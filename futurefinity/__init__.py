@@ -16,12 +16,19 @@
 
 from urllib.parse import urlparse, parse_qsl
 from futurefinity.utils import *
+from aiohttp import MultiDict
+from aiohttp import CIMultiDict
 
 import asyncio
 
 import aiohttp
 import aiohttp.server
 import routes
+import jinja2
+import traceback
+import http.cookies
+
+__all__ = ["ensure_bytes", "render_template"]
 
 
 class HTTPError(Exception):
@@ -37,38 +44,58 @@ class RequestHandler:
 
     def __init__(self, *args, **kwargs):
         self.app = kwargs.get("app")
-        self.writer = kwargs.get("writer")
+        self.make_response = kwargs.get("make_response")
         self.method = kwargs.get("method").lower()
         self.path = kwargs.get("path")
+        self.queries = kwargs.get("queries")
         self.payload = kwargs.get("payload")
         self.http_version = kwargs.get("http_version")
-        self.request_headers = kwargs.get("request_headers")
+        self._request_headers = kwargs.get("request_headers")
+        self._request_cookies = kwargs.get("request_cookies")
+
+        self._response_headers = CIMultiDict()
+        self._response_cookies = http.cookies.SimpleCookie()
 
         self._written = False
         self._finished = False
         self.status_code = 200
         self._response_body = b""
 
+    def get_query(self, name, default=None):
+        return self.queries.get("name", default=default)
+
     def set_header(self, name, value):
-        pass
+        self._response_headers[name] = value
 
     def add_header(self, name, value):
-        pass
+        self._response_headers.add(name, value)
 
     def get_header(self, name, default=None):
-        pass
+        return self._request_headers.get(name, default=default)
 
     def clear_header(self, name):
-        pass
+        self._response_headers.remove(name)
 
     def clear_all_headers(self):
-        pass
+        self._response_headers.clear()
 
     def get_cookie(self, name, default=None):
-        pass
+        cookie = self._request_cookies.get(name)
+        if not cookie:
+            return default
+        return cookie.value
 
-    def set_cookie(self, name, value):
-        pass
+    def set_cookie(self, name, value, domain=None, expires=None, path="/",
+                   expires_days=None, secure=False, httponly=False):
+        self._response_cookies[name] = value
+        if domain:
+            self._response_cookies[name]["domain"] = domain
+        if expires:
+            self._response_cookies[name]["expires"] = expires
+        self._response_cookies[name]["path"] = path
+        self._response_cookies[name]["max-age"] = expires_days
+        self._response_cookies[name]["secure"] = secure
+        self._response_cookies[name]["httponly"] = httponly
 
     def get_secure_cookie(self, name, default=None):
         pass
@@ -77,33 +104,75 @@ class RequestHandler:
         pass
 
     def clear_cookie(self, name):
-        pass
+        if name in self._response_cookies:
+            del self._response_cookies[name]
 
     def clear_all_cookies(self):
-        pass
+        self._response_cookies = http.cookies.SimpleCookie()
 
     def write(self, text, clear_text=False):
+        if self._finished:
+            return
         self._written = True
         self._response_body += ensure_bytes(text)
         if clear_text:
             self._response_body = ensure_bytes(text)
 
+    def render_string(self, template_name, **kwargs):
+        template = self.app.template_env.get_template(template_name)
+        return template.render(**kwargs)
+
+    def render(self, template_name, **kwargs):
+        self.write(self.render_string(template_name, **kwargs))
+
     async def finish(self):
         if self._finished:
             return
-
         self._finished = True
-        response = aiohttp.Response(
-            self.writer, self.status_code, http_version=self.http_version
-        )
-        response.add_header('Content-Type', 'text/html')
-        response.add_header('Content-Length', str(len(self._response_body)))
-        response.send_headers()
-        response.write(ensure_bytes(self._response_body))
-        await response.write_eof()
+
+        if (self._response_body[-2:] != b"\r\n" or
+           self._response_body[-1:] != b"\n"):
+            self._response_body += b"\r\n"
+
+        if "Content-Type" not in self._response_headers:
+            self.set_header("Content-Type", "text/html")
+
+        if "Content-Length" not in self._response_headers:
+            self.set_header("Content-Length",
+                            str(len(self._response_body)))
+
+        if "Connection" not in self._response_headers:
+            self.set_header("Connection", "Keep-Alive")
+
+        for cookie_morsel in self._response_cookies.values():
+            self._response_headers.add("Set-Cookie",
+                                       cookie_morsel.OutputString())
+
+        await self.make_response(status_code=self.status_code,
+                                 http_version=self.http_version,
+                                 response_headers=self._response_headers,
+                                 response_body=self._response_body)
 
     def write_error(self, error_code, message=None):
-        pass
+        self.write("""<!DOCTYPE HTML>
+<html>
+<head>
+    <title>%(error_code)d: %(status_code_detail)s</title>
+</head>
+<body>
+    <div>%(error_code)d: %(status_code_detail)s</div>""" % {
+                "error_code": error_code,
+                "status_code_detail": status_code_list[error_code]
+            },
+            clear_text=True)
+        if message:
+            self.write("""
+    <div>%(message)s</div>""" % {"message": ensure_str(message)})
+
+        self.write("""
+</body>
+</html>
+""")
 
     async def head(self, *args, **kwargs):
         get_return_text = await self.get(*args, **kwargs)
@@ -141,8 +210,10 @@ class RequestHandler:
             if not self._written:
                 self.write(body)
         except HTTPError as e:
+            traceback.print_exc()
             self.write_error(e.status_code, e.message)
         except Exception as e:
+            traceback.print_exc()
             self.write_error(500)
         await self.finish()
 
@@ -159,13 +230,43 @@ class HTTPServer(aiohttp.server.ServerHttpProtocol):
         self.app = app
 
     async def handle_request(self, message, payload):
-        await self.app.process_handler(self.writer, message, payload)
+        parsed_path = urlparse(message.path)
+
+        await self.app.process_handler(
+            make_response=self.make_response,
+            method=message.method,
+            path=parsed_path.path,
+            queries=MultiDict(parse_qsl(parsed_path.query)),
+            payload=payload,
+            http_version=message.version,
+            request_headers=message.headers,
+            request_cookies=http.cookies.SimpleCookie(
+                message.headers.get("Cookie"))
+        )
+
+    async def make_response(self, status_code, http_version, response_headers,
+                            response_body):
+        response = aiohttp.Response(
+            self.writer, status_code, http_version=http_version
+        )
+        for (key, value) in response_headers.items():
+            response.add_header(key, value)
+        response.send_headers()
+        response.write(ensure_bytes(response_body))
+        await response.write_eof()
 
 
 class Application:
-    def __init__(self, loop=asyncio.get_event_loop()):
+    def __init__(self, loop=asyncio.get_event_loop(), **kwargs):
         self.loop = loop
         self.handlers = routes.Mapper()
+        if kwargs.get("template_path", None):
+            self.template_env = env = jinja2.Environment(
+                loader=jinja2.FileSystemLoader(
+                    kwargs.get("template_path"),
+                    encoding=kwargs.get("encoding", "utf-8")))
+        else:
+            self.template_env = None
 
     def make_server(self):
         return (lambda: HTTPServer(app=self, keep_alive=75))
@@ -180,17 +281,23 @@ class Application:
             return cls
         return decorator
 
-    async def process_handler(self, writer, message, payload):
-        matched_obj = self.handlers.match(message.path)
+    async def process_handler(self, make_response, method, path, queries,
+                              payload, http_version, request_headers,
+                              request_cookies):
+        matched_obj = self.handlers.match(path)
         if not matched_obj:
             matched_obj = {"__handler__": NotFoundHandler}
+
         handler = matched_obj.pop("__handler__")(
             app=self,
-            writer=writer,
-            method=message.method,
-            path=message.path,
+            make_response=make_response,
+            method=method,
+            path=path,
+            queries=queries,
             payload=payload,
-            http_version=message.version,
-            request_headers=message.headers
+            http_version=http_version,
+            request_headers=request_headers,
+            request_cookies=request_cookies
         )
+
         await handler.handle(**matched_obj)

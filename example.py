@@ -17,13 +17,16 @@
 import futurefinity
 import asyncio
 
-app = futurefinity.Application()
+app = futurefinity.Application(
+    template_path="example/template"
+)
 
 
 @app.add_handler("/")
 class RootHandler(futurefinity.RequestHandler):
+    @futurefinity.render_template("example.htm")
     async def get(self, *args, **kwargs):
-        return "Hello World!"
+        return {"greeting": "Hello World!"}
 
 
 if __name__ == '__main__':
