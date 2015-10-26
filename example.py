@@ -18,7 +18,8 @@ import futurefinity
 import asyncio
 
 app = futurefinity.Application(
-    template_path="example/template"
+    template_path="example/template",
+    debug=True
 )
 
 
@@ -26,8 +27,12 @@ app = futurefinity.Application(
 class RootHandler(futurefinity.RequestHandler):
     @futurefinity.render_template("example.htm")
     async def get(self, *args, **kwargs):
-        return {"greeting": "Hello World!"}
+        arg = self.get_query("asdfas")
+        return {"greeting": arg}
 
+    async def post(self, *args, **kwargs):
+        self.get_form("azwsxedcrftvgyb")
+        self.get_file("asdfasdf")
 
 if __name__ == '__main__':
     app.listen(8080)

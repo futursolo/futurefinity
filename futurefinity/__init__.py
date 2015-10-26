@@ -14,7 +14,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from urllib.parse import urlparse, parse_qsl
+from urllib.parse import urlparse
 from futurefinity.utils import *
 from aiohttp import MultiDict
 from aiohttp import CIMultiDict
@@ -29,6 +29,10 @@ import traceback
 import http.cookies
 
 __all__ = ["ensure_bytes", "render_template"]
+
+__version__ = ("0", "0", "1", "-1000")
+
+version = "0.0.1dev"
 
 
 class HTTPError(Exception):
@@ -62,16 +66,24 @@ class RequestHandler:
         self._response_body = b""
 
     def get_query(self, name, default=None):
-        return self.queries.get("name", default=default)
+        return self.queries.get(name, [default])[0]
 
     def set_header(self, name, value):
-        self._response_headers[name] = value
+        lower_name = name.lower()
+        self._response_headers[name] = [value]
 
     def add_header(self, name, value):
-        self._response_headers.add(name, value)
+        lower_name = name.lower()
+        if lower_name not in self._response_headers.keys():
+            self.set_header(lower_name, value)
+            return
+        self._response_headers[lower_name].append(value)
 
     def get_header(self, name, default=None):
-        return self._request_headers.get(name, default=default)
+        return self._request_headers.get(name, [default])[0]
+
+    def get_all_headers(self, name, default=None):
+        return self._request_headers.get(name, default)
 
     def clear_header(self, name):
         self._response_headers.remove(name)
@@ -80,7 +92,7 @@ class RequestHandler:
         self._response_headers.clear()
 
     def get_cookie(self, name, default=None):
-        cookie = self._request_cookies.get(name)
+        cookie = self._request_cookies.get(name, default)
         if not cookie:
             return default
         return cookie.value
@@ -134,18 +146,21 @@ class RequestHandler:
            self._response_body[-1:] != b"\n"):
             self._response_body += b"\r\n"
 
-        if "Content-Type" not in self._response_headers:
-            self.set_header("Content-Type", "text/html")
+        if "content-type" not in self._response_headers:
+            self.set_header("content-type", "text/html")
 
-        if "Content-Length" not in self._response_headers:
-            self.set_header("Content-Length",
+        if "content-length" not in self._response_headers:
+            self.set_header("content-length",
                             str(len(self._response_body)))
 
-        if "Connection" not in self._response_headers:
-            self.set_header("Connection", "Keep-Alive")
+        if "connection" not in self._response_headers:
+            self.set_header("connection", "Keep-Alive")
+
+        if "server" not in self._response_headers:
+            self.set_header("server", "FutureFinity/0.0.1")
 
         for cookie_morsel in self._response_cookies.values():
-            self._response_headers.add("Set-Cookie",
+            self._response_headers.add("set-cookie",
                                        cookie_morsel.OutputString())
 
         await self.make_response(status_code=self.status_code,
@@ -154,25 +169,26 @@ class RequestHandler:
                                  response_body=self._response_body)
 
     def write_error(self, error_code, message=None):
-        self.write("""<!DOCTYPE HTML>
-<html>
-<head>
-    <title>%(error_code)d: %(status_code_detail)s</title>
-</head>
-<body>
-    <div>%(error_code)d: %(status_code_detail)s</div>""" % {
-                "error_code": error_code,
-                "status_code_detail": status_code_list[error_code]
-            },
-            clear_text=True)
+        self.status_code = error_code
+        self.write("<!DOCTYPE HTML>"
+                   "<html>"
+                   "<head>"
+                   "    <title>%(error_code)d: %(status_code_detail)s</title>"
+                   "</head>"
+                   "<body>"
+                   "    <div>%(error_code)d: %(status_code_detail)s</div>" % {
+                        "error_code": error_code,
+                        "status_code_detail": status_code_list[error_code]
+                   },
+                   clear_text=True)
         if message:
-            self.write("""
-    <div>%(message)s</div>""" % {"message": ensure_str(message)})
+            self.write(""
+                       "    <div>%(message)s</div>" % {
+                           "message": ensure_str(message)})
 
-        self.write("""
-</body>
-</html>
-""")
+        self.write(""
+                   "</body>"
+                   "</html>")
 
     async def head(self, *args, **kwargs):
         get_return_text = await self.get(*args, **kwargs)
@@ -232,14 +248,16 @@ class HTTPServer(aiohttp.server.ServerHttpProtocol):
     async def handle_request(self, message, payload):
         parsed_path = urlparse(message.path)
 
+        parsed_queries = parse_query(parsed_path.query)
+        parsed_headers = parse_header(message.headers)
         await self.app.process_handler(
             make_response=self.make_response,
             method=message.method,
             path=parsed_path.path,
-            queries=MultiDict(parse_qsl(parsed_path.query)),
+            queries=parsed_queries,
             payload=payload,
             http_version=message.version,
-            request_headers=message.headers,
+            request_headers=parsed_headers,
             request_cookies=http.cookies.SimpleCookie(
                 message.headers.get("Cookie"))
         )
@@ -250,7 +268,8 @@ class HTTPServer(aiohttp.server.ServerHttpProtocol):
             self.writer, status_code, http_version=http_version
         )
         for (key, value) in response_headers.items():
-            response.add_header(key, value)
+            for content in value:
+                response.add_header(key, content)
         response.send_headers()
         response.write(ensure_bytes(response_body))
         await response.write_eof()
@@ -261,7 +280,7 @@ class Application:
         self.loop = loop
         self.handlers = routes.Mapper()
         if kwargs.get("template_path", None):
-            self.template_env = env = jinja2.Environment(
+            self.template_env = jinja2.Environment(
                 loader=jinja2.FileSystemLoader(
                     kwargs.get("template_path"),
                     encoding=kwargs.get("encoding", "utf-8")))

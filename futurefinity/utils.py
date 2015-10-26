@@ -14,6 +14,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from urllib.parse import parse_qsl
 import functools
 
 
@@ -49,6 +50,25 @@ def render_template(template_name):
             return self.render_string(template_name, **render_dict)
         return wrapper
     return decorator
+
+
+def parse_query(queries):
+    parsed_queries = {}
+    for query in parse_qsl(queries):
+        if query[0] not in parsed_queries.keys():
+            parsed_queries[query[0]] = []
+        parsed_queries[query[0]].append(query[1])
+    return parsed_queries
+
+
+def parse_header(headers):
+    parsed_headers = {}
+    for (key, value) in headers.items():
+        lower_case_header_name = key.lower()
+        if lower_case_header_name not in parsed_headers.keys():
+            parsed_headers[lower_case_header_name] = []
+        parsed_headers[lower_case_header_name].append(value)
+    return parsed_headers
 
 
 status_code_list = {
