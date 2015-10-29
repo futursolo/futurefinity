@@ -27,12 +27,12 @@ app = futurefinity.Application(
 class RootHandler(futurefinity.RequestHandler):
     @futurefinity.render_template("example.htm")
     async def get(self, *args, **kwargs):
-        arg = self.get_query("asdfas")
-        return {"greeting": arg}
+        return {"greeting": None}
 
+    @futurefinity.render_template("example.htm")
     async def post(self, *args, **kwargs):
-        self.get_form("azwsxedcrftvgyb")
-        self.get_file("asdfasdf")
+        name = self.get_body_query("name")
+        return {"greeting": name}
 
 if __name__ == '__main__':
     app.listen(8080)

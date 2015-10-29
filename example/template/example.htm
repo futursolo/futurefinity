@@ -4,6 +4,13 @@
 
 </head>
 <body>
-    {{ greeting }}
+    {% if greeting %}
+    <div>{{ greeting }}</div>
+    {%  else %}
+    <form action="" method="post">
+        <input name="name" type="text">
+        <input value="Submit" type="submit">
+    </form>
+    {% endif %}
 </body>
 </html>

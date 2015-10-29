@@ -14,8 +14,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from urllib.parse import parse_qsl
+import urllib.parse
 import functools
+import collections
+import collections.abc
 
 
 def ensure_bytes(var):
@@ -52,23 +54,77 @@ def render_template(template_name):
     return decorator
 
 
-def parse_query(queries):
-    parsed_queries = {}
-    for query in parse_qsl(queries):
-        if query[0] not in parsed_queries.keys():
-            parsed_queries[query[0]] = []
-        parsed_queries[query[0]].append(query[1])
-    return parsed_queries
+class HTTPHeaders(collections.abc.MutableMapping):
+    def __init__(self, *args, **kwargs):
+        self._dict = {}
+        self._as_list = {}
+        self._last_key = None
+        if (len(args) == 1 and len(kwargs) == 0 and
+                isinstance(args[0], HTTPHeaders)):
+            for k, v in args[0].get_all():
+                self.add(k, v)
+        else:
+            self.update(*args, **kwargs)
 
+    def add(self, name, value):
+        norm_name = name.lower()
+        self._last_key = norm_name
+        if norm_name in self:
+            self._dict[norm_name] = (ensure_str(self[norm_name]) + ',' +
+                                     ensure_str(value))
+            self._as_list[norm_name].append(value)
+        else:
+            self[norm_name] = value
 
-def parse_header(headers):
-    parsed_headers = {}
-    for (key, value) in headers.items():
-        lower_case_header_name = key.lower()
-        if lower_case_header_name not in parsed_headers.keys():
-            parsed_headers[lower_case_header_name] = []
-        parsed_headers[lower_case_header_name].append(value)
-    return parsed_headers
+    def get_list(self, name):
+        norm_name = name.lower()
+        return self._as_list.get(norm_name, [])
+
+    def get_all(self):
+        for name, values in self._as_list.items():
+            for value in values:
+                yield (name, value)
+
+    def parse_line(self, line):
+        if line[0].isspace():
+            new_part = ' ' + line.lstrip()
+            self._as_list[self._last_key][-1] += new_part
+            self._dict[self._last_key] += new_part
+        else:
+            name, value = line.split(":", 1)
+            self.add(name, value.strip())
+
+    @classmethod
+    def parse(cls, headers):
+        h = cls()
+        for line in _CRLF_RE.split(headers):
+            if line:
+                h.parse_line(line)
+        return h
+
+    def __setitem__(self, name, value):
+        norm_name = name.lower()
+        self._dict[norm_name] = value
+        self._as_list[norm_name] = [value]
+
+    def __getitem__(self, name):
+        return self._dict[name.lower()]
+
+    def __delitem__(self, name):
+        norm_name = name.lower()
+        del self._dict[norm_name]
+        del self._as_list[norm_name]
+
+    def __len__(self):
+        return len(self._dict)
+
+    def __iter__(self):
+        return iter(self._dict)
+
+    def copy(self):
+        return HTTPHeaders(self)
+
+    __copy__ = copy
 
 
 status_code_list = {

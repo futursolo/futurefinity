@@ -14,15 +14,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from urllib.parse import urlparse
 from futurefinity.utils import *
-from aiohttp import MultiDict
-from aiohttp import CIMultiDict
-
+from futurefinity.server import *
 import asyncio
 
-import aiohttp
-import aiohttp.server
 import routes
 import jinja2
 import traceback
@@ -35,6 +30,11 @@ __version__ = ("0", "0", "1", "-1000")
 version = "0.0.1dev"
 
 
+supported_methods = ("get", "head", "post", "delete", "patch", "put",
+                     "options", "connect")
+body_expected_method = ("post", "patch", "put")
+
+
 class HTTPError(Exception):
     def __init__(self, status_code=200, message=None, *args, **kwargs):
         self.status_code = status_code
@@ -43,21 +43,19 @@ class HTTPError(Exception):
 
 class RequestHandler:
     allow_methods = ("get", "post", "head")
-    supported_methods = ("get", "head", "post", "delete", "patch", "put",
-                         "options")
 
     def __init__(self, *args, **kwargs):
         self.app = kwargs.get("app")
         self.make_response = kwargs.get("make_response")
-        self.method = kwargs.get("method").lower()
+        self.method = kwargs.get("method")
         self.path = kwargs.get("path")
         self.queries = kwargs.get("queries")
-        self.payload = kwargs.get("payload")
+        self.request_body = kwargs.get("request_body")
         self.http_version = kwargs.get("http_version")
         self._request_headers = kwargs.get("request_headers")
         self._request_cookies = kwargs.get("request_cookies")
 
-        self._response_headers = CIMultiDict()
+        self._response_headers = {}
         self._response_cookies = http.cookies.SimpleCookie()
 
         self._written = False
@@ -67,6 +65,9 @@ class RequestHandler:
 
     def get_query(self, name, default=None):
         return self.queries.get(name, [default])[0]
+
+    def get_body_query(self, name, default=None):
+        return self.request_body.get(name, [default])[0]
 
     def set_header(self, name, value):
         lower_name = name.lower()
@@ -192,7 +193,7 @@ class RequestHandler:
 
     async def head(self, *args, **kwargs):
         get_return_text = await self.get(*args, **kwargs)
-        if status_code != 200:
+        if self.status_code != 200:
             return
         if self._written is True:
             self.set_header("Content-Length", str(len(self._response_body)))
@@ -219,60 +220,17 @@ class RequestHandler:
         raise HTTPError(405)
 
     async def handle(self, *args, **kwargs):
-        try:
-            if self.method not in self.allow_methods:
-                raise HTTPError(405)
-            body = await getattr(self, self.method)(*args, **kwargs)
-            if not self._written:
-                self.write(body)
-        except HTTPError as e:
-            traceback.print_exc()
-            self.write_error(e.status_code, e.message)
-        except Exception as e:
-            traceback.print_exc()
-            self.write_error(500)
-        await self.finish()
+        if self.method not in self.allow_methods:
+            raise HTTPError(405)
+        body = await getattr(self, self.method)(*args, **kwargs)
+        if not self._written:
+            self.write(body)
 
 
 class NotFoundHandler(RequestHandler):
     async def handle(self, *args, **kwargs):
         self.write_error(404)
         await self.finish()
-
-
-class HTTPServer(aiohttp.server.ServerHttpProtocol):
-    def __init__(self, *args, app, **kwargs):
-        aiohttp.server.ServerHttpProtocol.__init__(self, *args, **kwargs)
-        self.app = app
-
-    async def handle_request(self, message, payload):
-        parsed_path = urlparse(message.path)
-
-        parsed_queries = parse_query(parsed_path.query)
-        parsed_headers = parse_header(message.headers)
-        await self.app.process_handler(
-            make_response=self.make_response,
-            method=message.method,
-            path=parsed_path.path,
-            queries=parsed_queries,
-            payload=payload,
-            http_version=message.version,
-            request_headers=parsed_headers,
-            request_cookies=http.cookies.SimpleCookie(
-                message.headers.get("Cookie"))
-        )
-
-    async def make_response(self, status_code, http_version, response_headers,
-                            response_body):
-        response = aiohttp.Response(
-            self.writer, status_code, http_version=http_version
-        )
-        for (key, value) in response_headers.items():
-            for content in value:
-                response.add_header(key, content)
-        response.send_headers()
-        response.write(ensure_bytes(response_body))
-        await response.write_eof()
 
 
 class Application:
@@ -288,7 +246,7 @@ class Application:
             self.template_env = None
 
     def make_server(self):
-        return (lambda: HTTPServer(app=self, keep_alive=75))
+        return (lambda: HTTPServer(app=self, keep_alive=75, timeout=300))
 
     def listen(self, port, address="127.0.0.1"):
         f = self.loop.create_server(self.make_server(), address, port)
@@ -301,7 +259,7 @@ class Application:
         return decorator
 
     async def process_handler(self, make_response, method, path, queries,
-                              payload, http_version, request_headers,
+                              request_body, http_version, request_headers,
                               request_cookies):
         matched_obj = self.handlers.match(path)
         if not matched_obj:
@@ -313,10 +271,18 @@ class Application:
             method=method,
             path=path,
             queries=queries,
-            payload=payload,
+            request_body=request_body,
             http_version=http_version,
             request_headers=request_headers,
             request_cookies=request_cookies
         )
 
-        await handler.handle(**matched_obj)
+        try:
+            await handler.handle(**matched_obj)
+        except HTTPError as e:
+            traceback.print_exc()
+            handler.write_error(e.status_code, e.message)
+        except Exception as e:
+            traceback.print_exc()
+            handler.write_error(500)
+        await handler.finish()
