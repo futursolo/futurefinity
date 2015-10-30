@@ -15,24 +15,21 @@
 # under the License.
 
 from futurefinity.utils import *
-from futurefinity.server import *
+import futurefinity.server
+
 import asyncio
 
 import routes
 import jinja2
 import traceback
 import http.cookies
+import http.client
 
 __all__ = ["ensure_bytes", "render_template"]
 
 __version__ = ("0", "0", "1", "-1000")
 
 version = "0.0.1dev"
-
-
-supported_methods = ("get", "head", "post", "delete", "patch", "put",
-                     "options", "connect")
-body_expected_method = ("post", "patch", "put")
 
 
 class HTTPError(Exception):
@@ -42,7 +39,7 @@ class HTTPError(Exception):
 
 
 class RequestHandler:
-    allow_methods = ("get", "post", "head")
+    allow_methods = ("GET", "POST", "HEAD")
 
     def __init__(self, *args, **kwargs):
         self.app = kwargs.get("app")
@@ -55,7 +52,7 @@ class RequestHandler:
         self._request_headers = kwargs.get("request_headers")
         self._request_cookies = kwargs.get("request_cookies")
 
-        self._response_headers = {}
+        self._response_headers = HTTPHeaders()
         self._response_cookies = http.cookies.SimpleCookie()
 
         self._written = False
@@ -70,15 +67,10 @@ class RequestHandler:
         return self.request_body.get(name, [default])[0]
 
     def set_header(self, name, value):
-        lower_name = name.lower()
-        self._response_headers[name] = [value]
+        self._response_headers[name] = value
 
     def add_header(self, name, value):
-        lower_name = name.lower()
-        if lower_name not in self._response_headers.keys():
-            self.set_header(lower_name, value)
-            return
-        self._response_headers[lower_name].append(value)
+        self._response_headers.add(name, value)
 
     def get_header(self, name, default=None):
         return self._request_headers.get(name, [default])[0]
@@ -148,7 +140,7 @@ class RequestHandler:
             self._response_body += b"\r\n"
 
         if "content-type" not in self._response_headers:
-            self.set_header("content-type", "text/html")
+            self.set_header("content-type", "text/html; charset=utf-8;")
 
         if "content-length" not in self._response_headers:
             self.set_header("content-length",
@@ -164,10 +156,9 @@ class RequestHandler:
             self._response_headers.add("set-cookie",
                                        cookie_morsel.OutputString())
 
-        await self.make_response(status_code=self.status_code,
-                                 http_version=self.http_version,
-                                 response_headers=self._response_headers,
-                                 response_body=self._response_body)
+        self.make_response(status_code=self.status_code,
+                           response_headers=self._response_headers,
+                           response_body=self._response_body)
 
     def write_error(self, error_code, message=None):
         self.status_code = error_code
@@ -179,7 +170,7 @@ class RequestHandler:
                    "<body>"
                    "    <div>%(error_code)d: %(status_code_detail)s</div>" % {
                         "error_code": error_code,
-                        "status_code_detail": status_code_list[error_code]
+                        "status_code_detail": http.client.responses[error_code]
                    },
                    clear_text=True)
         if message:
@@ -222,7 +213,7 @@ class RequestHandler:
     async def handle(self, *args, **kwargs):
         if self.method not in self.allow_methods:
             raise HTTPError(405)
-        body = await getattr(self, self.method)(*args, **kwargs)
+        body = await getattr(self, self.method.lower())(*args, **kwargs)
         if not self._written:
             self.write(body)
 
@@ -246,7 +237,7 @@ class Application:
             self.template_env = None
 
     def make_server(self):
-        return (lambda: HTTPServer(app=self, keep_alive=75, timeout=300))
+        return (lambda: futurefinity.server.HTTPServer(app=self))
 
     def listen(self, port, address="127.0.0.1"):
         f = self.loop.create_server(self.make_server(), address, port)

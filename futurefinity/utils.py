@@ -20,6 +20,11 @@ import collections
 import collections.abc
 
 
+supported_methods = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
+                     "OPTIONS", "CONNECT")
+body_expected_method = ("POST", "PATCH", "PUT")
+
+
 def ensure_bytes(var):
     if isinstance(var, bytes):
         return var
@@ -85,23 +90,6 @@ class HTTPHeaders(collections.abc.MutableMapping):
             for value in values:
                 yield (name, value)
 
-    def parse_line(self, line):
-        if line[0].isspace():
-            new_part = ' ' + line.lstrip()
-            self._as_list[self._last_key][-1] += new_part
-            self._dict[self._last_key] += new_part
-        else:
-            name, value = line.split(":", 1)
-            self.add(name, value.strip())
-
-    @classmethod
-    def parse(cls, headers):
-        h = cls()
-        for line in _CRLF_RE.split(headers):
-            if line:
-                h.parse_line(line)
-        return h
-
     def __setitem__(self, name, value):
         norm_name = name.lower()
         self._dict[norm_name] = value
@@ -125,47 +113,3 @@ class HTTPHeaders(collections.abc.MutableMapping):
         return HTTPHeaders(self)
 
     __copy__ = copy
-
-
-status_code_list = {
-    100: "Continue",
-    101: "Switching Protocols",
-    200: "OK",
-    201: "Created",
-    202: "Accepted",
-    203: "Non-Authoritative Information",
-    204: "No Content",
-    205: "Reset Content",
-    206: "Partial Content",
-    300: "Multiple Choices",
-    301: "Moved Permanently",
-    302: "Found",
-    303: "See Other",
-    304: "Not Modified",
-    305: "Use Proxy",
-    307: "Temporary Redirect",
-    400: "Bad Request",
-    401: "Unauthorized",
-    402: "Payment Required",
-    403: "Forbidden",
-    404: "Not Found",
-    405: "Method Not Allowed",
-    406: "Not Acceptable",
-    407: "Proxy Authentication Required",
-    408: "Request Timeout",
-    409: "Conflict",
-    410: "Gone",
-    411: "Length Required",
-    412: "Precondition Failed",
-    413: "Request Entity Too Large",
-    414: "Request-URI Too Long",
-    415: "Unsupported Media Type",
-    416: "Requested Range Not Satisfiable",
-    417: "Expectation Failed",
-    500: "Internal Server Error",
-    501: "Not Implemented",
-    502: "Bad Gateway",
-    503: "Service Unavailable",
-    504: "Gateway Timeout",
-    505: "HTTP Version Not Supported",
-}

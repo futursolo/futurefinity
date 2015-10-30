@@ -32,6 +32,7 @@ class RootHandler(futurefinity.RequestHandler):
     @futurefinity.render_template("example.htm")
     async def post(self, *args, **kwargs):
         name = self.get_body_query("name")
+        print(self.request_body)
         return {"greeting": name}
 
 if __name__ == '__main__':

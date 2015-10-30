@@ -7,8 +7,11 @@
     {% if greeting %}
     <div>{{ greeting }}</div>
     {%  else %}
-    <form action="" method="post">
+    <form action="" method="post" enctype="multipart/form-data">
         <input name="name" type="text">
+        <input name="name2" type="text">
+        <input name="name3" type="text">
+        <input name="file1" type="file">
         <input value="Submit" type="submit">
     </form>
     {% endif %}
