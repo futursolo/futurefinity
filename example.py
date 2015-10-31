@@ -14,25 +14,31 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import futurefinity
+from futurefinity.utils import render_template, HTTPError
+import futurefinity.web
 import asyncio
+import hashlib
 
-app = futurefinity.Application(
+
+app = futurefinity.web.Application(
     template_path="example/template",
     debug=True
 )
 
 
 @app.add_handler("/")
-class RootHandler(futurefinity.RequestHandler):
-    @futurefinity.render_template("example.htm")
+class RootHandler(futurefinity.web.RequestHandler):
+    @render_template("example.htm")
     async def get(self, *args, **kwargs):
         return {"greeting": None}
 
-    @futurefinity.render_template("example.htm")
+    @render_template("example.htm")
     async def post(self, *args, **kwargs):
         name = self.get_body_query("name")
-        print(self.request_body)
+        file = self.get_body_query("file1[]")
+        md5_hash = hashlib.md5()
+        md5_hash.update(file)
+        print(md5_hash.hexdigest())
         return {"greeting": name}
 
 if __name__ == '__main__':
