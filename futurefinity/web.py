@@ -34,7 +34,7 @@ class RequestHandler:
 
     def __init__(self, *args, **kwargs):
         self.app = kwargs.get("app")
-        self.make_response = kwargs.get("make_response")
+        self.server = kwargs.get("server")
         self.method = kwargs.get("method")
         self.path = kwargs.get("path")
         self.matched_path = kwargs.get("matched_path")
@@ -130,10 +130,6 @@ class RequestHandler:
             return
         self._finished = True
 
-        if (self._response_body[-2:] != b"\r\n" or
-           self._response_body[-1:] != b"\n"):
-            self._response_body += b"\r\n"
-
         if "content-type" not in self._response_headers:
             self.set_header("content-type", "text/html; charset=utf-8;")
 
@@ -141,19 +137,43 @@ class RequestHandler:
             self.set_header("content-length",
                             str(len(self._response_body)))
 
-        if "connection" not in self._response_headers:
-            self.set_header("connection", "Keep-Alive")
+        if self.http_version == 11:
+            if "keep-alive" not in self._response_headers:
+                self.set_header("keep-alive", "timeout=100, max=100")
 
-        if "server" not in self._response_headers:
-            self.set_header("server", "FutureFinity/0.0.1")
+        self.set_header("server", "FutureFinity/0.0.1")
 
         for cookie_morsel in self._response_cookies.values():
             self._response_headers.add("set-cookie",
                                        cookie_morsel.OutputString())
 
-        self.make_response(status_code=self.status_code,
-                           response_headers=self._response_headers,
-                           response_body=self._response_body)
+        if self.http_version == 20:
+            return  # HTTP/2 will be implemented later.
+        else:
+            self.make_http_v1_response()
+
+    def make_http_v1_response(self):
+        response_text = b""
+        if self.http_version == 10:
+            response_text += b"HTTP/1.0 "
+        elif self.http_version == 11:
+            response_text += b"HTTP/1.1 "
+
+        response_text += (str(self.status_code)).encode() + b" "
+
+        response_text += http.client.responses[
+            self.status_code].encode() + b"\r\n"
+        for (key, value) in self._response_headers.get_all():
+            response_text += ("%(key)s: %(value)s\r\n" % {
+                "key": key, "value": value}).encode()
+        response_text += b"\r\n"
+        response_text += ensure_bytes(self._response_body)
+        self.server.transport.write(response_text)
+        print(self.http_version)
+        if self.http_version == 11:
+            self.server.reset_server()
+        else:
+            self.server.transport.close()
 
     def write_error(self, error_code, message=None):
         self.status_code = error_code
@@ -265,7 +285,7 @@ class NotFoundHandler(RequestHandler):
 
 class Application:
     def __init__(self, loop=asyncio.get_event_loop(), **kwargs):
-        self.loop = loop
+        self._loop = loop
         self.handlers = routes.Mapper()
         if kwargs.get("template_path", None):
             self.template_env = jinja2.Environment(
@@ -276,11 +296,12 @@ class Application:
             self.template_env = None
 
     def make_server(self):
-        return (lambda: futurefinity.server.HTTPServer(app=self))
+        return (lambda: futurefinity.server.HTTPServer(app=self,
+                                                       loop=self._loop))
 
     def listen(self, port, address="127.0.0.1"):
-        f = self.loop.create_server(self.make_server(), address, port)
-        srv = self.loop.run_until_complete(f)
+        f = self._loop.create_server(self.make_server(), address, port)
+        srv = self._loop.run_until_complete(f)
 
     def add_handler(self, route_str, name=None):
         def decorator(cls):

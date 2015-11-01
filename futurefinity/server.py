@@ -26,33 +26,38 @@ import traceback
 
 
 class HTTPServer(asyncio.Protocol):
-    def __init__(self, app, enable_h2=False):
+    def __init__(self, app, loop=asyncio.get_event_loop(), enable_h2=False):
+        self._loop = loop
         self.app = app
         self.enable_h2 = enable_h2
-        self.reset_server()
-
-    def reset_server(self):
+        self.transport = None
+        self._keep_alive_handler = None
         self.data = b""
         self._crlf_mark = True
         self.http_version = 10
 
         self._request_handler = None
 
-        self._header_parsed = False
-        self._body_parsed = False
-        self._multipart_master = False
-        self._multipart_boundary = None
-        self._multipart_slave = False
-        self.parsed_headers = None
-        self.request_cookies = None
-        self.parsed_path = None
-        self.parsed_queries = None
-        self.parsed_body = None
-        self.transport = None
+    def set_keep_alive_handler(self):
+        self.cancel_keep_alive_handler()
+        self._keep_alive_handler = self._loop.call_later(100,
+                                                         self.transport.close)
+
+    def cancel_keep_alive_handler(self):
+        if self._keep_alive_handler is not None:
+            self._keep_alive_handler.cancel()
+        self._keep_alive_handler = None
+
+    def reset_server(self):
+        self.set_keep_alive_handler()
+        self.data = b""
+        self._crlf_mark = True
+        self.http_version = 10
+
+        self._request_handler = None
 
     def connection_made(self, transport):
         self.transport = transport
-        self._printed = False
         context = self.transport.get_extra_info("sslcontext", None)
         if context and ssl.HAS_ALPN:  # NPN will not be supported
             alpn_protocol = context.selected_alpn_protocol()
@@ -63,9 +68,7 @@ class HTTPServer(asyncio.Protocol):
                 raise Exception("Unsupported Protocol")
 
     def data_received(self, data):
-        if not self._printed:
-            print(data[:20])
-            self._printed = True
+        self.cancel_keep_alive_handler()
         if self.http_version == 20:
             return  # HTTP/2 will be implemented later.
 
@@ -90,10 +93,12 @@ class HTTPServer(asyncio.Protocol):
                 initial, body_data = parse_http_v1_initial(
                     self.data, use_crlf_mark=self._crlf_mark)
 
+                self.http_version = initial["http_version"]
+
                 matched_obj = self.app.find_handler(initial["parsed_path"])
                 self._request_handler = matched_obj.pop("__handler__")(
                     app=self.app,
-                    make_response=self.make_response,
+                    server=self,
                     method=initial["parsed_headers"][":method"],
                     path=initial["parsed_path"],
                     matched_path=matched_obj,
@@ -110,29 +115,5 @@ class HTTPServer(asyncio.Protocol):
 
         self._request_handler.process_handler(body_data)
 
-    def make_response(self, status_code,
-                      response_headers, response_body):
-        if self.http_version == 20:
-            return  # HTTP/2 will be implemented later.
-        else:
-            self.make_http_v1_response(status_code,
-                                       response_headers, response_body)
-
-    def make_http_v1_response(self, status_code,
-                              response_headers, response_body):
-        response_text = b""
-        if self.http_version == 10:
-            response_text += b"HTTP/1.0 "
-        elif self.http_version == 11:
-            response_text += b"HTTP/1.1 "
-
-        response_text += (str(status_code)).encode() + b" "
-
-        response_text += http.client.responses[status_code].encode() + b"\r\n"
-        for (key, value) in response_headers.get_all():
-            response_text += ("%(key)s: %(value)s\r\n" % {
-                "key": key, "value": value}).encode()
-        response_text += b"\r\n"
-        response_text += ensure_bytes(response_body)
-        self.transport.write(response_text)
-        self.transport.close()
+    def connection_lost(self, reason):
+        self.cancel_keep_alive_handler()

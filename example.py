@@ -34,12 +34,7 @@ class RootHandler(futurefinity.web.RequestHandler):
 
     @render_template("example.htm")
     async def post(self, *args, **kwargs):
-        name = self.get_body_query("name")
-        file = self.get_body_query("file1[]")
-        md5_hash = hashlib.md5()
-        md5_hash.update(file)
-        print(md5_hash.hexdigest())
-        return {"greeting": name}
+        return {"greeting": None}
 
 if __name__ == '__main__':
     app.listen(8080)
