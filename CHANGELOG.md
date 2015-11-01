@@ -7,3 +7,7 @@ v0.0.1-dev
 - HTTP headers
 - Cookies
 - GET Queries
+- POST URLEncoded Form
+- POST Multipart Form
+- Secure Cookies
+- Security Secret Generator

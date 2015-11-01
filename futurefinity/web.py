@@ -24,6 +24,10 @@ import jinja2
 import traceback
 import http.cookies
 import http.client
+import time
+import base64
+import hmac
+import hashlib
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -97,11 +101,86 @@ class RequestHandler:
         self._response_cookies[name]["secure"] = secure
         self._response_cookies[name]["httponly"] = httponly
 
-    def get_secure_cookie(self, name, default=None):
-        pass
+    def set_secure_cookie(self, name, value, expires_days=30, **kwargs):
+        secret = self.app.settings.get("security_secret", None)
+        if not secret:
+            raise Exception("Security Secret is not in Application Settings. "
+                            "Please Set Security Secret First.")
 
-    def set_secure_cookie(self, name, value):
-        pass
+        timestamp = str(int(time.time())).encode("utf-8")
+        if isinstance(value, str):
+            value = value.encode("utf-8")
+        elif not isinstance(value, bytes):
+            raise ValueError
+        value = base64.b64encode(value)
+
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        elif not isinstance(name, bytes):
+            raise ValueError
+
+        def format_field(s):
+            return ("%d:" % len(s)).encode("utf-8") + s
+        to_sign = b"|".join([
+            format_field(timestamp),
+            format_field(name),
+            format_field(value),
+            b""])
+
+        hash = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
+        hash.update(to_sign)
+        signature = hash.hexdigest().encode("utf-8")
+
+        content = to_sign + signature
+        self.set_cookie(ensure_str(name), ensure_str(content),
+                        expires_days=expires_days, **kwargs)
+
+    def get_secure_cookie(self, name, max_age_days=31):
+        secret = self.app.settings.get("security_secret", None)
+        if not secret:
+            raise Exception("Security Secret is not in Application Settings. "
+                            "Please Set Security Secret First.")
+        value = ensure_bytes(self.get_cookie(name))
+        if not value:
+            return None
+        if not isinstance(value, bytes):
+            raise ValueError
+
+        name = ensure_bytes(name)
+        if not isinstance(name, bytes):
+            raise ValueError
+
+        def _consume_field(s):
+            length, _, rest = s.partition(b':')
+            n = int(length)
+            field_value = rest[:n]
+            if rest[n:n + 1] != b'|':
+                raise ValueError("malformed v2 signed value field")
+            rest = rest[n + 1:]
+            return field_value, rest
+        try:
+            timestamp, rest = _consume_field(value)
+            name_field, rest = _consume_field(rest)
+            value_field, passed_sig = _consume_field(rest)
+        except ValueError:
+            return None
+        signed_string = value[:-len(passed_sig)]
+
+        hash = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
+        hash.update(signed_string)
+        expected_sig = hash.hexdigest().encode("utf-8")
+
+        if not hmac.compare_digest(passed_sig, expected_sig):
+            return None
+        if name_field != name:
+            return None
+        timestamp = int(timestamp)
+        if timestamp < time.time() - max_age_days * 86400:
+            return None
+        try:
+            return ensure_str(base64.b64decode(value_field))
+        except:
+            return None
 
     def clear_cookie(self, name):
         if name in self._response_cookies:
@@ -294,6 +373,7 @@ class Application:
                     encoding=kwargs.get("encoding", "utf-8")))
         else:
             self.template_env = None
+        self.settings = kwargs
 
     def make_server(self):
         return (lambda: futurefinity.server.HTTPServer(app=self,
@@ -303,11 +383,14 @@ class Application:
         f = self._loop.create_server(self.make_server(), address, port)
         srv = self._loop.run_until_complete(f)
 
-    def add_handler(self, route_str, name=None):
+    def add_handler(self, route_str, name=None, handler=None):
         def decorator(cls):
             self.handlers.connect(name, route_str, __handler__=cls)
             return cls
-        return decorator
+        if handler is not None:
+            decorator(handler)
+        else:
+            return decorator
 
     def find_handler(self, path):
         matched_obj = self.handlers.match(path)

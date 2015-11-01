@@ -20,6 +20,9 @@ import collections
 import collections.abc
 import cgi
 import io
+import random
+import string
+import http.cookies
 
 MAX_HEADER_LENGTH = 4096
 
@@ -61,7 +64,7 @@ def ensure_str(var):
         return var
     if var is None:
         return ""
-    if not isinstance(var, bytes):
+    if isinstance(var, bytes):
         strvar = var.decode("utf-8")
     else:
         strvar = var
@@ -167,6 +170,8 @@ def parse_http_v1_initial(data, use_crlf_mark=True):
     if "cookie" in initial["parsed_headers"]:
         initial["parsed_cookies"] = http.cookies.SimpleCookie(
             initial["parsed_headers"].get("cookie"))
+    else:
+        initial["parsed_cookies"] = http.cookies.SimpleCookie()
 
     parsed_url = urllib.parse.urlparse(
         initial["parsed_headers"].get(":path"))
@@ -192,6 +197,15 @@ def parse_http_v1_body(data, content_length, content_type,
         "CONTENT_TYPE": content_type,
         "CONTENT_LENGTH": content_length
     })
+
+
+def security_secret_generator(length):
+        try:
+            random_generator = random.SystemRandom()
+        except:
+            random_generator = random
+        return "".join(random_generator.sample(
+            string.ascii_letters + string.digits, length))
 
 
 class MagicDict(collections.abc.MutableMapping):
