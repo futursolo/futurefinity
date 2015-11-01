@@ -11,3 +11,9 @@ v0.0.1-dev
 - POST Multipart Form
 - Secure Cookies
 - Security Secret Generator
+
+def args_kwargs(name, *args, reason=None, **kwargs):
+    print(name)
+    print(args)
+    print(reason)
+    print(kwargs)

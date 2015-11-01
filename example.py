@@ -22,7 +22,8 @@ import hashlib
 
 app = futurefinity.web.Application(
     template_path="example/template",
-    security_secret="",
+    security_secret="gvbAh5Is8dSaprwlnue1EjRUxBOM4k2T",
+    csrf_protect=True,
     debug=True
 )
 

@@ -28,6 +28,7 @@ import time
 import base64
 import hmac
 import hashlib
+import uuid
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -51,6 +52,8 @@ class RequestHandler:
 
         self._response_headers = HTTPHeaders()
         self._response_cookies = http.cookies.SimpleCookie()
+
+        self._csrf_value = None
 
         self._body_parsed = False
         self._request_handled = False
@@ -182,6 +185,30 @@ class RequestHandler:
         except:
             return None
 
+    def check_csrf_value(self):
+        cookie_value = self.get_secure_cookie("_csrf")
+        form_value = self.get_body_query("_csrf")
+
+        if not (cookie_value and form_value):
+            raise HTTPError(403)  # CSRF Value is not set.
+
+        if cookie_value != form_value:
+            raise HTTPError(403)  # CERF Value does not match.
+
+    def set_csrf_value(self):
+        if self._csrf_value is not None:
+            return
+        self._csrf_value = str(uuid.uuid4())
+        self.set_secure_cookie("_csrf", self._csrf_value, expires_days=None)
+
+    def get_csrf_value(self):
+        self.set_csrf_value()
+        return self._csrf_value
+
+    def csrf_form_html(self):
+        value = self.get_csrf_value()
+        return "<input type=\"hidden\" name=\"_csrf\" value=\"%s\">" % value
+
     def clear_cookie(self, name):
         if name in self._response_cookies:
             del self._response_cookies[name]
@@ -199,7 +226,12 @@ class RequestHandler:
 
     def render_string(self, template_name, **kwargs):
         template = self.app.template_env.get_template(template_name)
-        return template.render(**kwargs)
+        template_args = {
+            "handler": self,
+            "csrf_form_html": self.csrf_form_html
+        }
+        template_args.update(kwargs)
+        return template.render(**template_args)
 
     def render(self, template_name, **kwargs):
         self.write(self.render_string(template_name, **kwargs))
@@ -208,6 +240,9 @@ class RequestHandler:
         if self._finished:
             return
         self._finished = True
+
+        if self.app.settings.get("csrf_protect", False):
+            self.set_csrf_value()
 
         if "content-type" not in self._response_headers:
             self.set_header("content-type", "text/html; charset=utf-8;")
@@ -248,7 +283,6 @@ class RequestHandler:
         response_text += b"\r\n"
         response_text += ensure_bytes(self._response_body)
         self.server.transport.write(response_text)
-        print(self.http_version)
         if self.http_version == 11:
             self.server.reset_server()
         else:
@@ -314,6 +348,9 @@ class RequestHandler:
                 raise HTTPError(400)
             if self.method not in self.allow_methods:
                 raise HTTPError(405)
+            if self.app.settings.get(
+             "csrf_protect", False) and self.method in BODY_EXPECTED_METHODS:
+                self.check_csrf_value()
             body = await getattr(self, self.method.lower())(*args, **kwargs)
             if not self._written:
                 self.write(body)
