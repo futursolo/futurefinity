@@ -236,7 +236,33 @@ class RequestHandler:
     def render(self, template_name, **kwargs):
         self.write(self.render_string(template_name, **kwargs))
 
-    async def finish(self):
+    def redirect(self, url, permanent=False, status=None):
+        if self._finished:
+            raise Exception("Cannot redirect after request finished.")
+        if status is None:
+            status = 301 if permanent else 302
+        else:
+            assert isinstance(status, int) and 300 <= status <= 399
+        self.status_code = status
+        self.set_header("location", ensure_str(url))
+        self.write("<!DOCTYPE HTML>"
+                   "<html>"
+                   "<head>"
+                   "    <meta charset=\"utf-8\">"
+                   "    <title>%(status_code)d %(status_message)s</title>"
+                   "</head>"
+                   "<body>"
+                   "    <h1>%(status_code)d %(status_message)s</h1>"
+                   "    The document has moved <a href=\"%(url)s\">here</a>."
+                   "</body>"
+                   "</html>" % {
+                       "status_code": status,
+                       "status_message": http.client.responses[status],
+                       "url": ensure_str(url)
+                    })
+        self.finish()
+
+    def finish(self):
         if self._finished:
             return
         self._finished = True
@@ -360,7 +386,7 @@ class RequestHandler:
         except Exception as e:
             traceback.print_exc()
             self.write_error(500)
-        await self.finish()
+        self.finish()
 
     def process_handler(self, body_data):
         if self.http_version == 20:
@@ -376,7 +402,7 @@ class RequestHandler:
             content_length = int(self.get_header("content-length"))
             if content_length > MAX_BODY_LENGTH:
                 self.write_error(413)  # Body Too Large
-                asyncio.ensure_future(self.finish())
+                self.finish()
                 self._body_parsed = True
                 return
             self._request_body_data += body_data
@@ -396,7 +422,7 @@ class RequestHandler:
 class NotFoundHandler(RequestHandler):
     async def handle(self, *args, **kwargs):
         self.write_error(404)
-        await self.finish()
+        self.finish()
 
 
 class Application:
