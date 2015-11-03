@@ -23,6 +23,11 @@ import io
 import random
 import string
 import http.cookies
+import time
+import datetime
+import email.utils
+import calendar
+import numbers
 
 MAX_HEADER_LENGTH = 4096
 
@@ -76,6 +81,8 @@ def render_template(template_name):
         @functools.wraps(f)
         async def wrapper(self, *args, **kwargs):
             render_dict = await f(self, *args, **kwargs)
+            if self._written:
+                return
             return self.render_string(template_name, **render_dict)
         return wrapper
     return decorator
@@ -206,6 +213,20 @@ def security_secret_generator(length):
             random_generator = random
         return "".join(random_generator.sample(
             string.ascii_letters + string.digits, length))
+
+
+def format_timestamp(ts=None):
+    if not ts:
+        ts = time.time()
+    if isinstance(ts, numbers.Real):
+        pass
+    elif isinstance(ts, (tuple, time.struct_time)):
+        ts = calendar.timegm(ts)
+    elif isinstance(ts, datetime.datetime):
+        ts = calendar.timegm(ts.utctimetuple())
+    else:
+        raise TypeError("unknown timestamp type: %r" % ts)
+    return email.utils.formatdate(ts, usegmt=True)
 
 
 class MagicDict(collections.abc.MutableMapping):

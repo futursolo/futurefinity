@@ -69,10 +69,10 @@ class RequestHandler:
         return self._request_body_query.getfirst(name, default)
 
     def set_header(self, name, value):
-        self._response_headers[name] = value
+        self._response_headers[name] = ensure_str(value)
 
     def add_header(self, name, value):
-        self._response_headers.add(name, value)
+        self._response_headers.add(name, ensure_str(value))
 
     def get_header(self, name, default=None):
         return self._request_headers.get_list(name, [default])[0]
@@ -276,6 +276,9 @@ class RequestHandler:
         if "content-length" not in self._response_headers:
             self.set_header("content-length",
                             str(len(self._response_body)))
+
+        if "date" not in self._response_headers:
+            self.set_header("date", format_timestamp())
 
         if self.http_version == 11:
             if "keep-alive" not in self._response_headers:
