@@ -20,7 +20,10 @@ import futurefinity.server
 import asyncio
 
 import routes
-import jinja2
+try:
+    import jinja2
+except:
+    jinja2 = None
 import traceback
 import http.cookies
 import http.client
@@ -29,6 +32,7 @@ import base64
 import hmac
 import hashlib
 import uuid
+import re
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -81,10 +85,11 @@ class RequestHandler:
         return self._request_headers.get(name, default)
 
     def clear_header(self, name):
-        self._response_headers.remove(name)
+        if name in self._response_headers.keys():
+            del self._response_headers[name]
 
     def clear_all_headers(self):
-        self._response_headers.clear()
+        self._response_headers = HTTPHeaders()
 
     def get_cookie(self, name, default=None):
         cookie = self._request_cookies.get(name, default)
@@ -225,6 +230,9 @@ class RequestHandler:
             self._response_body = ensure_bytes(text)
 
     def render_string(self, template_name, **kwargs):
+        if jinja2 is None:
+            raise Exception("Jinja2 is not installed, "
+                            "and render_string is not overrided.")
         template = self.app.template_env.get_template(template_name)
         template_args = {
             "handler": self,
@@ -262,6 +270,40 @@ class RequestHandler:
                     })
         self.finish()
 
+    def compute_etag(self):
+        hasher = hashlib.sha1()
+        hasher.update(self._response_body)
+        return '"%s"' % hasher.hexdigest()
+
+    def set_etag_header(self):
+        etag = self.compute_etag()
+        if etag is not None:
+            self.set_header("etag", etag)
+
+    def check_etag_header(self):
+        computed_etag = ensure_bytes(self._response_headers.get_first("etag"))
+        etags = re.findall(
+            br'\*|(?:W/)?"[^"]*"',
+            ensure_bytes(self.get_header("if-none-match", ""))
+        )
+        print(etags)
+        if not computed_etag or not etags:
+            return False
+
+        match = False
+        if etags[0] == b'*':
+            match = True
+        else:
+            def value_validator(value):
+                if value.startswith(b'W/'):
+                    value = value[2:]
+                return value
+            for etag in etags:
+                if value_validator(etag) == value_validator(computed_etag):
+                    match = True
+                    break
+        return match
+
     def finish(self):
         if self._finished:
             return
@@ -289,6 +331,18 @@ class RequestHandler:
         for cookie_morsel in self._response_cookies.values():
             self._response_headers.add("set-cookie",
                                        cookie_morsel.OutputString())
+
+        if "etag" not in self._response_headers and self.status_code == 200:
+            self.set_etag_header()
+
+        if self.check_etag_header():
+            self.status_code = 304
+            self._response_body = b""
+            for header_name in ["allow", "content-encoding",
+                                "content-language", "content-length",
+                                "content-md5", "content-range", "content-type",
+                                "last-modified"]:
+                self.clear_header(header_name)
 
         if self.http_version == 20:
             return  # HTTP/2 will be implemented later.
@@ -432,7 +486,7 @@ class Application:
     def __init__(self, loop=asyncio.get_event_loop(), **kwargs):
         self._loop = loop
         self.handlers = routes.Mapper()
-        if kwargs.get("template_path", None):
+        if kwargs.get("template_path", None) and jinja2 is not None:
             self.template_env = jinja2.Environment(
                 loader=jinja2.FileSystemLoader(
                     kwargs.get("template_path"),

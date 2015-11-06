@@ -30,10 +30,8 @@ app = futurefinity.web.Application(
 
 @app.add_handler("/")
 class RootHandler(futurefinity.web.RequestHandler):
-    @render_template("example.htm")
     async def get(self, *args, **kwargs):
-        return self.redirect("/NotFound")
-        return {"greeting": None}
+        return "Hello, World!"
 
     @render_template("example.htm")
     async def post(self, *args, **kwargs):
