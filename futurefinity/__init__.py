@@ -16,4 +16,4 @@
 
 __version__ = ("0", "0", "1", "-1000")
 
-version = "0.0.1dev"
+version = "0.0.1dev0"
