@@ -15,6 +15,7 @@
 # under the License.
 
 from futurefinity.utils import *
+import futurefinity
 import futurefinity.server
 
 import asyncio
@@ -46,31 +47,30 @@ class RequestHandler:
         self.server = kwargs.get("server")
         self.method = kwargs.get("method")
         self.path = kwargs.get("path")
-        self.matched_path = kwargs.get("matched_path")
-        self._request_queries = kwargs.get("queries")
         self.http_version = kwargs.get("http_version")
+        self.make_response = kwargs.get("make_response")
+
+        self.status_code = 200
+
+        self._request_queries = kwargs.get("queries")
         self._request_headers = kwargs.get("request_headers")
         self._request_cookies = kwargs.get("request_cookies")
-        self._request_body_data = b""
-        self._request_body_query = None
+        self._request_body = kwargs.get("request_body")
 
         self._response_headers = HTTPHeaders()
         self._response_cookies = http.cookies.SimpleCookie()
 
         self._csrf_value = None
 
-        self._body_parsed = False
-        self._request_handled = False
         self._written = False
         self._finished = False
-        self.status_code = 200
         self._response_body = b""
 
-    def get_query(self, name, default=None):
-        return self._request_queries.get(name, [default])[0]
+    def get_link_arg(self, name, default=None):
+        return self._request_queries.get_list(name, [default])[0]
 
-    def get_body_query(self, name, default=None):
-        return self._request_body_query.getfirst(name, default)
+    def get_body_arg(self, name, default=None):
+        return self._request_body.getfirst(name, default)
 
     def set_header(self, name, value):
         self._response_headers[name] = ensure_str(value)
@@ -286,7 +286,6 @@ class RequestHandler:
             br'\*|(?:W/)?"[^"]*"',
             ensure_bytes(self.get_header("if-none-match", ""))
         )
-        print(etags)
         if not computed_etag or not etags:
             return False
 
@@ -326,7 +325,7 @@ class RequestHandler:
             if "keep-alive" not in self._response_headers:
                 self.set_header("keep-alive", "timeout=100, max=100")
 
-        self.set_header("server", "FutureFinity/0.0.1")
+        self.set_header("server", "FutureFinity/" + futurefinity.version)
 
         for cookie_morsel in self._response_cookies.values():
             self._response_headers.add("set-cookie",
@@ -347,29 +346,8 @@ class RequestHandler:
         if self.http_version == 20:
             return  # HTTP/2 will be implemented later.
         else:
-            self.make_http_v1_response()
-
-    def make_http_v1_response(self):
-        response_text = b""
-        if self.http_version == 10:
-            response_text += b"HTTP/1.0 "
-        elif self.http_version == 11:
-            response_text += b"HTTP/1.1 "
-
-        response_text += (str(self.status_code)).encode() + b" "
-
-        response_text += http.client.responses[
-            self.status_code].encode() + b"\r\n"
-        for (key, value) in self._response_headers.get_all():
-            response_text += ("%(key)s: %(value)s\r\n" % {
-                "key": key, "value": value}).encode()
-        response_text += b"\r\n"
-        response_text += ensure_bytes(self._response_body)
-        self.server.transport.write(response_text)
-        if self.http_version == 11:
-            self.server.reset_server()
-        else:
-            self.server.transport.close()
+            self.make_response(self.status_code, self._response_headers,
+                               self._response_body)
 
     def write_error(self, error_code, message=None):
         self.status_code = error_code
@@ -422,10 +400,6 @@ class RequestHandler:
         raise HTTPError(405)
 
     async def handle(self, *args, **kwargs):
-        if self._request_handled:
-            return
-
-        self._request_handled = True
         try:
             if self.method not in SUPPORTED_METHODS:
                 raise HTTPError(400)
@@ -444,36 +418,6 @@ class RequestHandler:
             traceback.print_exc()
             self.write_error(500)
         self.finish()
-
-    def process_handler(self, body_data):
-        if self.http_version == 20:
-            pass  # HTTP/2 will be implemented later.
-        else:
-            self.process_http_v1_handler(body_data)
-
-    def process_http_v1_handler(self, body_data):
-        if self._body_parsed:
-            return
-        if self.method in BODY_EXPECTED_METHODS:
-            content_type = self.get_header("content-type")
-            content_length = int(self.get_header("content-length"))
-            if content_length > MAX_BODY_LENGTH:
-                self.write_error(413)  # Body Too Large
-                self.finish()
-                self._body_parsed = True
-                return
-            self._request_body_data += body_data
-            if len(self._request_body_data) < content_length:
-                return  # Request Not Completed, wait.
-            self._request_body_query = parse_http_v1_body(
-                data=self._request_body_data,
-                content_type=self.get_header("content-type"),
-                content_length=self.get_header("content-length")
-            )
-            self._body_parsed = True
-        else:
-            self._body_parsed = True
-        asyncio.ensure_future(self.handle(**self.matched_path))
 
 
 class NotFoundHandler(RequestHandler):

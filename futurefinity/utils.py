@@ -14,6 +14,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import futurefinity
 import urllib.parse
 import functools
 import collections
@@ -187,6 +188,11 @@ def parse_http_v1_initial(data, use_crlf_mark=True):
 
     for query in urllib.parse.parse_qsl(parsed_url.query):
         initial["parsed_queries"].add(query[0], query[1])
+
+    if initial["parsed_headers"][":method"] in BODY_EXPECTED_METHODS:
+        if int(initial["parsed_headers"].get_first(
+         "content-length")) > MAX_BODY_LENGTH:
+            raise HTTPError(413)  # 413 Request Entity Too Large
 
     return initial, raw_body
 
