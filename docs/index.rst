@@ -1,9 +1,11 @@
 FutureFinity |release| Documentation
 ========================================
 
-Overview:
+Overview
+--------
   FutureFinity is an asynchronous web framework, using asyncio, inspired by Tornado and Flask.
-
+  Benefit from the non-blocking model and asyncio, FutureFinity can handle thousands of requests
+  at the same time.
 
 Hello, World!
 -------------
@@ -21,6 +23,7 @@ Hello, World!
           return "Hello, World!"
 
   app.listen(23333)
+
   try:
       loop.run_forever()
   except KeyboardInterrupt:
@@ -31,6 +34,7 @@ Hello, World!
    :titlesonly:
 
    install
+   web
 
 
 Indices and tables

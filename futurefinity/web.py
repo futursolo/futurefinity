@@ -14,6 +14,37 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+
+"""
+``futurefinity.web`` contains Application and RequestHandler class, which are
+essential of building an web application based on futurefinity.
+
+To use futurefinity.web,you need to import it and asyncio,
+and create an instance of Application class::
+
+  import futurefinity.web
+  import asyncio
+
+  app = futurefinity.web.Application()
+
+Then, you need to inherit RequestHandler class to create handlers,
+and override methods in the class named with HTTP methods with async def.
+After that, decorate the created class with the app.add_handler with link
+that this class will handle::
+
+  @app.add_handler("/")
+  class RootHandler(futurefinity.web.RequestHandler):
+      async def get(self, *args, **kwargs):
+          return "Hello, World!"
+
+Finally, listen to the port you want, and start asyncio event loop::
+
+  app.listen(23333)
+  asyncio.get_event_loop().run_forever()
+
+"""
+
+
 from futurefinity.utils import *
 import futurefinity
 import futurefinity.server
@@ -40,7 +71,18 @@ __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
 
 
 class RequestHandler:
+    """
+    Basic Request Handler.
+
+    This class should not be used directly, subclass must inherit this class
+    and override functions that represents the HTTP method.
+    """
+
     allow_methods = ("GET", "POST", "HEAD")
+    """
+    Methods that FutureFinity allows, should be contained in a tuple.
+    By default, FutureFinity allows GET, POST, and HEAD.
+    """
 
     def __init__(self, *args, **kwargs):
         self.app = kwargs.get("app")
@@ -66,39 +108,72 @@ class RequestHandler:
         self._finished = False
         self._response_body = b""
 
-    def get_link_arg(self, name, default=None):
+    def get_link_arg(self, name: str, default=None) -> str:
+        """
+        Return first argument in the link with the name.
+        """
         return self._request_queries.get_list(name, [default])[0]
 
-    def get_body_arg(self, name, default=None):
+    def get_body_arg(self, name: str, default=None) -> str:
+        """
+        Return first argument in the body with the name.
+        """
         return self._request_body.getfirst(name, default)
 
-    def set_header(self, name, value):
-        self._response_headers[name] = ensure_str(value)
-
-    def add_header(self, name, value):
-        self._response_headers.add(name, ensure_str(value))
-
-    def get_header(self, name, default=None):
+    def get_header(self, name: str, default: str=None) -> str:
+        """
+        Return First Header with the name.
+        """
         return self._request_headers.get_list(name, [default])[0]
 
-    def get_all_headers(self, name, default=None):
-        return self._request_headers.get(name, default)
+    def get_all_headers(self, name: str, default: str=None) -> list:
+        """
+        Return All Header with the name by list.
+        """
+        return self._request_headers.get_list(name, [default])
 
-    def clear_header(self, name):
+    def set_header(self, name: str, value: str):
+        """
+        Set a response header with the name and value, this will override any
+        former value(s) with the same name.
+        """
+        self._response_headers[name] = ensure_str(value)
+
+    def add_header(self, name: str, value: str):
+        """
+        Add a response header with the name and value, this will not override
+        any former value(s) with the same name.
+        """
+        self._response_headers.add(name, ensure_str(value))
+
+    def clear_header(self, name: str):
+        """
+        Clear response header(s) with the name.
+        """
         if name in self._response_headers.keys():
             del self._response_headers[name]
 
     def clear_all_headers(self):
+        """
+        Clear all response header(s).
+        """
         self._response_headers = HTTPHeaders()
 
-    def get_cookie(self, name, default=None):
+    def get_cookie(self, name: str, default: str=None) -> str:
+        """
+        Return first Cookie in the request header(s) with the name.
+        """
         cookie = self._request_cookies.get(name, default)
         if not cookie:
             return default
         return cookie.value
 
-    def set_cookie(self, name, value, domain=None, expires=None, path="/",
-                   expires_days=None, secure=False, httponly=False):
+    def set_cookie(self, name: str, value: str, domain: str=None,
+                   expires: str=None, path: str="/", expires_days: int=None,
+                   secure: bool=False, httponly: bool=False):
+        """
+        Set a cookie with attribute(s).
+        """
         self._response_cookies[name] = value
         if domain:
             self._response_cookies[name]["domain"] = domain
@@ -109,41 +184,26 @@ class RequestHandler:
         self._response_cookies[name]["secure"] = secure
         self._response_cookies[name]["httponly"] = httponly
 
-    def set_secure_cookie(self, name, value, expires_days=30, **kwargs):
-        secret = self.app.settings.get("security_secret", None)
-        if not secret:
-            raise Exception("Security Secret is not in Application Settings. "
-                            "Please Set Security Secret First.")
+    def clear_cookie(self, name: str):
+        """
+        Clear a cookie with the name.
+        """
+        if name in self._response_cookies:
+            del self._response_cookies[name]
 
-        timestamp = str(int(time.time())).encode("utf-8")
-        if isinstance(value, str):
-            value = value.encode("utf-8")
-        elif not isinstance(value, bytes):
-            raise ValueError
-        value = base64.b64encode(value)
+    def clear_all_cookies(self):
+        """
+        Clear response cookie(s).
+        """
+        self._response_cookies = http.cookies.SimpleCookie()
 
-        if isinstance(name, str):
-            name = name.encode("utf-8")
-        elif not isinstance(name, bytes):
-            raise ValueError
+    def get_secure_cookie(self, name: str, max_age_days: int=31) -> str:
+        """
+        Get a signed cookie with the name, if it validates, or None.
 
-        def format_field(s):
-            return ("%d:" % len(s)).encode("utf-8") + s
-        to_sign = b"|".join([
-            format_field(timestamp),
-            format_field(name),
-            format_field(value),
-            b""])
-
-        hash = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
-        hash.update(to_sign)
-        signature = hash.hexdigest().encode("utf-8")
-
-        content = to_sign + signature
-        self.set_cookie(ensure_str(name), ensure_str(content),
-                        expires_days=expires_days, **kwargs)
-
-    def get_secure_cookie(self, name, max_age_days=31):
+        Signed cookie cannot protect the content inside the value,
+        it only validates if this cookie is issued by the server or not.
+        """
         secret = self.app.settings.get("security_secret", None)
         if not secret:
             raise Exception("Security Secret is not in Application Settings. "
@@ -190,9 +250,66 @@ class RequestHandler:
         except:
             return None
 
+    def set_secure_cookie(self, name: str, value: str, expires_days: int=30,
+                          **kwargs):
+        """
+        Set a cookie that contains signed value that cannot be forged.
+
+        The value goes with sha256 signed hmac and a timestamp.
+
+        You must set a security_secret in Application Settings before
+
+        you use this method. It can be generated by::
+
+          futurefinity.utils.security_secret_generator(length=16)
+
+        You can use any length less than 61.
+
+        Once security_secret is generated, treat it as a password,
+        change security_secret will cause all secure_cookie become invalid.
+        """
+        secret = self.app.settings.get("security_secret", None)
+        if not secret:
+            raise Exception("Security Secret is not in Application Settings. "
+                            "Please Set Security Secret First.")
+
+        timestamp = str(int(time.time())).encode("utf-8")
+        if isinstance(value, str):
+            value = value.encode("utf-8")
+        elif not isinstance(value, bytes):
+            raise ValueError
+        value = base64.b64encode(value)
+
+        if isinstance(name, str):
+            name = name.encode("utf-8")
+        elif not isinstance(name, bytes):
+            raise ValueError
+
+        def format_field(s):
+            return ("%d:" % len(s)).encode("utf-8") + s
+        to_sign = b"|".join([
+            format_field(timestamp),
+            format_field(name),
+            format_field(value),
+            b""])
+
+        hash = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
+        hash.update(to_sign)
+        signature = hash.hexdigest().encode("utf-8")
+
+        content = to_sign + signature
+        self.set_cookie(ensure_str(name), ensure_str(content),
+                        expires_days=expires_days, **kwargs)
+
     def check_csrf_value(self):
+        """
+        Validate if csrf value is valid.
+
+        FutureFinity use a secure cookie _csrf and a body argument _scrf
+        to prevent CSRF attack.
+        """
         cookie_value = self.get_secure_cookie("_csrf")
-        form_value = self.get_body_query("_csrf")
+        form_value = self.get_body_arg("_csrf")
 
         if not (cookie_value and form_value):
             raise HTTPError(403)  # CSRF Value is not set.
@@ -201,27 +318,36 @@ class RequestHandler:
             raise HTTPError(403)  # CERF Value does not match.
 
     def set_csrf_value(self):
+        """
+        Generate CSRF value and set it to secure cookie.
+        """
         if self._csrf_value is not None:
             return
         self._csrf_value = str(uuid.uuid4())
         self.set_secure_cookie("_csrf", self._csrf_value, expires_days=None)
 
     def get_csrf_value(self):
+        """
+        Return a valid CSRF value to this request.
+
+        If csrf value does not exist, generate and set it.
+        """
         self.set_csrf_value()
         return self._csrf_value
 
-    def csrf_form_html(self):
+    def csrf_form_html(self) -> str:
+        """
+        Return a HTML form field contains _csrf value.
+        """
         value = self.get_csrf_value()
         return "<input type=\"hidden\" name=\"_csrf\" value=\"%s\">" % value
 
-    def clear_cookie(self, name):
-        if name in self._response_cookies:
-            del self._response_cookies[name]
+    def write(self, text: UnifiedStrBytes, clear_text: bool=False):
+        """
+        Store response body.
 
-    def clear_all_cookies(self):
-        self._response_cookies = http.cookies.SimpleCookie()
-
-    def write(self, text, clear_text=False):
+        If write() is called for many times, it will connect all text together.
+        """
         if self._finished:
             return
         self._written = True
@@ -229,7 +355,16 @@ class RequestHandler:
         if clear_text:
             self._response_body = ensure_bytes(text)
 
-    def render_string(self, template_name, **kwargs):
+    def render_string(self, template_name: str, **kwargs) -> str:
+        """
+        Render Template in template folder into string.
+        This method needs jinja2. if jinja2 is not installed, but this
+        method is called, it will raise an Error.
+
+        If you don't want to use jinja2, just override this method, and insert
+        your favourite template rendering system.
+        """
+
         if jinja2 is None:
             raise Exception("Jinja2 is not installed, "
                             "and render_string is not overrided.")
@@ -241,10 +376,17 @@ class RequestHandler:
         template_args.update(kwargs)
         return template.render(**template_args)
 
-    def render(self, template_name, **kwargs):
+    def render(self, template_name: str, **kwargs):
+        """
+        Render the template with render_string, and write them into response
+        body directly.
+        """
         self.write(self.render_string(template_name, **kwargs))
 
-    def redirect(self, url, permanent=False, status=None):
+    def redirect(self, url: str, permanent: bool=False, status: int=None):
+        """
+        Rediect request to other location.
+        """
         if self._finished:
             raise Exception("Cannot redirect after request finished.")
         if status is None:
@@ -271,16 +413,17 @@ class RequestHandler:
         self.finish()
 
     def compute_etag(self):
+        """
+        Compute etag header of response_body.
+        """
         hasher = hashlib.sha1()
         hasher.update(self._response_body)
         return '"%s"' % hasher.hexdigest()
 
-    def set_etag_header(self):
-        etag = self.compute_etag()
-        if etag is not None:
-            self.set_header("etag", etag)
-
     def check_etag_header(self):
+        """
+        Check etag header of response_body.
+        """
         computed_etag = ensure_bytes(self._response_headers.get_first("etag"))
         etags = re.findall(
             br'\*|(?:W/)?"[^"]*"',
@@ -303,7 +446,18 @@ class RequestHandler:
                     break
         return match
 
+    def set_etag_header(self):
+        """
+        Set response etag header.
+        """
+        etag = self.compute_etag()
+        if etag is not None:
+            self.set_header("etag", etag)
+
     def finish(self):
+        """
+        Finish the request, send the response.
+        """
         if self._finished:
             return
         self._finished = True
@@ -349,7 +503,10 @@ class RequestHandler:
             self.make_response(self.status_code, self._response_headers,
                                self._response_body)
 
-    def write_error(self, error_code, message=None):
+    def write_error(self, error_code: int, message: UnifiedStrBytes=None):
+        """
+        Respond an error to client.
+        """
         self.status_code = error_code
         self.write("<!DOCTYPE HTML>"
                    "<html>"
@@ -372,6 +529,9 @@ class RequestHandler:
                    "</html>")
 
     async def head(self, *args, **kwargs):
+        """
+        Respond the Head Request.
+        """
         get_return_text = await self.get(*args, **kwargs)
         if self.status_code != 200:
             return
@@ -382,24 +542,55 @@ class RequestHandler:
         self.write(b"", clear_text=True)
 
     async def get(self, *args, **kwargs):
+        """
+        Must be override in subclass if you want to handle GET request,
+        or it will raise an HTTPError(405) -- Method Not Allowed.
+        """
         raise HTTPError(405)
 
     async def post(self, *args, **kwargs):
+        """
+        Must be override in subclass if you want to handle POST request,
+        or it will raise an HTTPError(405) -- Method Not Allowed.
+        """
         raise HTTPError(405)
 
     async def delete(self, *args, **kwargs):
+        """
+        Must be override in subclass if you want to handle DELETE request,
+        or it will raise an HTTPError(405) -- Method Not Allowed.
+        """
         raise HTTPError(405)
 
     async def patch(self, *args, **kwargs):
+        """
+        Must be override in subclass if you want to handle PATCH request,
+        or it will raise an HTTPError(405) -- Method Not Allowed.
+        """
         raise HTTPError(405)
 
     async def put(self, *args, **kwargs):
+        """
+        Must be override in subclass if you want to handle PUT request,
+        or it will raise an HTTPError(405) -- Method Not Allowed.
+        """
         raise HTTPError(405)
 
     async def options(self, *args, **kwargs):
+        """
+        Must be override in subclass if you want to handle OPTIONS request,
+        or it will raise an HTTPError(405) -- Method Not Allowed.
+        """
         raise HTTPError(405)
 
     async def handle(self, *args, **kwargs):
+        """
+        Method to handle the request.
+
+        It checks the if request method is supported and alloed, and handle
+        them to right class function, get the return value, write them to
+        response body, and finish the request.
+        """
         try:
             if self.method not in SUPPORTED_METHODS:
                 raise HTTPError(400)
@@ -421,14 +612,23 @@ class RequestHandler:
 
 
 class NotFoundHandler(RequestHandler):
+    """
+    Default RequestHandler when link matches no handler.
+
+    By default, it just returns a 404 Error to the client.
+    """
     async def handle(self, *args, **kwargs):
         self.write_error(404)
         self.finish()
 
 
 class Application:
-    def __init__(self, loop=asyncio.get_event_loop(), **kwargs):
-        self._loop = loop
+    """
+    Class that its instance create asyncio compatible servers,
+    store handler list, find every request's handler, and pass it to server.
+    """
+    def __init__(self, **kwargs):
+        self._loop = kwargs.get("loop", asyncio.get_event_loop())
         self.handlers = routes.Mapper()
         if kwargs.get("template_path", None) and jinja2 is not None:
             self.template_env = jinja2.Environment(
@@ -439,15 +639,29 @@ class Application:
             self.template_env = None
         self.settings = kwargs
 
-    def make_server(self):
+    def make_server(self) -> asyncio.Protocol:
+        """
+        Make a asyncio compatible server.
+        """
         return (lambda: futurefinity.server.HTTPServer(app=self,
                                                        loop=self._loop))
 
-    def listen(self, port, address="127.0.0.1"):
+    def listen(self, port: int, address: str="127.0.0.1"):
+        """
+        Make the server listens to the specified port and address.
+        """
         f = self._loop.create_server(self.make_server(), address, port)
         srv = self._loop.run_until_complete(f)
 
-    def add_handler(self, route_str, name=None, handler=None):
+    def add_handler(self, route_str: str, name: str=None,
+                    handler: RequestHandler=None):
+        """
+        Add a handler to handler list.
+        If you specific a handler in parameter, it will return nothing.
+
+        On the other hand, if you use it as a decorator, you should not pass
+        a handler to this function or it will cause unexcepted result.
+        """
         def decorator(cls):
             self.handlers.connect(name, route_str, __handler__=cls)
             return cls
@@ -456,7 +670,13 @@ class Application:
         else:
             return decorator
 
-    def find_handler(self, path):
+    def find_handler(self, path: str) -> RequestHandler:
+        """
+        Find a handler that matches the path.
+
+        If a handler that matches the path cannot be found, it will return
+        NotFoundHandler, which return 404 Not Found to client.
+        """
         matched_obj = self.handlers.match(path)
         if not matched_obj:
             matched_obj = {"__handler__": NotFoundHandler}

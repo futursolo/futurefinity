@@ -29,6 +29,7 @@ import datetime
 import email.utils
 import calendar
 import numbers
+import typing
 
 MAX_HEADER_LENGTH = 4096
 
@@ -45,6 +46,8 @@ _CRLF_BYTES_MARK = b"\r\n"
 
 _LF_MARK = "\n"
 _LF_BYTES_MARK = b"\n"
+
+UnifiedStrBytes = typing.TypeVar("UnifiedStrBytes", str, bytes)
 
 
 class HTTPError(Exception):
