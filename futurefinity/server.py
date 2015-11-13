@@ -14,6 +14,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+"""
+``futurefinity.server`` contains the FutureFinity HTTPServer Class used by
+FutureFinity Web Application, which can parse http request and initialize
+right RequestHandler and make response to client.
+"""
+
 from futurefinity.utils import *
 import futurefinity
 
@@ -21,13 +27,27 @@ import urllib.parse
 import asyncio
 import ssl
 import re
+import cgi
 import http.cookies
 import http.client
 import traceback
 
 
 class HTTPServer(asyncio.Protocol):
-    def __init__(self, app, loop=asyncio.get_event_loop(), enable_h2=False):
+    """
+    FutureFinity HTTPServer Class.
+
+    Generally, this class should not be used directly in your application.
+    If you want customize server before pass it event loop, call::
+
+      app.make_server()
+
+    The make_server() function will return a lambda warpped HTTPServer
+    instance, which can pass right Application Instance and Application
+    Configuration to server.
+    """
+    def __init__(self, app, loop=asyncio.get_event_loop(),
+                 enable_h2: bool=False):
         self._loop = loop
         self.app = app
         self.enable_h2 = enable_h2
@@ -46,16 +66,27 @@ class HTTPServer(asyncio.Protocol):
         self._request_handlers = {}
 
     def set_keep_alive_handler(self):
+        """
+        Set a EventLoop.call_later instance, close transport after timeout.
+        """
         self.cancel_keep_alive_handler()
         self._keep_alive_handler = self._loop.call_later(100,
                                                          self.transport.close)
 
     def cancel_keep_alive_handler(self):
+        """
+        Cancel the EventLoop.call_later instance, prevent transport be closed
+        accidently.
+        """
         if self._keep_alive_handler is not None:
             self._keep_alive_handler.cancel()
         self._keep_alive_handler = None
 
     def reset_server(self):
+        """
+        Reset the server, make the server able to receive new request in a
+        connection.
+        """
         self._request_handlers = {}
         self.set_keep_alive_handler()
         self.data = b""
@@ -68,7 +99,10 @@ class HTTPServer(asyncio.Protocol):
         self.content_length = 0
         self.parsed_body = None
 
-    def connection_made(self, transport):
+    def connection_made(self, transport: asyncio.BaseTransport):
+        """
+        Called by Event Loop when the connection is made.
+        """
         self.transport = transport
         context = self.transport.get_extra_info("sslcontext", None)
         if context and ssl.HAS_ALPN:  # NPN will not be supported
@@ -79,16 +113,29 @@ class HTTPServer(asyncio.Protocol):
                 self.transport.close()
                 raise Exception("Unsupported Protocol")
 
-    def handle_request_error(self, e):
+    def handle_request_error(self, e: Exception):
+        """
+        Response an HTTPError when a error is raised when parsing HTTP
+        Request.
+        """
         if self.http_version == 20:
             return  # HTTP/2 will be implemented later.
         else:
             self.handle_request_error_http_v1(e)
 
-    def handle_request_error_http_v1(self, e):
+    def handle_request_error_http_v1(self, e: Exception):
+        """
+        Response an HTTP/1.x Error.
+
+        This function should not be used directly, handle_request_error()
+        function will pass it to the right http version.
+        """
         pass
 
-    def data_received(self, data):
+    def data_received(self, data: bytes):
+        """
+        Called by Event Loop when data received.
+        """
         self.cancel_keep_alive_handler()
         try:
             if self.http_version == 20:
@@ -99,7 +146,13 @@ class HTTPServer(asyncio.Protocol):
             traceback.print_exc()
             self.handle_request_error(e)
 
-    def data_received_http_v1(self, data):
+    def data_received_http_v1(self, data: bytes):
+        """
+        Try to parse received data as HTTP/1.x request.
+
+        This function should not be used directly, data_received() function
+        will pass it to the right http version.
+        """
         if self._body_parsed:
             return
 
@@ -137,7 +190,24 @@ class HTTPServer(asyncio.Protocol):
         self._request_handlers[0] = asyncio.ensure_future(
             self.handle_request(self.initial, self.parsed_body))
 
-    async def handle_request(self, initial, parsed_body):
+    def parse_body_http_v1(self):
+        """
+        Try to Parse Data as HTTP/1.x Request Body.
+        """
+        if len(self.data) < self.content_length:
+            return  # Request Not Completed, wait.
+        self.parsed_body = parse_http_v1_body(
+            data=self.data,
+            content_type=self.content_type,
+            content_length=self.content_length
+        )
+        self._body_parsed = True
+
+    async def handle_request(self, initial: dict,
+                             parsed_body: cgi.FieldStorage):
+        """
+        Handle an HTTP Request to Right RequestHandler.
+        """
         matched_obj = self.app.find_handler(initial["parsed_path"])
         request_handler = matched_obj.pop("__handler__")(
             app=self.app,
@@ -154,25 +224,27 @@ class HTTPServer(asyncio.Protocol):
         )
         await request_handler.handle(**matched_obj)
 
-    def parse_body_http_v1(self):
-        if len(self.data) < self.content_length:
-            return  # Request Not Completed, wait.
-        self.parsed_body = parse_http_v1_body(
-            data=self.data,
-            content_type=self.content_type,
-            content_length=self.content_length
-        )
-        self._body_parsed = True
-
-    def make_response(self, status_code, response_headers, response_body):
+    def make_response(self, status_code: int, response_headers: HTTPHeaders,
+                      response_body: bytes):
+        """
+        Make http response to client.
+        """
         if self.http_version == 20:
             pass  # HTTP/2 will be implemented later.
         else:
             self.make_http_v1_response(status_code, response_headers,
                                        response_body)
 
-    def make_http_v1_response(self, status_code, response_headers,
-                              response_body):
+    def make_http_v1_response(self, status_code: int,
+                              response_headers: HTTPHeaders,
+                              response_body: bytes):
+
+        """
+        Make HTTP/1.x response to client.
+
+        This function should not be called directly, make_response() function
+        will handle it to right http version.
+        """
         response_text = b""
         if self.http_version == 10:
             response_text += b"HTTP/1.0 "
@@ -195,7 +267,10 @@ class HTTPServer(asyncio.Protocol):
         else:
             self.transport.close()
 
-    def connection_lost(self, reason):
+    def connection_lost(self, reason: UnifiedStrBytes):
+        """
+        Called by Event Loop when the connection lost.
+        """
         self.cancel_keep_alive_handler()
         for (key, value) in self._request_handlers.items():
             value.cancel()

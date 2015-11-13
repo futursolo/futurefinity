@@ -675,7 +675,7 @@ class Application:
         Find a handler that matches the path.
 
         If a handler that matches the path cannot be found, it will return
-        NotFoundHandler, which return 404 Not Found to client.
+        NotFoundHandler, which returns 404 Not Found to client.
         """
         matched_obj = self.handlers.match(path)
         if not matched_obj:

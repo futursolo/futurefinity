@@ -35,6 +35,7 @@ Hello, World!
 
    install
    web
+   server
 
 
 Indices and tables
