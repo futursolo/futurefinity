@@ -108,13 +108,13 @@ class RequestHandler:
         self._finished = False
         self._response_body = b""
 
-    def get_link_arg(self, name: str, default=None) -> str:
+    def get_link_arg(self, name: str, default: str=None) -> str:
         """
         Return first argument in the link with the name.
         """
         return self._request_queries.get_list(name, [default])[0]
 
-    def get_body_arg(self, name: str, default=None) -> str:
+    def get_body_arg(self, name: str, default: str=None) -> str:
         """
         Return first argument in the body with the name.
         """
