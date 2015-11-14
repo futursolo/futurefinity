@@ -18,6 +18,12 @@ try:
     from setuptools import setup
 except ImportError:
     from distutils.core import setup
+import sys
+
+
+if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
+    raise RuntimeError("FutureFinity Requires Python 3.5.0 or higher.")
+
 
 install_requires = ["routes"]
 
@@ -31,7 +37,7 @@ if __name__ == "__main__":
         author_email="futursolo@gmail.com",
         url="https://finity.futures.moe/",
         license="http://www.apache.org/licenses/LICENSE-2.0",
-        description="FutureFinity is a fantastic Python web framework, "
+        description="FutureFinity is an asynchronous Python web framework, "
                     "using asyncio, inspired by Tornado and Flask.",
         packages=["futurefinity"],
         test_suite="nose2.collector.collector",

@@ -14,7 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-
 """
 ``futurefinity.web`` contains Application and RequestHandler class, which are
 essential of building an web application based on futurefinity.

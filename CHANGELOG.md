@@ -1,4 +1,4 @@
-v0.0.1-dev
+v0.0.1
 -------
 - Project Initialization
 - Support GET Method
@@ -12,3 +12,6 @@ v0.0.1-dev
 - Secure Cookies
 - Security Secret Generator
 - CSRF Protection
+- Debug
+- Error Handling
+- Basic Documentation
