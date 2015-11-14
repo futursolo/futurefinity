@@ -31,6 +31,7 @@ import cgi
 import http.cookies
 import http.client
 import traceback
+import typing
 
 
 class HTTPServer(asyncio.Protocol):
@@ -267,7 +268,7 @@ class HTTPServer(asyncio.Protocol):
         else:
             self.transport.close()
 
-    def connection_lost(self, reason: UnifiedStrBytes):
+    def connection_lost(self, reason: typing.Union[str, bytes]):
         """
         Called by Event Loop when the connection lost.
         """

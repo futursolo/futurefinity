@@ -1,6 +1,8 @@
 `futurefinity.server` -- FutureFinity Web Server Class
 ======================================================
 
+.. highlight:: python3
+
 .. automodule:: futurefinity.server
 
 .. autoclass:: futurefinity.server.HTTPServer

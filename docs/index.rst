@@ -34,7 +34,7 @@ Hello, World!
 
 Tutorial
 --------
-Based on the "Hello, World!" example, we can add more excited features to it.
+Based on the "Hello, World!" example, we can add more exciting features to it.
 
 Dynamic Routing:
 
@@ -133,6 +133,7 @@ Also see:
    install
    web
    server
+   utils
 
 
 Indices and tables

@@ -65,6 +65,7 @@ import hmac
 import hashlib
 import uuid
 import re
+import typing
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -342,7 +343,7 @@ class RequestHandler:
         value = self.get_csrf_value()
         return "<input type=\"hidden\" name=\"_csrf\" value=\"%s\">" % value
 
-    def write(self, text: UnifiedStrBytes, clear_text: bool=False):
+    def write(self, text: typing.Union[str, bytes], clear_text: bool=False):
         """
         Store response body.
 
@@ -503,7 +504,8 @@ class RequestHandler:
             self.make_response(self.status_code, self._response_headers,
                                self._response_body)
 
-    def write_error(self, error_code: int, message: UnifiedStrBytes=None):
+    def write_error(self, error_code: int,
+                    message: typing.Union[str, bytes]=None):
         """
         Respond an error to client.
         """
