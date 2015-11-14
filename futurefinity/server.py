@@ -131,7 +131,37 @@ class HTTPServer(asyncio.Protocol):
         This function should not be used directly, handle_request_error()
         function will pass it to the right http version.
         """
-        pass
+        status_code = 400
+        message = None
+        if isinstance(e, HTTPError):
+            status_code = e.status_code
+            message = e.message
+
+        response_body = ensure_bytes(status_code) + b": "
+        response_body += ensure_bytes(http.client.responses[status_code])
+
+        response_text = b""
+
+        if self.http_version == 11:
+            response_text += b"HTTP/1.1 "
+        else:
+            response_text += b"HTTP/1.0 "
+
+        response_text += ensure_bytes(status_code) + b" "
+
+        response_text += ensure_bytes(http.client.responses[
+            status_code]) + b"\r\n"
+
+        response_text += b"Content-Type: text/plain\r\n"
+
+        response_text += b"Content-Length: %d\r\n" % len(response_body)
+
+        response_text += b"\r\n\r\n"
+
+        response_text += response_body
+
+        self.transport.write(response_text)
+        self.transport.close()
 
     def data_received(self, data: bytes):
         """
@@ -144,7 +174,8 @@ class HTTPServer(asyncio.Protocol):
             else:
                 self.data_received_http_v1(data)
         except Exception as e:
-            traceback.print_exc()
+            if self.app.settings.get("debug", False):
+                traceback.print_exc()
             self.handle_request_error(e)
 
     def data_received_http_v1(self, data: bytes):

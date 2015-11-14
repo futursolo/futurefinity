@@ -66,6 +66,8 @@ import hashlib
 import uuid
 import re
 import typing
+import sys
+import html
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -505,7 +507,8 @@ class RequestHandler:
                                self._response_body)
 
     def write_error(self, error_code: int,
-                    message: typing.Union[str, bytes]=None):
+                    message: typing.Union[str, bytes]=None,
+                    exc_info: tuple=None):
         """
         Respond an error to client.
         """
@@ -525,6 +528,22 @@ class RequestHandler:
             self.write(""
                        "    <div>%(message)s</div>" % {
                            "message": ensure_str(message)})
+
+        if self.app.settings.get("debug", False) and exc_info:
+            print("""HTTPError: %(error_code)d,
+                     Path: %(path)s,
+                     Headers: %(headers)s,
+                     Cookies: %(cookies)s.""" % {
+                         "error_code": error_code,
+                         "path": self.path,
+                         "headers": str(self._request_headers),
+                         "cookies": str(self._request_cookies)
+                     }, file=sys.stderr)
+            traceback.print_exception(*exc_info)
+            for line in traceback.format_exception(*exc_info):
+                self.write(
+                    "    <div>%s</div>" % html.escape(line).replace(" ",
+                                                                    "&nbsp;"))
 
         self.write(""
                    "</body>"
@@ -605,11 +624,9 @@ class RequestHandler:
             if not self._written:
                 self.write(body)
         except HTTPError as e:
-            traceback.print_exc()
-            self.write_error(e.status_code, e.message)
+            self.write_error(e.status_code, e.message, sys.exc_info())
         except Exception as e:
-            traceback.print_exc()
-            self.write_error(500)
+            self.write_error(500, None, sys.exc_info())
         self.finish()
 
 
