@@ -371,8 +371,8 @@ epub_exclude_files = ["search.html"]
 
 extlinks = {
     "current_tarball": (
-        "https://pypi.python.org/packages/source/t/futurefinity/futurefinity-%s.tar.g%%s" % version,
-        "futurefinity-%s.tar.g" % version),
+        "https://pypi.python.org/packages/source/F/FutureFinity/FutureFinity-%s.tar.g%%s" % version,
+        "FutureFinity-%s.tar.g" % version),
 }
 
 
