@@ -1,5 +1,6 @@
 # FutureFinity
 FutureFinity is an asynchronous Python web framework, using asyncio, inspired by Tornado and Flask.
+[![Build Status](https://travis-ci.org/futursolo/FutureFinity.svg)](https://travis-ci.org/futursolo/FutureFinity)
 
 Requirements
 ------------
