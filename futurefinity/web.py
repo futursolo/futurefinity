@@ -67,6 +67,8 @@ import re
 import typing
 import sys
 import html
+import os
+import mimetypes
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -638,6 +640,34 @@ class NotFoundHandler(RequestHandler):
     async def handle(self, *args, **kwargs):
         self.write_error(404)
         self.finish()
+
+
+class StaticFileHandler(RequestHandler):
+    """
+    Handler that handle static files.
+
+    Warning: You should use Web Server(such as: Nginx) to handle Static Files.
+             StaticFileHandler should only be used in development.
+    """
+
+    async def handle_static_file(file_uri_path: str, *args, **kwargs):
+        file_path = os.path.join(
+            self.app.settings.get("static_path", "static"), file_uri_path)
+        if not os.exist(file_path):
+            raise HTTPError(404)
+        if os.path.isdir(file_path):
+            raise HTTPError(403)
+
+        file_size = os.path.getsize("/Users/futursolo/.ssh/config")
+        if file_size >= 1024 * 1024 * 50:
+            # StaticFileHandler Currently does not file bigger than 50MB.
+            raise HTTPError(500, "Static File Size Too Large.")
+        with open(file_path, "rb") as f:
+            self.write(f.read())
+        self.finish()
+
+    async def get(self, *args, **kwargs):
+        await handle_static_file(file_uri_path=kwargs["file"])
 
 
 class Application:
