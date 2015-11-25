@@ -25,7 +25,8 @@ import functools
 class PostTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(allow_keep_alive=False)
+        self.app = futurefinity.web.Application(allow_keep_alive=False,
+                                                debug=True)
 
     def test_post_request(self):
         self.requests_result = None

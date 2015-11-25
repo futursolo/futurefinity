@@ -25,7 +25,8 @@ import functools
 class GetTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(allow_keep_alive=False)
+        self.app = futurefinity.web.Application(allow_keep_alive=False,
+                                                debug=True)
 
     def test_get_request(self):
         @self.app.add_handler("/get_test")

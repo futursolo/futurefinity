@@ -26,7 +26,8 @@ import traceback
 class GetTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(allow_keep_alive=False)
+        self.app = futurefinity.web.Application(allow_keep_alive=False,
+                                                debug=True)
 
     def test_custom_header_request(self):
         @self.app.add_handler("/header_test")

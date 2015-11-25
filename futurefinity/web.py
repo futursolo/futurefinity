@@ -650,24 +650,29 @@ class StaticFileHandler(RequestHandler):
              StaticFileHandler should only be used in development.
     """
 
-    async def handle_static_file(file_uri_path: str, *args, **kwargs):
+    async def handle_static_file(self, file_uri_path: str, *args, **kwargs):
         file_path = os.path.join(
             self.app.settings.get("static_path", "static"), file_uri_path)
-        if not os.exist(file_path):
+        if not os.path.exists(file_path):
             raise HTTPError(404)
         if os.path.isdir(file_path):
             raise HTTPError(403)
 
-        file_size = os.path.getsize("/Users/futursolo/.ssh/config")
+        file_size = os.path.getsize(file_path)
         if file_size >= 1024 * 1024 * 50:
             # StaticFileHandler Currently does not file bigger than 50MB.
             raise HTTPError(500, "Static File Size Too Large.")
+
+        mime = mimetypes.guess_type(file_uri_path)[0]
+        mime = mime or "application/octet-stream"
+        self.set_header("content-type", mime)
+
         with open(file_path, "rb") as f:
             self.write(f.read())
         self.finish()
 
     async def get(self, *args, **kwargs):
-        await handle_static_file(file_uri_path=kwargs["file"])
+        await self.handle_static_file(file_uri_path=kwargs["file"])
 
 
 class Application:
