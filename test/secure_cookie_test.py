@@ -24,7 +24,7 @@ import functools
 import json
 
 
-class GetTestCollector(unittest.TestCase):
+class SecureCookieTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
         self.app = futurefinity.web.Application(
