@@ -212,50 +212,28 @@ class RequestHandler:
         if not secret:
             raise Exception("Security Secret is not in Application Settings. "
                             "Please Set Security Secret First.")
-        value = ensure_bytes(self.get_cookie(name))
-        if not value:
-            return None
-        if not isinstance(value, bytes):
-            raise ValueError
+        valid_length = None
+        if max_age_days:
+            valid_length = max_age_days * 86400
 
-        name = ensure_bytes(name)
-        if not isinstance(name, bytes):
-            raise ValueError
+        cookie_content = self.get_cookie(name)
 
-        def _consume_field(s):
-            length, _, rest = s.partition(b':')
-            n = int(length)
-            field_value = rest[:n]
-            if rest[n:n + 1] != b'|':
-                raise ValueError("malformed v2 signed value field")
-            rest = rest[n + 1:]
-            return field_value, rest
-        try:
-            timestamp, rest = _consume_field(value)
-            name_field, rest = _consume_field(rest)
-            value_field, passed_sig = _consume_field(rest)
-        except ValueError:
+        if cookie_content is None:
             return None
-        signed_string = value[:-len(passed_sig)]
 
-        hash = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
-        hash.update(signed_string)
-        expected_sig = hash.hexdigest().encode("utf-8")
+        method, cookie_content = cookie_content.split("|", 1)
 
-        if not hmac.compare_digest(passed_sig, expected_sig):
-            return None
-        if name_field != name:
-            return None
-        timestamp = int(timestamp)
-        if timestamp < time.time() - max_age_days * 86400:
-            return None
-        try:
-            return ensure_str(base64.b64decode(value_field))
-        except:
+        if method == "AESGCM":
+            return decrypt_str_by_aes_gcm(secret, cookie_content,
+                                          valid_length=valid_length)
+        elif method == "SIGNED":
+            return validate_and_return_signed_str(secret, cookie_content,
+                                                  valid_length=valid_length)
+        else:
             return None
 
     def set_secure_cookie(self, name: str, value: str, expires_days: int=30,
-                          **kwargs):
+                          use_aes_gcm: bool=True, **kwargs):
         """
         Set a cookie that contains signed value that cannot be forged.
 
@@ -276,32 +254,12 @@ class RequestHandler:
         if not secret:
             raise Exception("Security Secret is not in Application Settings. "
                             "Please Set Security Secret First.")
+        content = None
+        if use_aes_gcm:
+            content = "AESGCM|" + encrypt_str_by_aes_gcm(secret, value)
+        else:
+            content = "SIGNED|" + create_signed_str(secret, value)
 
-        timestamp = str(int(time.time())).encode("utf-8")
-        if isinstance(value, str):
-            value = value.encode("utf-8")
-        elif not isinstance(value, bytes):
-            raise ValueError
-        value = base64.b64encode(value)
-
-        if isinstance(name, str):
-            name = name.encode("utf-8")
-        elif not isinstance(name, bytes):
-            raise ValueError
-
-        def format_field(s):
-            return ("%d:" % len(s)).encode("utf-8") + s
-        to_sign = b"|".join([
-            format_field(timestamp),
-            format_field(name),
-            format_field(value),
-            b""])
-
-        hash = hmac.new(secret.encode("utf-8"), digestmod=hashlib.sha256)
-        hash.update(to_sign)
-        signature = hash.hexdigest().encode("utf-8")
-
-        content = to_sign + signature
         self.set_cookie(ensure_str(name), ensure_str(content),
                         expires_days=expires_days, **kwargs)
 
@@ -362,7 +320,7 @@ class RequestHandler:
     def render_string(self, template_name: str, **kwargs) -> str:
         """
         Render Template in template folder into string.
-        This method needs jinja2. if jinja2 is not installed, but this
+        This method requires jinja2. if jinja2 is not installed, but this
         method is called, it will raise an Error.
 
         If you don't want to use jinja2, just override this method, and insert
