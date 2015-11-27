@@ -611,6 +611,10 @@ class StaticFileHandler(RequestHandler):
     async def handle_static_file(self, file_uri_path: str, *args, **kwargs):
         file_path = os.path.join(
             self.app.settings.get("static_path", "static"), file_uri_path)
+
+        if not os.path.realpath(file_path).startswith(
+         os.path.realpath(self.app.settings.get("static_path", "static"))):
+            raise HTTPError(403)
         if not os.path.exists(file_path):
             raise HTTPError(404)
         if os.path.isdir(file_path):
