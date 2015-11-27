@@ -27,7 +27,7 @@ if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
 
 install_requires = ["routes"]
 
-tests_require = ["requests", "nose2", "jinja2"]
+tests_require = ["requests", "nose2", "jinja2", "cryptography"]
 
 if __name__ == "__main__":
     setup(
