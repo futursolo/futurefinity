@@ -1,4 +1,4 @@
-``futurefinity.web`` -- FutureFinty Web Application and Web RequestHandler
+`futurefinity.web` -- FutureFinty Web Application and Web RequestHandler
 =============================================================================
 
 .. highlight:: python3

@@ -1,5 +1,5 @@
 v0.0.1
--------
+------
 - Project Initialization
 - Support GET Method
 - Routing
@@ -15,3 +15,8 @@ v0.0.1
 - Debug
 - Error Handling
 - Basic Documentation
+
+v0.1.0
+------
+- StaticFileHandler
+- New Secure Cookies(Signed and AES GCM Encrypted)
