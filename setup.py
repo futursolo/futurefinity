@@ -39,6 +39,7 @@ if __name__ == "__main__":
         license="http://www.apache.org/licenses/LICENSE-2.0",
         description="FutureFinity is an asynchronous Python web framework, "
                     "using asyncio, inspired by Tornado and Flask.",
+        long_description=open("README.rst", "r").read(),
         packages=["futurefinity", "futurefinity.interface"],
         test_suite="nose2.collector.collector",
         install_requires=install_requires,

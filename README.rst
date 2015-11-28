@@ -1,10 +1,13 @@
-# FutureFinity
+FutureFinity
+============
 FutureFinity is an asynchronous Python web framework, using asyncio, inspired by Tornado and Flask.
-[![Build Status](https://travis-ci.org/futursolo/FutureFinity.svg)](https://travis-ci.org/futursolo/FutureFinity)
+
+.. image:: https://travis-ci.org/futursolo/FutureFinity.svg?branch=master
+    :target: https://travis-ci.org/futursolo/FutureFinity
 
 Documentation
 -------------
-Documentation for latest stable version is hosted on [https://finity.futures.moe](https://finity.futures.moe).
+Documentation for latest stable version is hosted on `https://finity.futures.moe <https://finity.futures.moe>`_.
 
 For development version or deprecated version, download or clone the source,
 and do `cd doc; make html`.
@@ -18,9 +21,10 @@ Requirements
 
 Installation
 ------------
-```shell
-$ pip install FutureFinity
-```
+
+.. code-block:: shell
+
+  $ pip install FutureFinity
 
 License
 -------

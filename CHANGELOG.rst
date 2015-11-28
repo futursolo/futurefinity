@@ -20,3 +20,5 @@ v0.1.0
 ------
 - StaticFileHandler
 - New Secure Cookies(Signed and AES GCM Encrypted)
+- Introduce Interface
+- Using Template Interface instead of Overriding Function

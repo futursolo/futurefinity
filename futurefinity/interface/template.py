@@ -42,7 +42,7 @@ class TemplateInterfaceModel:
             self.template_path = self.app.settings.get("template_path", None)
 
     def render_template(self, template_name, template_args):
-        raise NotImplementedError
+        raise NotImplementedError("No Template Rendering Engine Installed!")
 
 
 class Jinja2TemplateInterface(TemplateInterfaceModel):
@@ -75,3 +75,5 @@ class Jinja2TemplateInterface(TemplateInterfaceModel):
 
 if jinja2:
     DefaultTemplateInterface = Jinja2TemplateInterface
+else:
+    DefaultTemplateInterface = TemplateInterfaceModel
