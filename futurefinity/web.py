@@ -47,14 +47,11 @@ Finally, listen to the port you want, and start asyncio event loop::
 from futurefinity.utils import *
 import futurefinity
 import futurefinity.server
+import futurefinity.interface
 
 import asyncio
 
 import routes
-try:
-    import jinja2
-except:
-    jinja2 = None
 import traceback
 import http.cookies
 import http.client
@@ -317,26 +314,22 @@ class RequestHandler:
         if clear_text:
             self._response_body = ensure_bytes(text)
 
-    def render_string(self, template_name: str, **kwargs) -> str:
+    def render_string(self, template_name: str, template_dict: dict) -> str:
         """
         Render Template in template folder into string.
-        This method requires jinja2. if jinja2 is not installed, but this
-        method is called, it will raise an Error.
 
-        If you don't want to use jinja2, just override this method, and insert
-        your favourite template rendering system.
+        Currently, FutureFinity uses Jinja2 as the Default Template Rendering
+        Engine. However, You can Specify Template Engine by Customizing
+        Template Interface.
         """
 
-        if jinja2 is None:
-            raise Exception("Jinja2 is not installed, "
-                            "and render_string is not overrided.")
-        template = self.app.template_env.get_template(template_name)
         template_args = {
             "handler": self,
             "csrf_form_html": self.csrf_form_html
         }
-        template_args.update(kwargs)
-        return template.render(**template_args)
+
+        renderer = self.app.interfaces.get("template")
+        return renderer.render_template(template_name, template_dict)
 
     def render(self, template_name: str, **kwargs):
         """
@@ -645,19 +638,14 @@ class Application:
     def __init__(self, **kwargs):
         self._loop = kwargs.get("loop", asyncio.get_event_loop())
         self.handlers = routes.Mapper()
-        if kwargs.get("template_path", None) and jinja2 is not None:
-            self.template_env = jinja2.Environment(
-                loader=jinja2.FileSystemLoader(
-                    kwargs.get("template_path"),
-                    encoding=kwargs.get("encoding", "utf-8")))
-        else:
-            self.template_env = None
         self.settings = kwargs
+        self.interfaces = futurefinity.interface.InterfaceFactory(app=self)
 
     def make_server(self) -> asyncio.Protocol:
         """
         Make a asyncio compatible server.
         """
+        self.interfaces.initialize()
         return (lambda: futurefinity.server.HTTPServer(app=self,
                                                        loop=self._loop))
 

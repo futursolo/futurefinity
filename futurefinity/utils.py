@@ -256,10 +256,10 @@ def render_template(template_name: str):
     def decorator(f):
         @functools.wraps(f)
         async def wrapper(self, *args, **kwargs):
-            render_dict = await f(self, *args, **kwargs)
+            template_dict = await f(self, *args, **kwargs)
             if self._written:
                 return
-            return self.render_string(template_name, **render_dict)
+            return self.render_string(template_name, template_dict)
         return wrapper
     return decorator
 
