@@ -37,9 +37,6 @@ class SessionInterfaceModel:
                 "FutureFinity Application is not set for this Interface.")
         self._initialized = True
 
-        if self.template_path is None:
-            self.template_path = self.app.settings.get("template_path", None)
-
     async def get_session(self, handler):
         raise NotImplementedError(
             "Neither Database-based Session Interface Selected, "
