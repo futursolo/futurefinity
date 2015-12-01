@@ -59,7 +59,9 @@ class SecureCookieSessionInterface(SessionInterfaceModel):
             return {}
 
     async def write_session(self, handler, session_object):
+        if session_object == {}:
+            return
         session_cookie = json.dumps(session_object)
-        handler.set_secure_cookie("_session", session_cookie)
+        handler.set_secure_cookie("_session", session_cookie, httponly=True)
 
 DefaultSessionInterface = SecureCookieSessionInterface

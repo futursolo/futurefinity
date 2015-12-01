@@ -100,6 +100,8 @@ class RequestHandler:
         self._request_cookies = kwargs.get("request_cookies")
         self._request_body = kwargs.get("request_body")
 
+        self._session = self.app.interfaces.get("session").get_session(self)
+
         self._response_headers = HTTPHeaders()
         self._response_cookies = http.cookies.SimpleCookie()
 
@@ -260,6 +262,12 @@ class RequestHandler:
         self.set_cookie(ensure_str(name), ensure_str(content),
                         expires_days=expires_days, **kwargs)
 
+    def get_session(self, name, default=None):
+        return self._session.get(name, default)
+
+    def set_session(self, name, value):
+        self._session.set(name, value)
+
     def check_csrf_value(self):
         """
         Validate if csrf value is valid.
@@ -416,6 +424,8 @@ class RequestHandler:
         if self._finished:
             return
         self._finished = True
+
+        self.app.interfaces.get("session").write_session(self, self._session)
 
         if self.app.settings.get("csrf_protect", False):
             self.set_csrf_value()
