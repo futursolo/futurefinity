@@ -64,4 +64,29 @@ class SecureCookieSessionInterface(SessionInterfaceModel):
         session_cookie = json.dumps(session_object)
         handler.set_secure_cookie("_session", session_cookie, httponly=True)
 
+
+class RedisSessionInterface(SessionInterfaceModel):
+    def __init__(self, app=None, pool=None, *args, **kwargs):
+        SessionInterfaceModel.__init__(self, app=app, *args,
+                                       **kwargs)
+        self.redis_connection_pool = pool
+
+    def initialize(self, app=None, pool=None):
+        SessionInterfaceModel.initialize(self, app=app)
+        if not self.redis_connection_pool:
+            self.redis_connection_pool = self.app.settings.get(
+                "redis_connection_pool", None)
+            if not self.redis_connection_pool:
+                raise Exception(
+                    "Cannot found Redis Connection Pool. "
+                    "Please provide redis_connection_pool through Application "
+                    "Settings or __init__ pool Parameter.")
+
+    async def get_session(self, handler):
+        session_id = json.loads(handler.get_secure_cookie("_session_id"))
+
+        with (await pool) as redis:
+            yield from redis.get('_%s_session' % session_id)
+
+
 DefaultSessionInterface = SecureCookieSessionInterface
