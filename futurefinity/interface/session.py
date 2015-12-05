@@ -16,6 +16,7 @@
 
 from futurefinity.utils import *
 import json
+import uuid
 try:
     import aioredis
 except ImportError:
@@ -73,6 +74,8 @@ class RedisSessionInterface(SessionInterfaceModel):
 
     def initialize(self, app=None, pool=None):
         SessionInterfaceModel.initialize(self, app=app)
+        if pool:
+             self.redis_connection_pool = pool
         if not self.redis_connection_pool:
             self.redis_connection_pool = self.app.settings.get(
                 "redis_connection_pool", None)
@@ -84,9 +87,27 @@ class RedisSessionInterface(SessionInterfaceModel):
 
     async def get_session(self, handler):
         session_id = json.loads(handler.get_secure_cookie("_session_id"))
+        if session_id["type"] != "redis":
+            return {}
+        with (await self.redis_connection_pool) as conn:
+            redis_key = "_%s_session" % session_id["id"]
+            if not (await conn.exists(redis_key)):
+                return {}
+            return json.loads(await conn.get(redis_key))
 
-        with (await pool) as redis:
-            yield from redis.get('_%s_session' % session_id)
+    async def write_session(self, handler, session_object):
+        session_id = {
+            "type": "redis",
+            "id": str(uuid.uuid4())
+        }
+        handler.set_secure_cookie("_session_id", json.dumps(session_id))
+
+        if session_object == {}:
+            return
+
+        with (await self.redis_connection_pool) as conn:
+            redis_key = "_%s_session" % session_id["id"]
+            conn.set(redis_key, json.dumps(session_object))
 
 
 DefaultSessionInterface = SecureCookieSessionInterface
