@@ -100,7 +100,8 @@ class RequestHandler:
         self._request_cookies = kwargs.get("request_cookies")
         self._request_body = kwargs.get("request_body")
 
-        self._session = self.app.interfaces.get("session").get_session(self)
+        self._session = await self.app.interfaces.get(
+            "session").get_session(self)
 
         self._response_headers = HTTPHeaders()
         self._response_cookies = http.cookies.SimpleCookie()
@@ -425,7 +426,8 @@ class RequestHandler:
             return
         self._finished = True
 
-        self.app.interfaces.get("session").write_session(self, self._session)
+        await self.app.interfaces.get(
+            "session").write_session(self, self._session)
 
         if self.app.settings.get("csrf_protect", False):
             self.set_csrf_value()
