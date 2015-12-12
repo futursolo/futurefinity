@@ -48,7 +48,7 @@ class InterfaceFactory:
             interface.initialize(app=self.app)
 
     def set(self, name, interface):
-        if not self._initialized:
+        if self._initialized:
             raise Exception(
                 "InterfaceFactory is intialized. "
                 "Custom interface must be setted before intialization.")

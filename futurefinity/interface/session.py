@@ -17,6 +17,7 @@
 from futurefinity.utils import *
 import json
 import uuid
+import traceback
 try:
     import aioredis
 except ImportError:
@@ -60,7 +61,7 @@ class SecureCookieSessionInterface(SessionInterfaceModel):
             return {}
 
     async def write_session(self, handler, session_object):
-        if session_object == {}:
+        if session_object is None:
             return
         session_cookie = json.dumps(session_object)
         handler.set_secure_cookie("_session", session_cookie, httponly=True)
@@ -75,7 +76,7 @@ class RedisSessionInterface(SessionInterfaceModel):
     def initialize(self, app=None, pool=None):
         SessionInterfaceModel.initialize(self, app=app)
         if pool:
-             self.redis_connection_pool = pool
+            self.redis_connection_pool = pool
         if not self.redis_connection_pool:
             self.redis_connection_pool = self.app.settings.get(
                 "redis_connection_pool", None)
@@ -86,16 +87,25 @@ class RedisSessionInterface(SessionInterfaceModel):
                     "Settings or __init__ pool Parameter.")
 
     async def get_session(self, handler):
-        session_id = json.loads(handler.get_secure_cookie("_session_id"))
+        session_id_cookie = handler.get_secure_cookie("_session_id")
+        if not session_id_cookie:
+            return {}
+
+        session_id = json.loads(session_id_cookie)
+
         if session_id["type"] != "redis":
             return {}
+
         with (await self.redis_connection_pool) as conn:
             redis_key = "_%s_session" % session_id["id"]
             if not (await conn.exists(redis_key)):
                 return {}
-            return json.loads(await conn.get(redis_key))
+            return json.loads(ensure_str(await conn.get(redis_key)))
 
     async def write_session(self, handler, session_object):
+        if session_object is None:
+            return
+
         session_id = {
             "type": "redis",
             "id": str(uuid.uuid4())
