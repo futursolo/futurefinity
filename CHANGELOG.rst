@@ -22,3 +22,6 @@ v0.1.0
 - New Secure Cookies(Signed and AES GCM Encrypted)
 - Introduce Interface
 - Using Template Interface instead of Overriding Function
+- Introduce Session Interface
+- Introduce Secure Cookie Based Session
+- Introduce Redis Based Session

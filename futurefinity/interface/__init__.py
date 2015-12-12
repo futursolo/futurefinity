@@ -22,9 +22,11 @@ enhance the feature of FutureFinity.
 
 from futurefinity.utils import *
 from futurefinity.interface import template as template_interface
+from futurefinity.interface import session as session_interface
 
 default_interfaces = {
-    "template": template_interface.DefaultTemplateInterface
+    "template": template_interface.DefaultTemplateInterface,
+    "session": session_interface.DefaultSessionInterface
 }
 
 
@@ -46,7 +48,7 @@ class InterfaceFactory:
             interface.initialize(app=self.app)
 
     def set(self, name, interface):
-        if not self._initialized:
+        if self._initialized:
             raise Exception(
                 "InterfaceFactory is intialized. "
                 "Custom interface must be setted before intialization.")

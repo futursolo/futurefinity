@@ -32,11 +32,14 @@ class TemplateInterfaceModel:
         self._initialized = False
 
     def initialize(self, app=None):
+        if self._initialized:
+            return
         if app:
             self.app = app
         if not self.app:
             raise Exception(
                 "FutureFinity Application is not set for this Interface.")
+        self._initialized = True
 
         if self.template_path is None:
             self.template_path = self.app.settings.get("template_path", None)
@@ -73,7 +76,7 @@ class Jinja2TemplateInterface(TemplateInterfaceModel):
         template = self.envir.get_template(template_name)
         return template.render(**template_dict)
 
-if jinja2:
+if jinja2 is not None:
     DefaultTemplateInterface = Jinja2TemplateInterface
 else:
     DefaultTemplateInterface = TemplateInterfaceModel

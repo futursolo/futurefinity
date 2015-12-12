@@ -1,10 +1,15 @@
 language: python
 python:
   - "3.5"
+  - "nightly"
 install:
   - pip install -r requirements.txt
   - pip install requests
   - pip install nose2
   - pip install .
+
+services:
+  - redis-server
+
 # command to run tests
 script: python setup.py test

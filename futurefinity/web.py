@@ -100,6 +100,8 @@ class RequestHandler:
         self._request_cookies = kwargs.get("request_cookies")
         self._request_body = kwargs.get("request_body")
 
+        self._session = None
+
         self._response_headers = HTTPHeaders()
         self._response_cookies = http.cookies.SimpleCookie()
 
@@ -259,6 +261,18 @@ class RequestHandler:
 
         self.set_cookie(ensure_str(name), ensure_str(content),
                         expires_days=expires_days, **kwargs)
+
+    async def get_session(self, name, default=None):
+        if not self._session:
+            self._session = await self.app.interfaces.get(
+                "session").get_session(self)
+        return self._session.get(name, default)
+
+    async def set_session(self, name, value):
+        if not self._session:
+            self._session = await self.app.interfaces.get(
+                "session").get_session(self)
+        self._session[name] = value
 
     def check_csrf_value(self):
         """
@@ -575,6 +589,8 @@ class RequestHandler:
             body = await getattr(self, self.method.lower())(*args, **kwargs)
             if not self._written:
                 self.write(body)
+            await self.app.interfaces.get(
+                "session").write_session(self, self._session)
         except HTTPError as e:
             self.write_error(e.status_code, e.message, sys.exc_info())
         except Exception as e:

@@ -27,7 +27,7 @@ if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
 
 install_requires = ["routes"]
 
-tests_require = ["requests", "nose2", "jinja2", "cryptography"]
+tests_require = ["requests", "nose2", "jinja2", "cryptography", "aioredis"]
 
 if __name__ == "__main__":
     setup(
@@ -37,10 +37,13 @@ if __name__ == "__main__":
         author_email="futursolo@gmail.com",
         url="https://finity.futures.moe/",
         license="http://www.apache.org/licenses/LICENSE-2.0",
-        description="FutureFinity is an asynchronous Python web framework, "
-                    "using asyncio, inspired by Tornado and Flask.",
+        description="FutureFinity is an asynchronous Python web framework "
+                    "designed for asyncio and native coroutines.",
         long_description=open("README.rst", "r").read(),
         packages=["futurefinity", "futurefinity.interface"],
+        package_data={
+            "futurefinity": ["README.rst", "LICENSE"]
+        },
         test_suite="nose2.collector.collector",
         install_requires=install_requires,
         tests_require=tests_require,
