@@ -41,6 +41,9 @@ if __name__ == "__main__":
                     "designed for asyncio and native coroutines.",
         long_description=open("README.rst", "r").read(),
         packages=["futurefinity", "futurefinity.interface"],
+        package_data={
+            "futurefinity": ["README.rst", "LICENSE"]
+        },
         test_suite="nose2.collector.collector",
         install_requires=install_requires,
         tests_require=tests_require,
