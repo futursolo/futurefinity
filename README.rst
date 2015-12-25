@@ -18,7 +18,6 @@ FutureFinity is an asynchronous Python web framework designed for asyncio and na
     :target: https://www.python.org/downloads/release/python-350/
 
 
-
 Documentation
 -------------
 Documentation for latest stable version is hosted on `https://finity.futures.moe <https://finity.futures.moe>`_.
@@ -32,6 +31,7 @@ Requirements
 - Routes>=2.0.0
 - Cryptography>=1.0.0(Optional, Recommended, Used by AES GCM Secure Cookie)
 - Jinja2>=2.0.0(Optional, Used by Template Rendering)
+- aioredis>=1.0.0(Optional, Used by Redis Session)
 
 Installation
 ------------

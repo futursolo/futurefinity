@@ -15,6 +15,23 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-__version__ = ("0", "1", "0", "1")
+import futurefinity.web
+import asyncio
 
-version = "0.1.0"
+loop = asyncio.get_event_loop()
+app = futurefinity.web.Application()
+
+
+@app.add_handler("/user_cookie")
+class UserCookieHandler(futurefinity.web.RequestHandler):
+    async get(self, *args, **kwargs):
+        round_num = int(self.get_cookie("rofl-round", default=450))
+        self.set_cookie("rofl-round", str(round_num + 100))
+        return "If you saw nothing except this sentence, use curl -i."
+
+app.listen(23333)
+
+try:
+    loop.run_forever()
+except KeyboardInterrupt:
+    pass

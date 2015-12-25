@@ -1,18 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 #
-# Copyright 2015 Futur Solo
+#   Copyright 2015 Futur Solo
 #
-# Licensed under the Apache License: Version 2.0 (the "License"); you may
-# not use this file except in compliance with the License. You may obtain
-# a copy of the License at
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#       http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing: software
-# distributed under the License is distributed on an "AS IS" BASIS: WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND: either express or implied. See the
-# License for the specific language governing permissions and limitations
-# under the License.
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
 
 """
 ``futurefinity.utils`` contains a series of utilities that are useful to
@@ -442,6 +443,9 @@ def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,
 
 
 def create_signed_str(secret: str, text: str) -> str:
+    """
+    Create a signed value with security secret.
+    """
     iv = os.urandom(16)
 
     content = struct.pack("l", int(time.time())) + ensure_bytes(text)
@@ -460,7 +464,9 @@ def create_signed_str(secret: str, text: str) -> str:
 
 def validate_and_return_signed_str(secret: str, signed_text: str,
                                    valid_length: int=None) -> str:
-
+    """
+    Validate the signed value and return the raw string.
+    """
     signed_text_reader = io.BytesIO(base64.b64decode(signed_text))
     iv = signed_text_reader.read(16)
     length = struct.unpack("l", encrypted_text_reader.read(8))[0]
@@ -485,6 +491,9 @@ def validate_and_return_signed_str(secret: str, signed_text: str,
 
 
 def encrypt_str_by_aes_gcm(secret: str, text: str) -> str:
+    """
+    Encrypt and sign the value with sceurity secret and AES-GCM.
+    """
     if AESCipher is None:
         raise Exception("Cryptography is not installed, "
                         "and aes_gcm_str_encrypt is called."
@@ -511,6 +520,9 @@ def encrypt_str_by_aes_gcm(secret: str, text: str) -> str:
 
 def decrypt_str_by_aes_gcm(secret: str, encrypted_text: str,
                            valid_length: int=None) -> str:
+    """
+    Decrypt the value and validate the signature of the value.
+    """
     if AESCipher is None:
         raise Exception("Cryptography is not installed, "
                         "and aes_gcm_str_decrypt is called."

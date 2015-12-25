@@ -16,7 +16,7 @@ FutureFinity |version| will only work on Python 3.5 or higher.
 
 **Installation**:
 
-Get the lasest FutureFinity release from `PyPI <https://pypi.python.org/pypi/futurefinity>`_ using pip(**Recommended**)::
+Get the latest FutureFinity release from `PyPI <https://pypi.python.org/pypi/futurefinity>`_ using pip(**Recommended**)::
 
   pip install FutureFinity
 
@@ -26,12 +26,10 @@ Install the latest GitHub Master Version::
 
 Install From Source Code:
 
-Download :current_tarball:`z`:
+Download :current_tarball:`z`::
 
-.. parsed-literal::
-
-  tar xvzf FutureFinity-|version|.tar.gz
-  cd FutureFinity-|version|
+  tar xvzf FutureFinity-(version).tar.gz
+  cd FutureFinity-(version)
   python setup.py install
 
 If this is not a stable release of FutureFinity, please do unittest before you use it::

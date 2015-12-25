@@ -17,6 +17,8 @@
 
 .. automethod:: futurefinity.web.RequestHandler.set_header
 
+.. automethod:: futurefinity.web.RequestHandler.add_header
+
 .. automethod:: futurefinity.web.RequestHandler.clear_header
 
 .. automethod:: futurefinity.web.RequestHandler.clear_all_headers
@@ -33,9 +35,15 @@
 
 .. automethod:: futurefinity.web.RequestHandler.set_secure_cookie
 
+.. automethod:: futurefinity.web.RequestHandler.get_session
+
+.. automethod:: futurefinity.web.RequestHandler.set_session
+
 .. automethod:: futurefinity.web.RequestHandler.check_csrf_value
 
 .. automethod:: futurefinity.web.RequestHandler.set_csrf_value
+
+.. automethod:: futurefinity.web.RequestHandler.get_csrf_value
 
 .. automethod:: futurefinity.web.RequestHandler.csrf_form_html
 
@@ -73,11 +81,11 @@
 
 .. automethod:: futurefinity.web.RequestHandler.handle
 
-.. automethod:: futurefinity.web.RequestHandler.delete
-
 .. autoattribute:: futurefinity.web.RequestHandler.allow_methods
 
 .. autoclass:: futurefinity.web.NotFoundHandler
+
+.. autoclass:: futurefinity.web.StaticFileHandler
 
 .. autoclass:: futurefinity.web.Application
 

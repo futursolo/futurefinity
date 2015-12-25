@@ -15,6 +15,21 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-__version__ = ("0", "1", "0", "1")
+import futurefinity.web
+import asyncio
 
-version = "0.1.0"
+loop = asyncio.get_event_loop()
+app = futurefinity.web.Application()
+
+
+@app.add_handler("/{name}")
+class DynamicRoutingHandler(futurefinity.web.RequestHandler):
+    async def get(self, *args, **kwargs):
+        return "Hello, " + kwargs["name"] + "!"
+
+app.listen(23333)
+
+try:
+    loop.run_forever()
+except KeyboardInterrupt:
+    pass
