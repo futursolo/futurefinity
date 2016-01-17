@@ -36,6 +36,7 @@ class CSRFTestCollector(unittest.TestCase):
             debug=True)
 
     async def get_requests_result(self, server):
+        await asyncio.sleep(0.1)  # Waiting for Server Initialized.
         try:
             self.requests_result = []
             with requests.Session() as s:

@@ -69,6 +69,7 @@ class SecureCookieTestCollector(unittest.TestCase):
                                   handler=TestHandler)
 
     async def get_requests_result(self, server):
+        await asyncio.sleep(0.1)  # Waiting for Server Initialized.
         try:
             self.requests_result = []
             with requests.Session() as s:
