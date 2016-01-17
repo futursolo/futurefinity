@@ -36,19 +36,14 @@ class RedirectTestCollector(unittest.TestCase):
             async def get(self, *args, **kwargs):
                 return self.redirect("/redirected")
 
-        @self.app.add_handler("/redirected")
-        class TestHandler(futurefinity.web.RequestHandler):
-            async def get(self, *args, **kwargs):
-                return "Redirected!"
-
         server = self.app.listen(8888)
 
         async def get_requests_result(self):
-            await asyncio.sleep(0.1)  # Waiting for Server Initialized.
             try:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
-                        requests.get, "http://127.0.0.1:8888/")
+                        requests.get, "http://127.0.0.1:8888/",
+                        allow_redirects=False)
                 )
             except:
                 traceback.print_exc()
@@ -60,6 +55,8 @@ class RedirectTestCollector(unittest.TestCase):
         asyncio.ensure_future(get_requests_result(self))
         self.loop.run_forever()
 
-        self.assertEqual(self.requests_result.status_code, 200,
+        self.assertEqual(self.requests_result.status_code, 302,
                          "Wrong Status Code")
-        self.assertEqual(self.requests_result.text, "Redirected!")
+
+        self.assertEqual(self.requests_result.headers["location"],
+                         "/redirected")

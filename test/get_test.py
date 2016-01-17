@@ -39,7 +39,6 @@ class GetTestCollector(unittest.TestCase):
         server = self.app.listen(8888)
 
         async def get_requests_result(self):
-            await asyncio.sleep(0.1)  # Waiting for Server Initialized.
             try:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
