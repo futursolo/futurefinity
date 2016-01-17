@@ -46,8 +46,8 @@ class RedirectTestCollector(unittest.TestCase):
         async def get_requests_result(self):
             try:
                 self.requests_result = await self.loop.run_in_executor(
-                    None, functools.partial(requests.get,
-                                            "http://127.0.0.1:8888/")
+                    None, functools.partial(
+                        requests.get, "http://127.0.0.1:8888/")
                 )
             except:
                 traceback.print_exc()
