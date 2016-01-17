@@ -73,9 +73,7 @@ class SecureCookieTestCollector(unittest.TestCase):
             self.requests_result = []
             with requests.Session() as s:
                 result_getter = functools.partial(
-                    lambda: s.get(
-                        "http://127.0.0.1:8888/test_secure_cookie"
-                    )
+                    s.get, "http://127.0.0.1:8888/test_secure_cookie"
                 )
                 self.requests_result.append(
                     await self.loop.run_in_executor(None, result_getter)

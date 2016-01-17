@@ -42,9 +42,8 @@ class StaticFileHandlerTestCollector(unittest.TestCase):
             if not self.requests_result:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
-                        lambda: requests.get(
-                            "http://127.0.0.1:8888/static/random_string"
-                        )
+                        requests.get,
+                        "http://127.0.0.1:8888/static/random_string"
                     )
                 )
             server.close()

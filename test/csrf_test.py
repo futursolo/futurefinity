@@ -41,17 +41,13 @@ class CSRFTestCollector(unittest.TestCase):
             with requests.Session() as s:
                 self.requests_result.append(
                     await self.loop.run_in_executor(None, functools.partial(
-                        lambda: s.get(
-                            "http://127.0.0.1:8888/csrf_test"
-                        )
+                        s.get, "http://127.0.0.1:8888/csrf_test"
                     ))
                 )
                 self.requests_result.append(
                     await self.loop.run_in_executor(None, functools.partial(
-                        lambda: s.post(
-                            "http://127.0.0.1:8888/csrf_test",
-                            data={"_csrf": self.requests_result[0].text}
-                        )
+                        s.post, "http://127.0.0.1:8888/csrf_test",
+                        data={"_csrf": self.requests_result[0].text}
                     ))
                 )
         except:

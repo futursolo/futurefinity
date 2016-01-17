@@ -48,9 +48,7 @@ class TemplateInterfaceTestCollector(unittest.TestCase):
             try:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
-                        lambda: requests.get(
-                            "http://127.0.0.1:8888/template_test"
-                        )
+                        requests.get, "http://127.0.0.1:8888/template_test"
                     )
                 )
             except:

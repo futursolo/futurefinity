@@ -43,9 +43,7 @@ class HeadTestCollector(unittest.TestCase):
             try:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
-                        lambda: requests.head(
-                            "http://127.0.0.1:8888/head_test"
-                        )
+                        requests.head, "http://127.0.0.1:8888/head_test"
                     )
                 )
             except:

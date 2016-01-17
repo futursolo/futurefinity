@@ -44,10 +44,8 @@ class PostTestCollector(unittest.TestCase):
             if not self.requests_result:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
-                        lambda: requests.post(
-                            "http://127.0.0.1:8888/post_test",
-                            data={"content": "Hello, World!"}
-                        )
+                        requests.post, "http://127.0.0.1:8888/post_test",
+                        data={"content": "Hello, World!"}
                     )
                 )
             server.close()
