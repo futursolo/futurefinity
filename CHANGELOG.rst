@@ -1,4 +1,27 @@
-v0.0.1
+
+v0.1.1
+------
+- Introduce Secure Cookie interface
+- Removed SecureCookieSession
+- Fixed Content-Type Error when HTTPError Occurs
+- Fixed CSRF Cookie errors
+- Fixed Documentation Typo
+- Added CSRF Unittest
+- Added Keep-Alive Unittest
+- Added Redirect Unittest
+
+
+v0.1.0
+------
+- StaticFileHandler
+- New Secure Cookies(Signed and AES GCM Encrypted)
+- Introduce Interface
+- Using Template Interface instead of Overriding Function
+- Introduce Session Interface
+- Introduce Secure Cookie Based Session
+- Introduce Redis Based Sessionv
+
+0.0.1
 ------
 - Project Initialization
 - Support GET Method
@@ -15,13 +38,3 @@ v0.0.1
 - Debug
 - Error Handling
 - Basic Documentation
-
-v0.1.0
-------
-- StaticFileHandler
-- New Secure Cookies(Signed and AES GCM Encrypted)
-- Introduce Interface
-- Using Template Interface instead of Overriding Function
-- Introduce Session Interface
-- Introduce Secure Cookie Based Session
-- Introduce Redis Based Session

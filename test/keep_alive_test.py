@@ -18,12 +18,9 @@
 from futurefinity.utils import *
 
 import futurefinity.web
-import futurefinity.interface.session
 
-import json
 import nose2
 import asyncio
-import aioredis
 import requests
 import unittest
 import functools
@@ -32,31 +29,13 @@ import functools
 class SessionTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(
-            allow_keep_alive=False,
-            security_secret=security_secret_generator(32),
-            debug=True)
-        self.pool = self.loop.run_until_complete(aioredis.create_pool(
-            ("localhost", 6379),
-            minsize=5, maxsize=10))
+        self.app = futurefinity.web.Application(debug=True)
 
-        self.app.interfaces.set(
-            "session",
-            futurefinity.interface.session.RedisSessionInterface(
-                pool=self.pool))
-
-    def test_session_request(self):
-        @self.app.add_handler("/test_session")
+    def test_keep_alive_request(self):
+        @self.app.add_handler("/test_keep_alive")
         class TestHandler(futurefinity.web.RequestHandler):
             async def get(self, *args, **kwargs):
-                test_value = await self.get_session("test_value", None)
-                if not test_value:
-                    test_value = security_secret_generator(100)
-                    await self.set_session(
-                        "test_value",
-                        test_value)
-                    return json.dumps([False, test_value])
-                return json.dumps([True, test_value])
+                return "Hello, World!"
 
         server = self.app.listen(8888)
 
@@ -66,7 +45,7 @@ class SessionTestCollector(unittest.TestCase):
                 with requests.Session() as s:
                     result_getter = functools.partial(
                         lambda: s.get(
-                            "http://127.0.0.1:8888/test_session"
+                            "http://127.0.0.1:8888/test_keep_alive"
                         )
                     )
                     self.requests_result.append(
@@ -90,13 +69,3 @@ class SessionTestCollector(unittest.TestCase):
 
         self.assertEqual(self.requests_result[1].status_code, 200,
                          "Wrong Status Code for Second Request.")
-
-        first_request = self.requests_result[0].json()
-        second_request = self.requests_result[1].json()
-
-        self.assertEqual(first_request[0], False,
-                         "Wrong Session Status for First Request.")
-        self.assertEqual(second_request[0], True,
-                         "Wrong Session Code for Second Request.")
-        self.assertEqual(first_request[1], second_request[1],
-                         "Wrong Cookie Content for Session.")

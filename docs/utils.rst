@@ -27,14 +27,6 @@
 
 .. autofunction:: futurefinity.utils.format_timestamp
 
-.. autofunction:: futurefinity.utils.create_signed_str
-
-.. autofunction:: futurefinity.utils.validate_and_return_signed_str
-
-.. autofunction:: futurefinity.utils.encrypt_str_by_aes_gcm
-
-.. autofunction:: futurefinity.utils.decrypt_str_by_aes_gcm
-
 .. autoclass:: futurefinity.utils.MagicDict
 
 .. automethod:: futurefinity.utils.MagicDict.add
@@ -52,5 +44,7 @@
 .. automethod:: futurefinity.utils.HTTPHeaders.add
 
 .. automethod:: futurefinity.utils.HTTPHeaders.get_list
+
+.. automethod:: futurefinity.utils.HTTPHeaders.get_first
 
 .. automethod:: futurefinity.utils.HTTPHeaders.copy

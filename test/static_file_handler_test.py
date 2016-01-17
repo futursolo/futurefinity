@@ -14,11 +14,13 @@
 #   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
-import unittest
-import nose2
-import requests
-import asyncio
+
 import futurefinity.web
+
+import nose2
+import asyncio
+import requests
+import unittest
 import functools
 
 
@@ -34,12 +36,10 @@ class StaticFileHandlerTestCollector(unittest.TestCase):
             "/static/{file}",
             handler=futurefinity.web.StaticFileHandler)
 
-        server = self.loop.run_until_complete(
-            self.loop.create_server(self.app.make_server(), "127.0.0.1", 8888))
+        server = self.app.listen(8888)
 
         async def get_requests_result(self):
             if not self.requests_result:
-                await asyncio.sleep(1)  # Waiting for Server Initialized.
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
                         lambda: requests.get(

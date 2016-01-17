@@ -44,21 +44,7 @@ import calendar
 import numbers
 import typing
 import os
-import base64
 import struct
-
-try:
-    from cryptography.hazmat.primitives.ciphers import (
-        Cipher as AESCipher,
-        algorithms as aes_algorithms,
-        modes as aes_modes
-    )
-    from cryptography.hazmat.backends import default_backend as aes_backend
-except ImportError:
-    AESCipher = None
-    aes_algorithms = None
-    aes_modes = None
-    aes_backend = None
 
 MAX_HEADER_LENGTH = 4096
 
@@ -167,11 +153,13 @@ class MagicDict(collections.abc.MutableMapping):
             for value in values:
                 yield (name, value)
 
-    def get_first(self, name):
+    def get_first(self, name, default=None):
         """
         Get the first value with the name.
         """
-        return self._as_list.get(name, [None])[0]
+        return self._as_list.get(name, [default])[0]
+
+    items = get_all
 
     def __setitem__(self, name, value):
         self._dict[name] = value
@@ -189,6 +177,16 @@ class MagicDict(collections.abc.MutableMapping):
 
     def __iter__(self):
         return iter(self._dict)
+
+    def __repr__(self):
+        return "MagicDict()"
+
+    def __str__(self):
+        content_list = []
+        for key, value in self.items():
+            content_list.append((key, value))
+
+        return "MagicDict(%s)" % str(content_list)
 
     def copy(self):
         """
@@ -213,10 +211,17 @@ class HTTPHeaders(MagicDict):
 
     def get_list(self, name: str, default: typing.Optional[str]=None):
         """
-        Get all header with the name in a list.
+        Get all headers with the name in a list.
         """
         lower_name = name.lower()
         return MagicDict.get_list(self, lower_name, default=default)
+
+    def get_first(self, name: str, default: typing.Optional[str]=None):
+        """
+        Get first header with the name.
+        """
+        lower_name = name.lower()
+        return MagicDict.get_first(self, lower_name, default=default)
 
     def __setitem__(self, name, value):
         lower_name = name.lower()
@@ -229,6 +234,16 @@ class HTTPHeaders(MagicDict):
     def __delitem__(self, name):
         lower_name = name.lower()
         return MagicDict.__delitem__(self, lower_name)
+
+    def __repr__(self):
+        return "HTTPHeaders()"
+
+    def __str__(self):
+        content_list = []
+        for key, value in self.items():
+            content_list.append((key, value))
+
+        return "HTTPHeaders(%s)" % str(content_list)
 
     def copy(self):
         """
@@ -440,117 +455,3 @@ def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,
     else:
         raise TypeError("unknown timestamp type: %r" % ts)
     return ensure_str(email.utils.formatdate(ts, usegmt=True))
-
-
-def create_signed_str(secret: str, text: str) -> str:
-    """
-    Create a signed value with security secret.
-    """
-    iv = os.urandom(16)
-
-    content = struct.pack("l", int(time.time())) + ensure_bytes(text)
-
-    hash = hmac.new(iv + ensure_bytes(secret), digestmod=hashlib.sha256)
-    hash.update(ensure_bytes(content))
-    signature = hash.digest()
-
-    final_signed_text = iv
-    final_signed_text += struct.pack("l", len(content))
-    final_signed_text += content
-    final_signed_text += signature
-
-    return ensure_str(base64.b64encode(final_signed_text))
-
-
-def validate_and_return_signed_str(secret: str, signed_text: str,
-                                   valid_length: int=None) -> str:
-    """
-    Validate the signed value and return the raw string.
-    """
-    signed_text_reader = io.BytesIO(base64.b64decode(signed_text))
-    iv = signed_text_reader.read(16)
-    length = struct.unpack("l", encrypted_text_reader.read(8))[0]
-    content = signed_text_reader.read(length)
-    signature = signed_text_reader.read(32)
-
-    hash = hmac.new(iv + ensure_bytes(secret), digestmod=hashlib.sha256)
-    hash.update(ensure_bytes(content))
-    if not hmac.compare_digest(signature, hash.digest()):
-        return None
-
-    timestamp = struct.unpack("l", content[:8])[0]
-    text = content[8:]
-
-    if valid_length and int(time.time()) - timestamp > valid_length:
-        return None
-
-    try:
-        return ensure_str(text)
-    except:
-        return None
-
-
-def encrypt_str_by_aes_gcm(secret: str, text: str) -> str:
-    """
-    Encrypt and sign the value with sceurity secret and AES-GCM.
-    """
-    if AESCipher is None:
-        raise Exception("Cryptography is not installed, "
-                        "and aes_gcm_str_encrypt is called."
-                        " Please install Cryptography through pip.")
-    iv = os.urandom(16)
-
-    content = struct.pack("l", int(time.time())) + ensure_bytes(text)
-
-    encryptor = AESCipher(
-        aes_algorithms.AES(ensure_bytes(secret)),
-        aes_modes.GCM(iv),
-        backend=aes_backend()
-    ).encryptor()
-
-    ciphertext = encryptor.update(content) + encryptor.finalize()
-
-    final_encrypted_text = iv
-    final_encrypted_text += struct.pack("l", len(ciphertext))
-    final_encrypted_text += ciphertext
-    final_encrypted_text += encryptor.tag
-
-    return ensure_str(base64.b64encode(final_encrypted_text))
-
-
-def decrypt_str_by_aes_gcm(secret: str, encrypted_text: str,
-                           valid_length: int=None) -> str:
-    """
-    Decrypt the value and validate the signature of the value.
-    """
-    if AESCipher is None:
-        raise Exception("Cryptography is not installed, "
-                        "and aes_gcm_str_decrypt is called."
-                        " Please install Cryptography through pip.")
-    encrypted_text_reader = io.BytesIO(base64.b64decode(encrypted_text))
-    iv = encrypted_text_reader.read(16)
-    length = struct.unpack("l", encrypted_text_reader.read(8))[0]
-    ciphertext = encrypted_text_reader.read(length)
-    tag = encrypted_text_reader.read(16)
-
-    decryptor = AESCipher(
-        aes_algorithms.AES(ensure_bytes(secret)),
-        aes_modes.GCM(iv, tag),
-        backend=aes_backend()
-    ).decryptor()
-
-    try:
-        content = decryptor.update(ciphertext) + decryptor.finalize()
-    except:
-        return None
-
-    timestamp = struct.unpack("l", content[:8])[0]
-    text = content[8:]
-
-    if valid_length and int(time.time()) - timestamp > valid_length:
-        return None
-
-    try:
-        return ensure_str(text)
-    except:
-        return None

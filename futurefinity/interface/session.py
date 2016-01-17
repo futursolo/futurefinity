@@ -45,30 +45,11 @@ class SessionInterfaceModel:
 
     async def get_session(self, handler):
         raise NotImplementedError(
-            "Neither Database-based Session Interface Selected, "
-            "Nor AES GCM Secure Cookie Enabled!")
+            "No Session Interface Can be automatically Selected.")
 
     async def write_session(self, handler, session_object):
         raise NotImplementedError(
-            "Neither Database-based Session Interface Selected, "
-            "Nor AES GCM Secure Cookie Enabled!")
-
-
-class SecureCookieSessionInterface(SessionInterfaceModel):
-    async def get_session(self, handler):
-        session_cookie = handler.get_secure_cookie("_session")
-        if not session_cookie:
-            return {}
-        try:
-            return json.loads(ensure_str(session_cookie))
-        except:
-            return {}
-
-    async def write_session(self, handler, session_object):
-        if session_object is None:
-            return
-        session_cookie = json.dumps(session_object)
-        handler.set_secure_cookie("_session", session_cookie, httponly=True)
+            "No Session Interface Can be automatically Selected.")
 
 
 class RedisSessionInterface(SessionInterfaceModel):
@@ -84,13 +65,13 @@ class RedisSessionInterface(SessionInterfaceModel):
         if not self.redis_connection_pool:
             self.redis_connection_pool = self.app.settings.get(
                 "redis_connection_pool", None)
-            if not self.redis_connection_pool:
-                raise Exception(
-                    "Cannot found Redis Connection Pool. "
-                    "Please provide redis_connection_pool through Application "
-                    "Settings or __init__ pool Parameter.")
 
     async def get_session(self, handler):
+        if not self.redis_connection_pool:
+            raise Exception(
+                "Cannot found Redis Connection Pool. "
+                "Please provide redis_connection_pool through Application "
+                "Settings or __init__ pool Parameter.")
         session_id_cookie = handler.get_secure_cookie("_session_id")
         if not session_id_cookie:
             return {}
@@ -110,6 +91,12 @@ class RedisSessionInterface(SessionInterfaceModel):
         if session_object is None:
             return
 
+        if not self.redis_connection_pool:
+            raise Exception(
+                "Cannot found Redis Connection Pool. "
+                "Please provide redis_connection_pool through Application "
+                "Settings or __init__ pool Parameter.")
+
         session_id = {
             "type": "redis",
             "id": str(uuid.uuid4())
@@ -124,4 +111,7 @@ class RedisSessionInterface(SessionInterfaceModel):
             conn.set(redis_key, json.dumps(session_object))
 
 
-DefaultSessionInterface = SecureCookieSessionInterface
+if aioredis is not None:
+    DefaultSessionInterface = RedisSessionInterface
+else:
+    DefaultSessionInterface = SessionInterfaceModel

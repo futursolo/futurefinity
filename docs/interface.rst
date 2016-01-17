@@ -16,3 +16,5 @@
 .. autoclass:: futurefinity.interface.session.SessionInterfaceModel
 
 .. autoclass:: futurefinity.interface.template.TemplateInterfaceModel
+
+.. autoclass:: futurefinity.interface.secure_cookie.SecureCookieInterfaceModel

@@ -24,10 +24,12 @@ enhance the feature of FutureFinity.
 from futurefinity.utils import *
 from futurefinity.interface import template as template_interface
 from futurefinity.interface import session as session_interface
+from futurefinity.interface import secure_cookie as secure_cookie_interface
 
 default_interfaces = {
     "template": template_interface.DefaultTemplateInterface,
-    "session": session_interface.DefaultSessionInterface
+    "session": session_interface.DefaultSessionInterface,
+    "secure_cookie": secure_cookie_interface.DefaultSecureCookieInterface
 }
 
 

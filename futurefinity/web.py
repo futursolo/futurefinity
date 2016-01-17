@@ -67,6 +67,7 @@ import sys
 import html
 import os
 import mimetypes
+import types
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -203,15 +204,10 @@ class RequestHandler:
 
     def get_secure_cookie(self, name: str, max_age_days: int=31) -> str:
         """
-        Get a signed cookie with the name, if it validates, or None.
+        Get a secure cookie with the name, if it validates, or None.
 
-        Signed cookie cannot protect the content inside the value,
-        it only validates if this cookie is issued by the server or not.
+        The implementation depends on the interface you use.
         """
-        secret = self.app.settings.get("security_secret", None)
-        if not secret:
-            raise Exception("Security Secret is not in Application Settings. "
-                            "Please Set Security Secret First.")
         valid_length = None
         if max_age_days:
             valid_length = max_age_days * 86400
@@ -221,23 +217,15 @@ class RequestHandler:
         if cookie_content is None:
             return None
 
-        method, cookie_content = cookie_content.split("|", 1)
+        return self.app.interfaces.get(
+            "secure_cookie").lookup_origin_text(cookie_content, valid_length)
 
-        if method == "AESGCM":
-            return decrypt_str_by_aes_gcm(secret, cookie_content,
-                                          valid_length=valid_length)
-        elif method == "SIGNED":
-            return validate_and_return_signed_str(secret, cookie_content,
-                                                  valid_length=valid_length)
-        else:
-            return None
-
-    def set_secure_cookie(self, name: str, value: str, expires_days: int=30,
-                          use_aes_gcm: bool=True, **kwargs):
+    def set_secure_cookie(self, name: str, value: str,
+                          expires_days: int=30, **kwargs):
         """
-        Set a cookie that contains signed value that cannot be forged.
+        Set a secure cookie.
 
-        The value goes with sha256 signed hmac and a timestamp.
+        The implementation depends on the interface you use.
 
         You must set a security_secret in Application Settings before
 
@@ -245,20 +233,11 @@ class RequestHandler:
 
           futurefinity.utils.security_secret_generator(length=16)
 
-        You can use any length less than 61.
-
         Once security_secret is generated, treat it as a password,
         change security_secret will cause all secure_cookie become invalid.
         """
-        secret = self.app.settings.get("security_secret", None)
-        if not secret:
-            raise Exception("Security Secret is not in Application Settings. "
-                            "Please Set Security Secret First.")
-        content = None
-        if use_aes_gcm:
-            content = "AESGCM|" + encrypt_str_by_aes_gcm(secret, value)
-        else:
-            content = "SIGNED|" + create_signed_str(secret, value)
+        content = self.app.interfaces.get(
+            "secure_cookie").generate_secure_text(value)
 
         self.set_cookie(ensure_str(name), ensure_str(content),
                         expires_days=expires_days, **kwargs)
@@ -291,7 +270,7 @@ class RequestHandler:
         """
         Validate if csrf value is valid.
 
-        FutureFinity use a secure cookie _csrf and a body argument _scrf
+        FutureFinity uses a secure cookie _csrf and a body argument _csrf
         to prevent CSRF attack.
         """
         cookie_value = self.get_secure_cookie("_csrf")
@@ -301,7 +280,7 @@ class RequestHandler:
             raise HTTPError(403)  # CSRF Value is not set.
 
         if cookie_value != form_value:
-            raise HTTPError(403)  # CERF Value does not match.
+            raise HTTPError(403)  # CSRF Value does not match.
 
     def set_csrf_value(self):
         """
@@ -310,7 +289,7 @@ class RequestHandler:
         if self._csrf_value is not None:
             return
         self._csrf_value = str(uuid.uuid4())
-        self.set_secure_cookie("_csrf", self._csrf_value, expires_days=None)
+        self.set_secure_cookie("_csrf", self._csrf_value, expires_days=1)
 
     def get_csrf_value(self):
         """
@@ -358,12 +337,13 @@ class RequestHandler:
         renderer = self.app.interfaces.get("template")
         return renderer.render_template(template_name, template_dict)
 
-    def render(self, template_name: str, **kwargs):
+    def render(self, template_name: str, template_dict=None):
         """
         Render the template with render_string, and write them into response
         body directly.
         """
-        self.write(self.render_string(template_name, **kwargs))
+        self.write(self.render_string(template_name,
+                                      template_dict=template_dict))
 
     def redirect(self, url: str, permanent: bool=False, status: int=None):
         """
@@ -492,9 +472,11 @@ class RequestHandler:
         Respond an error to client.
         """
         self.status_code = error_code
+        self.set_header("Content-Type", "text/html")
         self.write("<!DOCTYPE HTML>"
                    "<html>"
                    "<head>"
+                   "    <meta charset=\"UTF-8\">"
                    "    <title>%(error_code)d: %(status_code_detail)s</title>"
                    "</head>"
                    "<body>"
@@ -543,42 +525,42 @@ class RequestHandler:
 
     async def get(self, *args, **kwargs):
         """
-        Must be override in subclass if you want to handle GET request,
+        Must be overridden in subclass if you want to handle GET request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
         """
         raise HTTPError(405)
 
     async def post(self, *args, **kwargs):
         """
-        Must be override in subclass if you want to handle POST request,
+        Must be overridden in subclass if you want to handle POST request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
         """
         raise HTTPError(405)
 
     async def delete(self, *args, **kwargs):
         """
-        Must be override in subclass if you want to handle DELETE request,
+        Must be overridden in subclass if you want to handle DELETE request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
         """
         raise HTTPError(405)
 
     async def patch(self, *args, **kwargs):
         """
-        Must be override in subclass if you want to handle PATCH request,
+        Must be overridden in subclass if you want to handle PATCH request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
         """
         raise HTTPError(405)
 
     async def put(self, *args, **kwargs):
         """
-        Must be override in subclass if you want to handle PUT request,
+        Must be overridden in subclass if you want to handle PUT request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
         """
         raise HTTPError(405)
 
     async def options(self, *args, **kwargs):
         """
-        Must be override in subclass if you want to handle OPTIONS request,
+        Must be overridden in subclass if you want to handle OPTIONS request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
         """
         raise HTTPError(405)
@@ -587,9 +569,9 @@ class RequestHandler:
         """
         Method to handle the request.
 
-        It checks the if request method is supported and alloed, and handle
-        them to right class function, get the return value, write them to
-        response body, and finish the request.
+        It checks the if request method is supported and allowed, and handles
+        them to right class function, gets the return value, writes them to
+        response body, and finishes the request.
         """
         try:
             if self.method not in SUPPORTED_METHODS:
@@ -624,7 +606,7 @@ class NotFoundHandler(RequestHandler):
 
 class StaticFileHandler(RequestHandler):
     """
-    Handler that handle static files.
+    Handler that handles static files.
 
     Warning: You should use Web Server(such as: Nginx) to handle Static Files.
              StaticFileHandler should only be used in development.
@@ -661,8 +643,9 @@ class StaticFileHandler(RequestHandler):
 
 class Application:
     """
-    Class that its instance create asyncio compatible servers,
-    store handler list, find every request's handler, and pass it to server.
+    Class that its instance creates asyncio compatible servers,
+    stores handler list, finds every request's handler,
+    and passes it to server.
     """
     def __init__(self, **kwargs):
         self._loop = kwargs.get("loop", asyncio.get_event_loop())
@@ -678,12 +661,14 @@ class Application:
         return (lambda: futurefinity.server.HTTPServer(app=self,
                                                        loop=self._loop))
 
-    def listen(self, port: int, address: str="127.0.0.1"):
+    def listen(self, port: int,
+               address: str="127.0.0.1") -> types.CoroutineType:
         """
-        Make the server listens to the specified port and address.
+        Make the server to listen to the specified port and address.
         """
         f = self._loop.create_server(self.make_server(), address, port)
         srv = self._loop.run_until_complete(f)
+        return srv
 
     def add_handler(self, route_str: str, name: str=None,
                     handler: RequestHandler=None):
@@ -693,6 +678,16 @@ class Application:
 
         On the other hand, if you use it as a decorator, you should not pass
         a handler to this function or it will cause unexcepted result.
+
+        That is::
+
+          @app.add_handler("/")
+          class RootHandler(ReuqestHandler): pass
+
+        or::
+
+          class RootHandler(ReuqestHandler): pass
+          app.add_handler("/", handler=RootHandler)
         """
         def decorator(cls):
             self.handlers.connect(name, route_str, __handler__=cls)

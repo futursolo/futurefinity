@@ -17,7 +17,7 @@
 
 """
 ``futurefinity.server`` contains the FutureFinity HTTPServer Class used by
-FutureFinity Web Application, which can parse http request and initialize
+FutureFinity Web Application, which can parse http request, initialize
 right RequestHandler and make response to client.
 """
 
@@ -117,7 +117,7 @@ class HTTPServer(asyncio.Protocol):
 
     def handle_request_error(self, e: Exception):
         """
-        Response an HTTPError when a error is raised when parsing HTTP
+        Response an HTTPError when a error is raised when parsing an HTTP
         Request.
         """
         if self.http_version == 20:

@@ -15,43 +15,39 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import *
-
 import futurefinity.web
 
 import nose2
-import jinja2
 import asyncio
 import requests
 import unittest
 import functools
 
 
-class TemplateInterfaceTestCollector(unittest.TestCase):
+class RedirectTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(
-            allow_keep_alive=False, debug=True,
-            template_path="example/template"
-        )
+        self.app = futurefinity.web.Application(allow_keep_alive=False,
+                                                debug=True)
 
-    def test_jinja2_template_request(self):
-        @self.app.add_handler("/template_test")
+    def test_redirect_request(self):
+        @self.app.add_handler("/")
         class TestHandler(futurefinity.web.RequestHandler):
-            @render_template("jinja2.htm")
             async def get(self, *args, **kwargs):
-                return {"name": "John Smith"}
+                return self.redirect("/redirected")
+
+        @self.app.add_handler("/redirected")
+        class TestHandler(futurefinity.web.RequestHandler):
+            async def get(self, *args, **kwargs):
+                return "Redirected!"
 
         server = self.app.listen(8888)
 
         async def get_requests_result(self):
             try:
                 self.requests_result = await self.loop.run_in_executor(
-                    None, functools.partial(
-                        lambda: requests.get(
-                            "http://127.0.0.1:8888/template_test"
-                        )
-                    )
+                    None, functools.partial(requests.get,
+                                            "http://127.0.0.1:8888/")
                 )
             except:
                 traceback.print_exc()
@@ -63,14 +59,6 @@ class TemplateInterfaceTestCollector(unittest.TestCase):
         asyncio.ensure_future(get_requests_result(self))
         self.loop.run_forever()
 
-        jinja2_envir = jinja2.Environment(loader=jinja2.FileSystemLoader(
-            "example/template",
-            encoding="utf-8"
-        ))
-
-        template = jinja2_envir.get_template("jinja2.htm")
-
         self.assertEqual(self.requests_result.status_code, 200,
                          "Wrong Status Code")
-        self.assertEqual(ensure_str(self.requests_result.text),
-                         ensure_str(template.render(name="John Smith")))
+        self.assertEqual(self.requests_result.text, "Redirected!")
