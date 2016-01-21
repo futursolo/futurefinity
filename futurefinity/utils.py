@@ -28,23 +28,25 @@ This class is recommend to be imported without namespace.
 """
 
 import futurefinity
-import urllib.parse
+
+import io
+import os
+import cgi
+import time
+import random
+import struct
+import typing
+import string
+import numbers
+import calendar
+import datetime
 import functools
 import collections
-import collections.abc
-import cgi
-import io
-import random
-import string
-import http.cookies
-import time
-import datetime
 import email.utils
-import calendar
-import numbers
-import typing
-import os
-import struct
+import email.parser
+import http.cookies
+import urllib.parse
+import collections.abc
 
 MAX_HEADER_LENGTH = 4096
 

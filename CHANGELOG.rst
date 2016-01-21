@@ -1,4 +1,3 @@
-
 v0.1.1
 ------
 - Introduce Secure Cookie interface
@@ -9,7 +8,6 @@ v0.1.1
 - Added CSRF Unittest
 - Added Keep-Alive Unittest
 - Added Redirect Unittest
-
 
 v0.1.0
 ------
