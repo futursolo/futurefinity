@@ -20,9 +20,10 @@ from futurefinity.utils import *
 import futurefinity.web
 import futurefinity.interface.session
 
+import asyncio
+
 import json
 import nose2
-import asyncio
 import aioredis
 import requests
 import unittest

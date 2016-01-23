@@ -17,8 +17,9 @@
 
 import futurefinity.web
 
-import nose2
 import asyncio
+
+import nose2
 import requests
 import unittest
 import functools

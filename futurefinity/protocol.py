@@ -44,10 +44,11 @@ _MAX_HEADER_LENGTH = 4096
 
 _MAX_BODY_LENGTH = 52428800  # 50M
 
-_REQUEST_WAITING_INITIAL = 0
-_REQUEST_WAITING_HEADER = 1
-_REQUEST_WAITING_BODY = 2
-_REQUEST_FINISHED = 3
+_REQUEST_EMPTY = 0
+_REQUEST_WAITING_INITIAL = 1
+_REQUEST_WAITING_HEADER = 2
+_REQUEST_WAITING_BODY = 3
+_REQUEST_FINISHED = 4
 _REQUEST_BROKEN = -1
 _REQUEST_DESTROYED = -2
 
@@ -121,6 +122,7 @@ class HTTPHeaders(TolerantMagicDict):
         for i in range(0, _MAX_HEADER_NUMBER + 1):
             if len(splitted_data) == 0:
                 return False
+
             header = splitted_data.pop(0).decode()
 
             if header in _CRLF_MARK_LIST:
@@ -130,6 +132,9 @@ class HTTPHeaders(TolerantMagicDict):
             (key, value) = header.split(":", 1)
             self.add(key.strip(), value.strip())
 
+        else:
+            raise HTTPError(413)  # Too many Headers.
+
         return False
 
     __copy__ = copy
@@ -137,7 +142,26 @@ class HTTPHeaders(TolerantMagicDict):
 
 
 class HTTPFile:
-    pass
+    def __init__(self, filename: str, content: typing.Union[str, bytes],
+                 content_type: str="application/octet-stream",
+                 headers: typing.Optional[HTTPHeaders]=None,
+                 encoding: str="binary"):
+        self.filename = filename
+        self.content = content
+        self.content_type = content_type
+        self.headers = headers or HTTPHeaders()
+        self.encoding = encoding
+
+    def __str__(self):
+        return ("HTTPFile(filename=%(filename)s, "
+                "content_type=%(content_type)s, "
+                "headers=%(headers)s, "
+                "encoding=%(encoding)s)") % {
+                    "filename": repr(self.filename),
+                    "content_type": repr(self.content_type),
+                    "headers": repr(self.headers),
+                    "encoding": repr(self.encoding)
+                }
 
 
 class HTTPBody(TolerantMagicDict):
@@ -176,17 +200,76 @@ class HTTPBody(TolerantMagicDict):
         self._pending_bytes += ensure_bytes(data)
         if len(self._pending_bytes) < self._content_length:
             return False  # Request Not Completed, wait.
-
-        if self._content_type == "application/x-www-form-urlencoded":
+        if self._content_type.lower().strip() in (
+         "application/x-www-form-urlencoded", "application/x-url-encoded"):
             for (key, value) in urllib.parse.parse_qsl(
              self._pending_bytes[:self._content_length],
              keep_blank_values=True,
              strict_parsing=True):
                 self.add(key.decode(), value.decode())
 
-        elif self._content_type.startswith("multipart/form-data"):
-            pass  # Unimplemented.
+        elif self._content_type.lower().startswith("multipart/form-data"):
+            for field in self._content_type.split(";"):  # Search Boundary
+                if field.find("boundary=") == -1:
+                    continue
+                boundary = ensure_bytes(field.split("=")[1])
+                if boundary.startswith(b'"') and boundary.endswith(b'"'):
+                    boundary = boundary[1:-1]
+                break
+            else:
+                raise HTTPError(400)  # Cannot Find Boundary
+            full_boundary = b"--" + boundary
+            body_content, body_crlf_mark = self._pending_bytes[
+                :self._content_length].split(full_boundary + b"--")
 
+            full_boundary += body_crlf_mark
+            splitted_body_content = body_content.split(full_boundary)
+            body_crlf_mark_length = len(body_crlf_mark)
+
+            for part in splitted_body_content:
+                if not part:
+                    continue
+
+                initial, splitter, content = part.partition(body_crlf_mark * 2)
+                headers = HTTPHeaders()
+                if not headers.parse_http_v1_header(initial + splitter):
+                    raise HTTPError(400)  # 400 Bad Request.
+
+                disposition = headers.get_first("content-disposition")
+                disposition_list = []
+                disposition_dict = TolerantMagicDict()
+
+                for field in disposition.split(";"):  # Split Disposition
+                    field = field.strip()  # Remove Useless Spaces.
+                    if field.find("=") == -1:  # This is not a key-value pair.
+                        disposition_list.append(field)
+                        continue
+                    key, value = field.split("=")
+                    if value.startswith('"') and value.endswith('"'):
+                        value = value[1:-1]
+                    disposition_dict.add(key.strip().lower(), value.strip())
+
+                if disposition_list[0] != "form-data":
+                    raise HTTPError(400)
+                    # Mixed form-data will be supported later.
+                content = content[:-body_crlf_mark_length]  # Drop CRLF Mark
+
+                if "filename" in disposition_dict.keys():
+                    self.add(disposition_dict.get_first("name", ""), HTTPFile(
+                        filename=disposition_dict.get_first("filename", ""),
+                        content=content,
+                        content_type=headers.get_first(
+                            "content-type", "application/octet-stream"),
+                        headers=headers,
+                        encoding=headers.get_first("content-transfer-encoding",
+                                                   "binary")
+                    ))
+                else:
+                    try:
+                        content = content.decode()
+                    except UnicodeDecodeError:
+                        pass
+                    self.add(disposition_dict.get_first("name", ""), content)
         else:
             raise HTTPError(400)  # Unknown content-type.
 
@@ -204,12 +287,8 @@ class HTTPRequest:
                  headers: typing.Optional[HTTPHeaders]=None,
                  cookies: typing.Optional[HTTPCookies]=None,
                  body: typing.Optional[HTTPBody]=None):
-        if path is None:
-            self.stage = _REQUEST_WAITING_INITIAL
-            self.http_version = None
-        else:
-            self.stage = _REQUEST_FINISHED
-            self.http_version = http_version or 10
+        self.stage = _REQUEST_EMPTY
+        self.http_version = http_version or 10
         self._pending_bytes = b""
         self._splitted_pending_bytes = []
         self._splitted_bytes_length = 0
@@ -227,6 +306,9 @@ class HTTPRequest:
     def split_request(self):
         if len(self._pending_bytes) == 0:
             return
+        if self._splitted_bytes_length > _MAX_HEADER_LENGTH + 1:
+            return
+
         self._splitted_bytes_length += len(self._pending_bytes)
         self._splitted_pending_bytes.extend(
             self._pending_bytes.splitlines(keepends=True))
@@ -237,12 +319,15 @@ class HTTPRequest:
 
         self._splitted_bytes_length -= len(self._pending_bytes)
 
-    def parse_request(self, request_bytes: bytes) -> bool:
+    def parse_http_v1_request(self, request_bytes: bytes) -> bool:
         if self.stage in [_REQUEST_BROKEN, _REQUEST_DESTROYED,
                           _REQUEST_FINISHED]:
             raise HTTPError(500)
             # Should Not Send Content to Parse Request on this point.
         self._pending_bytes += request_bytes
+
+        if self.stage == _REQUEST_EMPTY:
+            self.stage = _REQUEST_WAITING_INITIAL
 
         if self.stage == _REQUEST_WAITING_INITIAL:
             self.split_request()
@@ -318,16 +403,21 @@ class HTTPRequest:
                 return False
 
         if self.stage == _REQUEST_WAITING_BODY:
-            if self.body.parse_http_v1_body(self._pending_bytes) is False:
-                self._pending_bytes = b""
-                return False
+            try:
+                if self.body.parse_http_v1_body(self._pending_bytes) is False:
+                    self._pending_bytes = b""
+                    return False
+            except HTTPError as e:
+                raise e
+            except:
+                raise HTTPError(400)  # Unknown Error
 
         self._pending_bytes = b""
         self._splitted_pending_bytes = []
         self.stage = _REQUEST_FINISHED
         return True
 
-    def generate_bytes(self):
+    def make_http_v1_request(self):
         pass
 
 

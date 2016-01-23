@@ -19,9 +19,10 @@ from futurefinity.utils import *
 
 import futurefinity.web
 
+import asyncio
+
 import nose2
 import jinja2
-import asyncio
 import requests
 import unittest
 import functools

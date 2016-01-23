@@ -16,6 +16,7 @@
 #   limitations under the License.
 
 from futurefinity.utils import *
+
 try:
     import jinja2
 except ImportError:

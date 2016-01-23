@@ -21,10 +21,10 @@ from futurefinity.interface.secure_cookie import HMACSecureCookieInterface
 
 import futurefinity.web
 
+import asyncio
 
 import json
 import nose2
-import asyncio
 import requests
 import unittest
 import functools
