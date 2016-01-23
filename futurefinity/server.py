@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -24,15 +24,16 @@ right RequestHandler and make response to client.
 from futurefinity.utils import *
 import futurefinity
 
-import urllib.parse
 import asyncio
-import ssl
+
 import re
 import cgi
-import http.cookies
-import http.client
-import traceback
+import ssl
 import typing
+import traceback
+import http.client
+import http.cookies
+import urllib.parse
 
 
 class HTTPServer(asyncio.Protocol):

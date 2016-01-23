@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -16,21 +16,27 @@
 #   limitations under the License.
 
 
-from futurefinity.utils import MagicDict
-from futurefinity.utils import ensure_str, ensure_bytes, split_data, MagicDict
-
+from futurefinity.utils import (ensure_str, ensure_bytes, split_data,
+                                MagicDict, TolerantMagicDict)
+from http.cookies import SimpleCookie as HTTPCookies
 
 import io
 import typing
-import http.cookies
+
 import urllib.parse
 
 
-_CRLF_MARK = "\r\n"
-_CRLF_BYTES_MARK = b"\r\n"
+_CR_MARK = "\r"
+_CR_BYTES_MARK = b"\r"
 
 _LF_MARK = "\n"
 _LF_BYTES_MARK = b"\n"
+
+_CRLF_MARK = _CR_MARK + _LF_MARK
+_CRLF_BYTES_MARK = _CR_BYTES_MARK + _LF_BYTES_MARK
+
+_CRLF_MARK_LIST = (_CR_MARK, _LF_MARK, _CRLF_MARK)
+_CRLF_BYTES_MARK_LIST = (_CR_BYTES_MARK, _LF_BYTES_MARK, _CRLF_BYTES_MARK)
 
 _MAX_HEADER_NUMBER = 4096
 
@@ -38,14 +44,30 @@ _MAX_HEADER_LENGTH = 4096
 
 _MAX_BODY_LENGTH = 52428800  # 50M
 
-_REQUEST_WAITING_HEADER = 0
-_REQUEST_HEADER_FINISHED = 1
+_REQUEST_WAITING_INITIAL = 0
+_REQUEST_WAITING_HEADER = 1
 _REQUEST_WAITING_BODY = 2
 _REQUEST_FINISHED = 3
+_REQUEST_BROKEN = -1
+_REQUEST_DESTROYED = -2
 
 _SUPPORTED_METHODS = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
                       "OPTIONS", "CONNECT")
 _BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
+
+
+def _clear_crlf(content: typing.Union[str, bytes]) -> typing.Union[str, bytes]:
+    if isinstance(content, str):
+        if content[-1:] in _CRLF_MARK_LIST:
+            content = content[:-1]
+        if content[-1:] in _CRLF_MARK_LIST:
+            content = content[:-1]
+    else:
+        if content[-1:] in _CRLF_BYTES_MARK_LIST:
+            content = content[:-1]
+        if content[-1:] in _CRLF_BYTES_MARK_LIST:
+            content = content[:-1]
+    return content
 
 
 class HTTPError(Exception):
@@ -67,47 +89,13 @@ class HTTPError(Exception):
         self.message = message
 
 
-class HTTPHeaders(MagicDict):
+class HTTPHeaders(TolerantMagicDict):
     """
-    HTTPHeaders class, based on MagicDict. But Keys must be str and are
-    case-insensitive.
+    HTTPHeaders class, based on MagicDict.
+
+    It has not only all the features from TolerantMagicDict, but also
+    can parse and make HTTP Headers.
     """
-    def add(self, name: str, value: str):
-        """
-        Add a header and change the name to lowercase.
-        """
-        lower_name = name.lower()
-        return MagicDict.add(self, lower_name, value)
-
-    def get_list(self, name: str, default: typing.Optional[str]=None):
-        """
-        Get all headers with the name in a list.
-        """
-        lower_name = name.lower()
-        return MagicDict.get_list(self, lower_name, default=default)
-
-    def get_first(self, name: str, default: typing.Optional[str]=None):
-        """
-        Get first header with the name.
-        """
-        lower_name = name.lower()
-        return MagicDict.get_first(self, lower_name, default=default)
-
-    def __setitem__(self, name, value):
-        lower_name = name.lower()
-        return MagicDict.__setitem__(self, lower_name, value)
-
-    def __getitem__(self, name):
-        lower_name = name.lower()
-        return MagicDict.__getitem__(self, lower_name)
-
-    def __delitem__(self, name):
-        lower_name = name.lower()
-        return MagicDict.__delitem__(self, lower_name)
-
-    def __repr__(self):
-        return "HTTPHeaders()"
-
     def __str__(self):
         content_list = []
         for key, value in self.items():
@@ -121,146 +109,223 @@ class HTTPHeaders(MagicDict):
         """
         return HTTPHeaders(self)
 
-    def parse_http_v1_header(self, data: typing.Union[str, bytes, io.StringIO],
-                             use_crlf_mark: bool=True):
+    def parse_http_v1_header(self, data: typing.Union[str, bytes, list]):
         """
-        Parse HTTP/1.x HTTP Header and return an HTTPHeader instance.
+        Parse HTTP/1.x HTTP Header.
         """
-        if isinstance(data, io.StringIO):
-            data_io = data
-        elif isinstance(data, bytes):
-            data_io = io.StringIO(data.decode())
-        elif isinstance(data, str):
-            data_io = io.StringIO(data)
+        if isinstance(data, list):
+            splitted_data = data
+        else:
+            splitted_data = ensure_bytes(data).splitlines(keepends=True)
 
-        for i in range(0, _MAX_HEADER_NUMBER):
-            header = data_io.readline().replace("\r", "").replace("\n", "")
-            if not header:
-                break
+        for i in range(0, _MAX_HEADER_NUMBER + 1):
+            if len(splitted_data) == 0:
+                return False
+            header = splitted_data.pop(0).decode()
+
+            if header in _CRLF_MARK_LIST:
+                return True
+
+            header = _clear_crlf(header)
             (key, value) = header.split(":", 1)
             self.add(key.strip(), value.strip())
 
+        return False
+
     __copy__ = copy
-
-
-class HTTPCookies:
-    pass
+    __repr__ = __str__
 
 
 class HTTPFile:
     pass
 
 
-class HTTPBody:
-    pass
+class HTTPBody(TolerantMagicDict):
+    def __init__(self, *args, **kwargs):
+        TolerantMagicDict.__init__(self, *args, **kwargs)
+        self._content_length = 0
+        self._content_type = ""
+        self._pending_bytes = b""
+
+    def set_content_length(self, content_length: int):
+        self._content_length = content_length
+
+    def get_content_length(self):
+        return self._content_length
+
+    def set_content_type(self, content_type: str):
+        self._content_type = content_type
+
+    def get_content_type(self):
+        return self._content_type
+
+    def __str__(self):
+        content_list = []
+        for key, value in self.items():
+            content_list.append((key, value))
+
+        return "HTTPBody(%s)" % str(content_list)
+
+    def copy(self):
+        """
+        Create another instance of HTTPBody but contains the same content.
+        """
+        return HTTPBody(self)
+
+    def parse_http_v1_body(self, data: typing.Union[str, bytes]) -> bool:
+        self._pending_bytes += ensure_bytes(data)
+        if len(self._pending_bytes) < self._content_length:
+            return False  # Request Not Completed, wait.
+
+        if self._content_type == "application/x-www-form-urlencoded":
+            for (key, value) in urllib.parse.parse_qsl(
+             self._pending_bytes[:self._content_length],
+             keep_blank_values=True,
+             strict_parsing=True):
+                self.add(key.decode(), value.decode())
+
+        elif self._content_type.startswith("multipart/form-data"):
+            pass  # Unimplemented.
+
+        else:
+            raise HTTPError(400)  # Unknown content-type.
+
+        return True
+
+    __copy__ = copy
+    __repr__ = __str__
 
 
 class HTTPRequest:
-    def __init__(self, path: str=None, host: str="", method: str="GET",
-                 http_version: int=None,
+    def __init__(self, path: typing.Optional[str]=None,
+                 host: typing.Optional[str]="",
+                 method: typing.Optional[str]="GET",
+                 http_version: typing.Optional[int]=None,
                  headers: typing.Optional[HTTPHeaders]=None,
                  cookies: typing.Optional[HTTPCookies]=None,
                  body: typing.Optional[HTTPBody]=None):
         if path is None:
-            self.stage = _REQUEST_WAITING_HEADER
+            self.stage = _REQUEST_WAITING_INITIAL
             self.http_version = None
         else:
             self.stage = _REQUEST_FINISHED
             self.http_version = http_version or 10
         self._pending_bytes = b""
+        self._splitted_pending_bytes = []
+        self._splitted_bytes_length = 0
         self._crlf_mark = None
         self.path = path
+        self.origin_path = None
         self.method = method
         self.host = host
         self.parsed_path = None
         self.queries = MagicDict()
-        self.http_version = http_version or 10
         self.cookies = cookies or HTTPCookies()
         self.headers = headers or HTTPHeaders()
         self.body = body or HTTPBody()
 
-    def decide_http_v1_mark(self):
-        """
-        Decide the request is CRLF or LF.
-
-        Return None if the request is still not finished.
-        Return True if CRLF is used.
-        Return False if LF is used.
-
-        Raise an HTTPError(413) if Header is larger than _MAX_HEADER_LENGTH.
-        """
-        crlf_position = self._pending_bytes.find(_CRLF_BYTES_MARK * 2)
-        lf_position = self._pending_bytes.find(_LF_BYTES_MARK * 2)
-
-        if (crlf_position == -1 and lf_position == -1) and len(
-           self._pending_bytes) < _MAX_HEADER_LENGTH:
-            self._crlf_mark = None  # Request Not Completed, wait.
-        elif crlf_position != -1 and lf_position != -1:
-            if lf_position > crlf_position:
-                self._crlf_mark = True
-            self._crlf_mark = False
-        elif crlf_position != -1:
-            self._crlf_mark = True
-        elif lf_position != -1:
-            self._crlf_mark = False
+    def split_request(self):
+        if len(self._pending_bytes) == 0:
+            return
+        self._splitted_bytes_length += len(self._pending_bytes)
+        self._splitted_pending_bytes.extend(
+            self._pending_bytes.splitlines(keepends=True))
+        if self._splitted_pending_bytes[-1][-1:] not in _CRLF_BYTES_MARK_LIST:
+            self._pending_bytes = self._splitted_pending_bytes.pop(-1)
         else:
-            raise HTTPError(413)  # 413 Request Entity Too Large
+            self._pending_bytes = b""
+
+        self._splitted_bytes_length -= len(self._pending_bytes)
 
     def parse_request(self, request_bytes: bytes) -> bool:
+        if self.stage in [_REQUEST_BROKEN, _REQUEST_DESTROYED,
+                          _REQUEST_FINISHED]:
+            raise HTTPError(500)
+            # Should Not Send Content to Parse Request on this point.
         self._pending_bytes += request_bytes
 
-        if self.stage == _REQUEST_WAITING_HEADER:
-            self.decide_http_v1_mark()
-            if self._crlf_mark is None:
+        if self.stage == _REQUEST_WAITING_INITIAL:
+            self.split_request()
+            if len(self._splitted_pending_bytes) == 0:
+                if self._splitted_bytes_length > _MAX_HEADER_LENGTH:
+                    self.stage = _REQUEST_BROKEN
+                    raise HTTPError(413)  # 413 Request Entity Too Large
                 return False  # Request Not Completed, wait.
+
+            basic_info = _clear_crlf(
+                self._splitted_pending_bytes.pop(0)).decode().split(" ")
+
+            if len(basic_info) != 3:
+                self.stage = _REQUEST_BROKEN
+                raise HTTPError(400)  # 400 Bad Request
+
+            self.method, self.origin_path, http_version = basic_info
+
+            if http_version.lower() == "http/1.1":
+                self.http_version = 11
+            elif http_version.lower() == "http/1.0":
+                self.http_version = 10
             else:
-                raw_initial, self._pending_bytes = split_data(
-                    self._pending_bytes, use_crlf_mark=self._crlf_mark,
-                    mark_repeat=2, max_part=2)
-                raw_initial = raw_initial.decode()
+                self.stage = _REQUEST_BROKEN
+                raise HTTPError(400)  # 400 Bad Request
 
-                basic_info, headers = split_data(raw_initial,
-                                                 use_crlf_mark=self._crlf_mark,
-                                                 max_part=2)
+            parsed_url = urllib.parse.urlparse(self.origin_path)
+            self.path = parsed_url.path
 
-                basic_info = basic_info.split(" ")
+            for query_name, query_value in urllib.parse.parse_qsl(
+             parsed_url.query):
+                self.queries.add(query_name, query_value)
 
-                if len(basic_info) != 3:
-                    raise HTTPError(400)  # 400 Bad Request
+            self.stage = _REQUEST_WAITING_HEADER
 
-                method, path, http_version = basic_info
+        if self.stage == _REQUEST_WAITING_HEADER:
+            self.split_request()
+            try:
+                if self.headers.parse_http_v1_header(
+                 self._splitted_pending_bytes) is False:
+                    if self._splitted_bytes_length > _MAX_HEADER_LENGTH:
+                        self.stage = _REQUEST_BROKEN
+                        raise HTTPError(413)  # 413 Request Entity Too Large
+                    return False  # Request Not Completed, wait.
+            except HTTPError as e:
+                raise e
+            except:
+                self.stage = _REQUEST_BROKEN
+                raise HTTPError(400)  # 413 Bad Request
 
-                if http_version.lower() == "http/1.1":
-                    self.http_version = 11
-                elif http_version.lower() == "http/1.0":
-                    self.http_version = 10
-                else:
-                    raise HTTPError(400)  # 400 Bad Request
-
-                self.headers.parse_http_v1_header(headers)
-
-                self.path = path
-                self.method = method
+            if "host" in self.headers.keys():
                 self.host = self.headers.pop("host")
 
-                if "cookie" in self.headers:
-                    self.cookies = http.cookies.SimpleCookie(
-                        self.headers.get_first("cookie"))
-                else:
-                    self.cookies = http.cookies.SimpleCookie()
+            if "cookie" in self.headers:
+                for cookie_header in self.headers.get_list("cookie"):
+                    self.cookies.load(cookie_header)
 
-                parsed_url = urllib.parse.urlparse(self.path)
-                self.parsed_path = parsed_url.path
+            if self.method in _BODY_EXPECTED_METHODS:
+                content_length = int(self.headers.get_first("content-length"))
+                if content_length > _MAX_BODY_LENGTH:
+                    self.stage = _REQUEST_BROKEN
+                    raise HTTPError(413)  # 413 Request Entity Too Large
 
-                for query in urllib.parse.parse_qsl(parsed_url.query):
-                    self.queries.add(query[0], query[1])
+                self.body.set_content_type(
+                    self.headers.get_first("content-type"))
+                self.body.set_content_length(content_length)
 
-                if self.method in _BODY_EXPECTED_METHODS:
-                    if int(self.headers.get_first(
-                     "content-length")) > _MAX_BODY_LENGTH:
-                        raise HTTPError(413)  # 413 Request Entity Too Large
-                else:
-                    return True
+                self._pending_bytes = b"".join(
+                    self._splitted_pending_bytes) + self._pending_bytes
+                self._splitted_pending_bytes = []
+
+                self.stage = _REQUEST_WAITING_BODY
+                return False
+
+        if self.stage == _REQUEST_WAITING_BODY:
+            if self.body.parse_http_v1_body(self._pending_bytes) is False:
+                self._pending_bytes = b""
+                return False
+
+        self._pending_bytes = b""
+        self._splitted_pending_bytes = []
+        self.stage = _REQUEST_FINISHED
+        return True
 
     def generate_bytes(self):
         pass

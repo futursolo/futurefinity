@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -46,28 +46,29 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 
 from futurefinity.utils import *
+
 import futurefinity
 import futurefinity.server
 import futurefinity.interface
 
 import asyncio
 
-import routes
-import traceback
-import http.cookies
-import http.client
-import time
-import base64
-import hmac
-import hashlib
-import uuid
-import re
-import typing
-import sys
-import html
 import os
-import mimetypes
+import re
+import sys
+import hmac
+import html
+import time
+import uuid
 import types
+import base64
+import routes
+import typing
+import hashlib
+import mimetypes
+import traceback
+import http.client
+import http.cookies
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]

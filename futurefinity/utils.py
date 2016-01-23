@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -43,7 +43,6 @@ import datetime
 import functools
 import collections
 import email.utils
-import email.parser
 import http.cookies
 import urllib.parse
 import collections.abc
@@ -135,8 +134,6 @@ class MagicDict(collections.abc.MutableMapping):
         """
         self._last_key = name
         if name in self:
-            self._dict[name] = (ensure_str(self[name]) + ',' +
-                                ensure_str(value))
             self._as_list[name].append(value)
         else:
             self[name] = value
@@ -180,9 +177,6 @@ class MagicDict(collections.abc.MutableMapping):
     def __iter__(self):
         return iter(self._dict)
 
-    def __repr__(self):
-        return "MagicDict()"
-
     def __str__(self):
         content_list = []
         for key, value in self.items():
@@ -197,6 +191,67 @@ class MagicDict(collections.abc.MutableMapping):
         return MagicDict(self)
 
     __copy__ = copy
+    __repr__ = __str__
+
+
+class TolerantMagicDict(MagicDict):
+    """
+    An implementation of case-insensitive one-to-many mapping.
+
+    Everything is the same as MagicDict,
+    but Keys must be str and are case-insensitive.
+
+    **This doesn't mean that the normal MagicDict is mean.**
+    """
+    def add(self, name: str, value: str):
+        """
+        Add an element and change the name to lowercase.
+        """
+        lower_name = name.lower()
+        return MagicDict.add(self, lower_name, value)
+
+    def get_list(self, name: str, default: typing.Optional[str]=None):
+        """
+        Get all elements with the name in a list.
+        """
+        lower_name = name.lower()
+        return MagicDict.get_list(self, lower_name, default=default)
+
+    def get_first(self, name: str, default: typing.Optional[str]=None):
+        """
+        Get the first element with the name.
+        """
+        lower_name = name.lower()
+        return MagicDict.get_first(self, lower_name, default=default)
+
+    def __setitem__(self, name, value):
+        lower_name = name.lower()
+        return MagicDict.__setitem__(self, lower_name, value)
+
+    def __getitem__(self, name):
+        lower_name = name.lower()
+        return MagicDict.__getitem__(self, lower_name)
+
+    def __delitem__(self, name):
+        lower_name = name.lower()
+        return MagicDict.__delitem__(self, lower_name)
+
+    def __str__(self):
+        content_list = []
+        for key, value in self.items():
+            content_list.append((key, value))
+
+        return "TolerantMagicDict(%s)" % str(content_list)
+
+    def copy(self):
+        """
+        Create another instance of TolerantMagicDict,
+        but contains the same content.
+        """
+        return TolerantMagicDict(self)
+
+    __copy__ = copy
+    __repr__ = __str__
 
 
 class HTTPHeaders(MagicDict):
