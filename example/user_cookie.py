@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ app = futurefinity.web.Application()
 
 @app.add_handler("/user_cookie")
 class UserCookieHandler(futurefinity.web.RequestHandler):
-    async get(self, *args, **kwargs):
+    async def get(self, *args, **kwargs):
         round_num = int(self.get_cookie("rofl-round", default=450))
         self.set_cookie("rofl-round", str(round_num + 100))
         return "If you saw nothing except this sentence, use curl -i."

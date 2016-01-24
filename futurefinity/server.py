@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -21,18 +21,22 @@ FutureFinity Web Application, which can parse http request, initialize
 right RequestHandler and make response to client.
 """
 
-from futurefinity.utils import *
+from futurefinity.utils import ensure_str, ensure_bytes
+from futurefinity.protocol import (HTTPHeaders, HTTPRequest,
+                                   HTTPResponse, HTTPError)
+
 import futurefinity
 
-import urllib.parse
 import asyncio
-import ssl
+
 import re
 import cgi
-import http.cookies
-import http.client
-import traceback
+import ssl
 import typing
+import traceback
+import http.client
+import http.cookies
+import urllib.parse
 
 
 class HTTPServer(asyncio.Protocol):
@@ -53,17 +57,14 @@ class HTTPServer(asyncio.Protocol):
         self._loop = loop
         self.app = app
         self.enable_h2 = enable_h2
+
         self.transport = None
         self._keep_alive_handler = None
-        self.data = b""
-        self._crlf_mark = None
+
+        self._request_parser = None
+        self._request_finished = False
+
         self.http_version = 10
-        self.initial = None
-        self._body_parsed = False
-        self.method = ""
-        self.content_type = ""
-        self.content_length = 0
-        self.parsed_body = None
 
         self._request_handlers = {}
 
@@ -91,15 +92,9 @@ class HTTPServer(asyncio.Protocol):
         """
         self._request_handlers = {}
         self.set_keep_alive_handler()
-        self.data = b""
-        self._crlf_mark = None
-        self.initial = None
-        self._request_handler = None
-        self._body_parsed = False
-        self.method = ""
-        self.content_type = ""
-        self.content_length = 0
-        self.parsed_body = None
+
+        self._request_parser = None
+        self._request_finished = False
 
     def connection_made(self, transport: asyncio.BaseTransport):
         """
@@ -173,129 +168,66 @@ class HTTPServer(asyncio.Protocol):
             if self.http_version == 20:
                 return  # HTTP/2 will be implemented later.
             else:
-                self.data_received_http_v1(data)
+                self.http_v1_data_received(data)
         except Exception as e:
             if self.app.settings.get("debug", False):
                 traceback.print_exc()
             self.handle_request_error(e)
 
-    def data_received_http_v1(self, data: bytes):
-        """
-        Try to parse received data as HTTP/1.x request.
-
-        This function should not be used directly, data_received() function
-        will pass it to the right http version.
-        """
-        if self._body_parsed:
+    def http_v1_data_received(self, data: bytes):
+        if self._request_finished:
             return
 
-        self.data += data
+        if self._request_parser is None:
+            self._request_parser = HTTPRequest()
 
-        if self._crlf_mark is None:
-            self._crlf_mark = decide_http_v1_mark(
-                self.data[:MAX_HEADER_LENGTH + 1])
+        self._request_finished = self._request_parser.parse_http_v1_request(
+            data)
+        self.http_version = self._request_parser.http_version
 
-            if self._crlf_mark is None:
-                return  # Request Not Completed, Wait.
+        if self._request_finished:
+            self._request_handlers[0] = asyncio.ensure_future(
+                self.handle_request(self._request_parser))
 
-            self.initial, self.data = parse_http_v1_initial(
-                self.data, use_crlf_mark=self._crlf_mark)
-
-            self.http_version = self.initial["http_version"]
-            self.method = self.initial["parsed_headers"][":method"]
-            if self.method in BODY_EXPECTED_METHODS:
-                self.content_type = self.initial[
-                    "parsed_headers"].get_first("content-type")
-                self.content_length = int(
-                    self.initial["parsed_headers"].get_first("content-length"))
-
-        if self.method in BODY_EXPECTED_METHODS:
-            self.parse_body_http_v1()
-            if not self._body_parsed:
-                return  # Request Not Completed, wait.
-        else:
-            self._body_parsed = True
-
-        if len(self._request_handlers.keys()) != 0:
-            raise HTTPError(500)
-            # HTTP/1.x should have only one RequestHandler at the same time.
-
-        self._request_handlers[0] = asyncio.ensure_future(
-            self.handle_request(self.initial, self.parsed_body))
-
-    def parse_body_http_v1(self):
-        """
-        Try to Parse Data as HTTP/1.x Request Body.
-        """
-        if len(self.data) < self.content_length:
-            return  # Request Not Completed, wait.
-        self.parsed_body = parse_http_v1_body(
-            data=self.data,
-            content_type=self.content_type,
-            content_length=self.content_length
-        )
-        self._body_parsed = True
-
-    async def handle_request(self, initial: dict,
-                             parsed_body: cgi.FieldStorage):
+    async def handle_request(self, request: HTTPRequest):
         """
         Handle an HTTP Request to Right RequestHandler.
         """
-        matched_obj = self.app.find_handler(initial["parsed_path"])
+        matched_obj = self.app.find_handler(request.path)
         request_handler = matched_obj.pop("__handler__")(
             app=self.app,
             server=self,
-            method=initial["parsed_headers"][":method"],
-            path=initial["parsed_path"],
-            matched_path=matched_obj,
-            queries=initial["parsed_queries"],
-            http_version=self.http_version,
-            request_headers=initial["parsed_headers"],
-            request_cookies=initial["parsed_cookies"],
-            request_body=parsed_body,
-            make_response=self.make_response
+            request=request,
+            respond_request=self.respond_request
         )
         await request_handler.handle(**matched_obj)
 
-    def make_response(self, status_code: int, response_headers: HTTPHeaders,
-                      response_body: bytes):
+    def respond_request(self, request: HTTPRequest, response: HTTPResponse):
         """
         Make http response to client.
         """
         if self.http_version == 20:
             pass  # HTTP/2 will be implemented later.
         else:
-            self.make_http_v1_response(status_code, response_headers,
-                                       response_body)
+            self.respond_http_v1_request(request, response)
 
-    def make_http_v1_response(self, status_code: int,
-                              response_headers: HTTPHeaders,
-                              response_body: bytes):
-
+    def respond_http_v1_request(self, request: HTTPRequest,
+                                response: HTTPResponse):
         """
         Make HTTP/1.x response to client.
 
         This function should not be called directly, make_response() function
         will handle it to right http version.
         """
-        response_text = b""
-        if self.http_version == 10:
-            response_text += b"HTTP/1.0 "
-        elif self.http_version == 11:
-            response_text += b"HTTP/1.1 "
+        use_keep_alive = (self.http_version == 11 and
+                          self.app.settings.get("allow_keep_alive", True))
 
-        response_text += ensure_bytes(str(status_code)) + b" "
+        if use_keep_alive and "keep-alive" not in response.headers:
+            response.headers.add("keep-alive", "timeout=100, max=100")
 
-        response_text += ensure_bytes(http.client.responses[
-            status_code]) + b"\r\n"
-        for (key, value) in response_headers.get_all():
-            response_text += ensure_bytes("%(key)s: %(value)s\r\n" % {
-                "key": key, "value": value})
-        response_text += b"\r\n"
-        response_text += ensure_bytes(response_body)
-        self.transport.write(response_text)
-        if self.http_version == 11 and self.app.settings.get(
-         "allow_keep_alive", True):
+        self.transport.write(response.make_http_v1_response())
+
+        if use_keep_alive:
             self.reset_server()
         else:
             self.transport.close()

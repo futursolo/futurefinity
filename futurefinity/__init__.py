@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -15,6 +15,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-__version__ = ("0", "1", "1", "1")
+__version__ = ("0", "2", "0", "-1000")
 
-version = "0.1.1"
+version = "0.2.0.dev0"

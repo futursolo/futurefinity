@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -36,8 +36,8 @@ if __name__ == "__main__":
         version=futurefinity.version,
         author="Futur Solo",
         author_email="futursolo@gmail.com",
-        url="https://finity.futures.moe/",
-        license="http://www.apache.org/licenses/LICENSE-2.0",
+        url="https://github.com/futursolo/FutureFinity",
+        license="Apache License 2.0",
         description="FutureFinity is an asynchronous Python web framework "
                     "designed for asyncio and native coroutines.",
         long_description=open("README.rst", "r").read(),

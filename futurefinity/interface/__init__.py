@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ FutureFinity. By replace default interfaces of FutureFinity, developer can
 enhance the feature of FutureFinity.
 """
 
-from futurefinity.utils import *
 from futurefinity.interface import template as template_interface
 from futurefinity.interface import session as session_interface
 from futurefinity.interface import secure_cookie as secure_cookie_interface

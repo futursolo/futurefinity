@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import *
+from futurefinity.protocol import HTTPError
 
 import futurefinity.web
 
@@ -25,16 +25,12 @@ import nose2
 import requests
 import unittest
 import functools
-import traceback
 
 
-class CSRFTestCollector(unittest.TestCase):
+class HTTPErrorTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(
-            allow_keep_alive=False, csrf_protect=True,
-            security_secret=security_secret_generator(32),
-            debug=True)
+        self.app = futurefinity.web.Application(allow_keep_alive=False)
 
     async def get_requests_result(self, server):
         try:
@@ -42,13 +38,12 @@ class CSRFTestCollector(unittest.TestCase):
             with requests.Session() as s:
                 self.requests_result.append(
                     await self.loop.run_in_executor(None, functools.partial(
-                        s.get, "http://127.0.0.1:8888/csrf_test"
+                        s.get, "http://127.0.0.1:8888/http_error_test"
                     ))
                 )
                 self.requests_result.append(
                     await self.loop.run_in_executor(None, functools.partial(
-                        s.post, "http://127.0.0.1:8888/csrf_test",
-                        data={"_csrf": self.requests_result[0].text}
+                        s.get, "http://127.0.0.1:8888/custom_error_test"
                     ))
                 )
         except:
@@ -58,26 +53,26 @@ class CSRFTestCollector(unittest.TestCase):
             await server.wait_closed()
             self.loop.stop()
 
-    def test_csrf_request(self):
-        @self.app.add_handler("/csrf_test")
+    def test_error_request(self):
+        @self.app.add_handler("/http_error_test")
         class TestHandler(futurefinity.web.RequestHandler):
             async def get(self, *args, **kwargs):
-                return self.get_csrf_value()
+                raise HTTPError(403)
 
-            def check_csrf_value(self, *args, **kwargs):
-                futurefinity.web.RequestHandler.check_csrf_value(self, *args,
-                                                                 **kwargs)
-
-            async def post(self, *args, **kwargs):
-                return "Hello, World!!"
+        @self.app.add_handler("/custom_error_test")
+        class TestHandler(futurefinity.web.RequestHandler):
+            async def get(self, *args, **kwargs):
+                "" + 233
 
         server = self.app.listen(8888)
+
+        self.requests_result = []
 
         asyncio.ensure_future(self.get_requests_result(server))
         self.loop.run_forever()
 
-        self.assertEqual(self.requests_result[0].status_code, 200,
-                         "Wrong Status Code for the First Request.")
+        self.assertEqual(self.requests_result[0].status_code, 403,
+                         "Wrong Status Code for First Default Request.")
 
-        self.assertEqual(self.requests_result[1].status_code, 200,
-                         "Wrong Status Code for the Second Request.")
+        self.assertEqual(self.requests_result[1].status_code, 500,
+                         "Wrong Status Code for Second Default Request.")

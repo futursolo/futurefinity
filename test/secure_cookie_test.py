@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-#   Copyright 2015 Futur Solo
+#   Copyright 2016 Futur Solo
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -21,10 +21,10 @@ from futurefinity.interface.secure_cookie import HMACSecureCookieInterface
 
 import futurefinity.web
 
+import asyncio
 
 import json
 import nose2
-import asyncio
 import requests
 import unittest
 import functools
