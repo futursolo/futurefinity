@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import *
+from futurefinity.utils import ensure_str
 
 import json
 import uuid
@@ -50,6 +50,8 @@ class SessionInterfaceModel:
             "No Session Interface Can be automatically Selected.")
 
     async def write_session(self, handler, session_object):
+        if session_object is None:
+            return
         raise NotImplementedError(
             "No Session Interface Can be automatically Selected.")
 
@@ -104,9 +106,6 @@ class RedisSessionInterface(SessionInterfaceModel):
             "id": str(uuid.uuid4())
         }
         handler.set_secure_cookie("_session_id", json.dumps(session_id))
-
-        if session_object == {}:
-            return
 
         with (await self.redis_connection_pool) as conn:
             redis_key = "_%s_session" % session_id["id"]

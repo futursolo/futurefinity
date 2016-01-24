@@ -16,10 +16,13 @@
 #   limitations under the License.
 
 
-from futurefinity.utils import (ensure_str, ensure_bytes,
+from futurefinity.utils import (ensure_str, ensure_bytes, format_timestamp,
                                 MagicDict, TolerantMagicDict)
 
 from http.cookies import SimpleCookie as HTTPCookies
+from http.client import responses as status_code_text
+
+import futurefinity
 
 import io
 import typing
@@ -53,6 +56,10 @@ _REQUEST_WAITING_BODY = 3
 _REQUEST_FINISHED = 4
 _REQUEST_BROKEN = -1
 _REQUEST_DESTROYED = -2
+
+_RESPONSE_EMPTY = 0
+_RESPONSE_FINISHED = 1
+_RESPONSE_DESTROYED = -1
 
 _SUPPORTED_METHODS = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
                       "OPTIONS", "CONNECT")
@@ -92,6 +99,38 @@ class HTTPError(Exception):
         self.message = message
 
 
+class CapitalizedHTTPv1Header(dict):
+    def __init__(self, *args, **kwargs):
+        dict.__init__(self, *args, **kwargs)
+        self.update({
+            "server": "Server",
+            "content-type": "Content-Type",
+            "content-length": "Content-Length",
+            "content-encoding": "Content-Encoding",
+            "user-agent": "User-Agent",
+            "set-cookie": "Set-Cookie",
+            "keep-alive": "Keep-Alive",
+            "etag": "ETag",
+            "if-none-match": "If-None-Match",
+            "date": "Date",
+            "allow": "Allow",
+            "content-md5": "Content-MD5",
+            "content-md5": "Content-md5",
+            "content-range": "Content-Range",
+            "last-modified": "Last-Modified",
+        })
+
+    def __getitem__(self, key: str) -> str:
+        if key in self:
+            return dict.__getitem__(self, key)
+
+        self[key] = key.title()
+        return self[key]
+
+
+capitalize_header = CapitalizedHTTPv1Header()
+
+
 class HTTPHeaders(TolerantMagicDict):
     """
     HTTPHeaders class, based on MagicDict.
@@ -125,7 +164,7 @@ class HTTPHeaders(TolerantMagicDict):
             if len(splitted_data) == 0:
                 return False
 
-            header = splitted_data.pop(0).decode()
+            header = ensure_str(splitted_data.pop(0))
 
             if header in _CRLF_MARK_LIST:
                 return True
@@ -138,6 +177,21 @@ class HTTPHeaders(TolerantMagicDict):
             raise HTTPError(413)  # Too many Headers.
 
         return False
+
+    def accept_cookies(self, cookies: HTTPCookies):
+        for cookie_morsel in cookies.values():
+            self.add("set-cookie", cookie_morsel.OutputString())
+
+    def make_http_v1_header(self) -> bytes:
+        header_bytes = b""
+        for (header_name, header_value) in self.items():
+            header_bytes += ensure_bytes(
+                "%(header_name)s: %(header_value)s" % {
+                    "header_name": capitalize_header[header_name],
+                    "header_value": header_value
+                }) + _CRLF_BYTES_MARK
+
+        return header_bytes
 
     __copy__ = copy
     __repr__ = __str__
@@ -208,7 +262,7 @@ class HTTPBody(TolerantMagicDict):
              self._pending_bytes[:self._content_length],
              keep_blank_values=True,
              strict_parsing=True):
-                self.add(key.decode(), value.decode())
+                self.add(ensure_str(key), ensure_str(value))
 
         elif self._content_type.lower().startswith("multipart/form-data"):
             for field in self._content_type.split(";"):  # Search Boundary
@@ -338,8 +392,8 @@ class HTTPRequest:
                     raise HTTPError(413)  # 413 Request Entity Too Large
                 return False  # Request Not Completed, wait.
 
-            basic_info = _clear_crlf(
-                self._splitted_pending_bytes.pop(0)).decode().split(" ")
+            basic_info = ensure_str(_clear_crlf(
+                self._splitted_pending_bytes.pop(0))).split(" ")
 
             if len(basic_info) != 3:
                 self.stage = _REQUEST_BROKEN
@@ -447,4 +501,52 @@ class HTTPRequest:
 
 
 class HTTPResponse:
-    pass
+    def __init__(self,
+                 http_version: typing.Optional[int]=None,
+                 status_code: typing.Optional[int]=None,
+                 headers: typing.Optional[HTTPHeaders]=None,
+                 cookies: typing.Optional[HTTPCookies]=None,
+                 body: typing.Optional[bytes]=None):
+        self.stage = _REQUEST_EMPTY
+        self.http_version = http_version or 10
+        self.status_code = status_code or 200
+
+        self.headers = headers or HTTPHeaders()
+        self.cookies = cookies or HTTPCookies()
+        self.body = body or b""
+
+    def make_http_v1_response(self):
+        response = b""
+        if self.http_version == 11:
+            response += b"HTTP/1.1 "
+        elif self.http_version == 10:
+            response += b"HTTP/1.1 "
+        else:
+            raise HTTPError(500)  # Unknown HTTP Version
+
+        response += ensure_bytes(str(self.status_code)) + b" "
+        response += ensure_bytes(status_code_text[self.status_code])
+        response += _CRLF_BYTES_MARK
+
+        headers = self.headers.copy()
+
+        if "content-type" not in headers.keys():
+            headers.add("content-type", "text/html; charset=utf-8;")
+
+        if "content-length" not in headers.keys():
+            headers.add("content-length",
+                        str(len(self.body)))
+
+        if "date" not in headers.keys():
+            headers.add("date", format_timestamp())
+
+        headers.add("server", "FutureFinity/" + futurefinity.version)
+
+        headers.accept_cookies(self.cookies)
+
+        response += headers.make_http_v1_header()
+        response += _CRLF_BYTES_MARK
+
+        response += self.body
+
+        return response

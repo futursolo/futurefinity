@@ -1,3 +1,10 @@
+dev
+---
+- Abstract HTTP Protocol by HTTPRequest and HTTPResponse
+- Fixed Cookie Default Value Bug
+- Fixed SessionInterface Bug
+
+
 v0.1.1
 ------
 - Introduce Secure Cookie interface

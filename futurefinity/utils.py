@@ -278,7 +278,7 @@ def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,
     """
     Make a timestamp that fits HTTP Response.
     """
-    if not ts:
+    if ts is None:
         ts = time.time()
     if isinstance(ts, numbers.Real):
         pass

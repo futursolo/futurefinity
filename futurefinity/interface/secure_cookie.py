@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import *
+from futurefinity.utils import ensure_str, ensure_bytes
 
 import io
 import os

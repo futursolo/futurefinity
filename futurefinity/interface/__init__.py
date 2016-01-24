@@ -21,7 +21,6 @@ FutureFinity. By replace default interfaces of FutureFinity, developer can
 enhance the feature of FutureFinity.
 """
 
-from futurefinity.utils import *
 from futurefinity.interface import template as template_interface
 from futurefinity.interface import session as session_interface
 from futurefinity.interface import secure_cookie as secure_cookie_interface

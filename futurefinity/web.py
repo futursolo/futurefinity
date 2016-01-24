@@ -46,7 +46,8 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 
 from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
-from futurefinity.protocol import HTTPHeaders, HTTPCookies, HTTPError
+from futurefinity.protocol import (HTTPHeaders, HTTPCookies, HTTPResponse,
+                                   HTTPError)
 
 import futurefinity
 import futurefinity.server
@@ -92,22 +93,19 @@ class RequestHandler:
         self.app = kwargs.get("app")
         self.server = kwargs.get("server")
         self.request = kwargs.get("request")
-        self.make_response = kwargs.get("make_response")
+        self.response = kwargs.get("response", HTTPResponse())
+        self.respond_request = kwargs.get("respond_request")
 
         self.path = self.request.path
 
-        self.status_code = 200
-
         self._session = None
 
-        self._response_headers = HTTPHeaders()
         self._response_cookies = HTTPCookies()
 
         self._csrf_value = None
 
         self._written = False
         self._finished = False
-        self._response_body = b""
 
     def get_link_arg(self, name: str, default: str=None) -> str:
         """
@@ -138,34 +136,34 @@ class RequestHandler:
         Set a response header with the name and value, this will override any
         former value(s) with the same name.
         """
-        self._response_headers[name] = ensure_str(value)
+        self.response.headers[name] = ensure_str(value)
 
     def add_header(self, name: str, value: str):
         """
         Add a response header with the name and value, this will not override
         any former value(s) with the same name.
         """
-        self._response_headers.add(name, ensure_str(value))
+        self.response.headers.add(name, ensure_str(value))
 
     def clear_header(self, name: str):
         """
         Clear response header(s) with the name.
         """
-        if name in self._response_headers.keys():
-            del self._response_headers[name]
+        if name in self.response.headers.keys():
+            del self.response.headers[name]
 
     def clear_all_headers(self):
         """
         Clear all response header(s).
         """
-        self._response_headers = HTTPHeaders()
+        self.response.headers = HTTPHeaders()
 
     def get_cookie(self, name: str, default: str=None) -> str:
         """
         Return first Cookie in the request header(s) with the name.
         """
         cookie = self.request.cookies.get(name, None)
-        if not cookie:
+        if cookie is None:
             return default
         return cookie.value
 
@@ -175,28 +173,29 @@ class RequestHandler:
         """
         Set a cookie with attribute(s).
         """
-        self._response_cookies[name] = value
+        self.response.cookies[name] = value
         if domain:
-            self._response_cookies[name]["domain"] = domain
+            self.response.cookies[name]["domain"] = domain
         if expires:
-            self._response_cookies[name]["expires"] = expires
-        self._response_cookies[name]["path"] = path
-        self._response_cookies[name]["max-age"] = expires_days
-        self._response_cookies[name]["secure"] = secure
-        self._response_cookies[name]["httponly"] = httponly
+            self.response.cookies[name]["expires"] = expires
+        self.response.cookies[name]["path"] = path
+        self.response.cookies[name]["max-age"] = expires_days
+        self.response.cookies[name]["secure"] = secure
+        self.response.cookies[name]["httponly"] = httponly
 
     def clear_cookie(self, name: str):
         """
         Clear a cookie with the name.
         """
-        if name in self._response_cookies:
-            del self._response_cookies[name]
+        self.set_cookie(name=name, value="",
+                        expires=format_timestamp(0))
 
     def clear_all_cookies(self):
         """
         Clear response cookie(s).
         """
-        self._response_cookies = HTTPCookies()
+        for cookie_name in self.request.cookies.keys():
+            self.clear_cookie(cookie_name)
 
     def get_secure_cookie(self, name: str, max_age_days: int=31) -> str:
         """
@@ -312,9 +311,9 @@ class RequestHandler:
         if self._finished:
             return
         self._written = True
-        self._response_body += ensure_bytes(text)
+        self.response.body += ensure_bytes(text)
         if clear_text:
-            self._response_body = ensure_bytes(text)
+            self.response.body = ensure_bytes(text)
 
     def render_string(self, template_name: str, template_dict: dict) -> str:
         """
@@ -351,7 +350,7 @@ class RequestHandler:
             status = 301 if permanent else 302
         else:
             assert isinstance(status, int) and 300 <= status <= 399
-        self.status_code = status
+        self.response.status_code = status
         self.set_header("location", ensure_str(url))
         self.write("<!DOCTYPE HTML>"
                    "<html>"
@@ -375,14 +374,14 @@ class RequestHandler:
         Compute etag header of response_body.
         """
         hasher = hashlib.sha1()
-        hasher.update(self._response_body)
+        hasher.update(self.response.body)
         return '"%s"' % hasher.hexdigest()
 
     def check_etag_header(self):
         """
         Check etag header of response_body.
         """
-        computed_etag = ensure_bytes(self._response_headers.get_first("etag"))
+        computed_etag = ensure_bytes(self.response.headers.get_first("etag"))
         etags = re.findall(
             br'\*|(?:W/)?"[^"]*"',
             ensure_bytes(self.get_header("if-none-match", ""))
@@ -423,43 +422,20 @@ class RequestHandler:
         if self.app.settings.get("csrf_protect", False):
             self.set_csrf_value()
 
-        if "content-type" not in self._response_headers:
-            self.set_header("content-type", "text/html; charset=utf-8;")
-
-        if "content-length" not in self._response_headers:
-            self.set_header("content-length",
-                            str(len(self._response_body)))
-
-        if "date" not in self._response_headers:
-            self.set_header("date", format_timestamp())
-
-        if self.request.http_version == 11:
-            if "keep-alive" not in self._response_headers:
-                self.set_header("keep-alive", "timeout=100, max=100")
-
-        self.set_header("server", "FutureFinity/" + futurefinity.version)
-
-        for cookie_morsel in self._response_cookies.values():
-            self._response_headers.add("set-cookie",
-                                       cookie_morsel.OutputString())
-
-        if "etag" not in self._response_headers and self.status_code == 200:
+        if ("etag" not in self.response.headers and
+           self.response.status_code == 200):
             self.set_etag_header()
 
         if self.check_etag_header():
-            self.status_code = 304
-            self._response_body = b""
+            self.response.status_code = 304
+            self.response.body = b""
             for header_name in ["allow", "content-encoding",
                                 "content-language", "content-length",
                                 "content-md5", "content-range", "content-type",
                                 "last-modified"]:
                 self.clear_header(header_name)
 
-        if self.request.http_version == 20:
-            return  # HTTP/2 will be implemented later.
-        else:
-            self.make_response(self.status_code, self._response_headers,
-                               self._response_body)
+        self.respond_request(self.request, self.response)
 
     def write_error(self, error_code: int,
                     message: typing.Union[str, bytes]=None,
@@ -467,7 +443,7 @@ class RequestHandler:
         """
         Respond an error to client.
         """
-        self.status_code = error_code
+        self.response.status_code = error_code
         self.set_header("Content-Type", "text/html")
         self.write("<!DOCTYPE HTML>"
                    "<html>"
@@ -504,10 +480,10 @@ class RequestHandler:
         Respond the Head Request.
         """
         get_return_text = await self.get(*args, **kwargs)
-        if self.status_code != 200:
+        if self.response.status_code != 200:
             return
         if self._written is True:
-            self.set_header("content-length", str(len(self._response_body)))
+            self.set_header("content-length", str(len(self.response.body)))
         else:
             self.set_header("content-length", str(len(get_return_text)))
         self.write(b"", clear_text=True)
