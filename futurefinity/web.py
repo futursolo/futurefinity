@@ -46,8 +46,8 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 
 from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
-from futurefinity.protocol import (HTTPHeaders, HTTPCookies, HTTPResponse,
-                                   HTTPError)
+from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPCookies,
+                                   HTTPResponse, HTTPError)
 
 import futurefinity
 import futurefinity.server
@@ -58,18 +58,15 @@ import asyncio
 import os
 import re
 import sys
-import hmac
 import html
 import time
 import uuid
 import types
-import base64
 import routes
 import typing
 import hashlib
 import mimetypes
 import traceback
-import http.client
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -364,7 +361,7 @@ class RequestHandler:
                    "</body>"
                    "</html>" % {
                        "status_code": status,
-                       "status_message": http.client.responses[status],
+                       "status_message": status_code_text[status],
                        "url": ensure_str(url)
                     })
         self.finish()
@@ -454,7 +451,7 @@ class RequestHandler:
                    "<body>"
                    "    <div>%(error_code)d: %(status_code_detail)s</div>" % {
                         "error_code": error_code,
-                        "status_code_detail": http.client.responses[error_code]
+                        "status_code_detail": status_code_text[error_code]
                    },
                    clear_text=True)
         if message:

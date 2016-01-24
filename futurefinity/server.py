@@ -22,7 +22,7 @@ right RequestHandler and make response to client.
 """
 
 from futurefinity.utils import ensure_str, ensure_bytes
-from futurefinity.protocol import (HTTPHeaders, HTTPRequest,
+from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPRequest,
                                    HTTPResponse, HTTPError)
 
 import futurefinity
@@ -34,9 +34,6 @@ import cgi
 import ssl
 import typing
 import traceback
-import http.client
-import http.cookies
-import urllib.parse
 
 
 class HTTPServer(asyncio.Protocol):
@@ -118,45 +115,27 @@ class HTTPServer(asyncio.Protocol):
         if self.http_version == 20:
             return  # HTTP/2 will be implemented later.
         else:
-            self.handle_request_error_http_v1(e)
+            self.handle_http_v1_request_error(e)
 
-    def handle_request_error_http_v1(self, e: Exception):
+    def handle_http_v1_request_error(self, e: Exception):
         """
         Response an HTTP/1.x Error.
 
         This function should not be used directly, handle_request_error()
         function will pass it to the right http version.
         """
-        status_code = 400
-        message = None
+        response = HTTPResponse()
+        response.status_code = 400
+
         if isinstance(e, HTTPError):
-            status_code = e.status_code
-            message = e.message
+            response.status_code = e.status_code
 
-        response_body = ensure_bytes(status_code) + b": "
-        response_body += ensure_bytes(http.client.responses[status_code])
+        response.headers["content-type"] = "text/plain"
 
-        response_text = b""
+        response.body = ensure_bytes(status_code) + b": "
+        response.body += ensure_bytes(status_code_text[response.status_code])
 
-        if self.http_version == 11:
-            response_text += b"HTTP/1.1 "
-        else:
-            response_text += b"HTTP/1.0 "
-
-        response_text += ensure_bytes(status_code) + b" "
-
-        response_text += ensure_bytes(http.client.responses[
-            status_code]) + b"\r\n"
-
-        response_text += b"Content-Type: text/plain\r\n"
-
-        response_text += b"Content-Length: %d\r\n" % len(response_body)
-
-        response_text += b"\r\n\r\n"
-
-        response_text += response_body
-
-        self.transport.write(response_text)
+        self.transport.write(response.make_http_v1_response())
         self.transport.close()
 
     def data_received(self, data: bytes):
@@ -221,6 +200,8 @@ class HTTPServer(asyncio.Protocol):
         """
         use_keep_alive = (self.http_version == 11 and
                           self.app.settings.get("allow_keep_alive", True))
+
+        response.headers.add("server", "FutureFinity/" + futurefinity.version)
 
         if use_keep_alive and "keep-alive" not in response.headers:
             response.headers.add("keep-alive", "timeout=100, max=100")

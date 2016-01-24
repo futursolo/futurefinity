@@ -29,7 +29,7 @@ import typing
 
 import urllib.parse
 
-__all__ = ["HTTPCookies"]
+__all__ = ["status_code_text", "HTTPCookies"]
 
 _CR_MARK = "\r"
 _CR_BYTES_MARK = b"\r"
@@ -539,8 +539,6 @@ class HTTPResponse:
 
         if "date" not in headers.keys():
             headers.add("date", format_timestamp())
-
-        headers.add("server", "FutureFinity/" + futurefinity.version)
 
         headers.accept_cookies(self.cookies)
 
