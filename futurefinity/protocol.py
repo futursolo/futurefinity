@@ -103,21 +103,22 @@ class CapitalizedHTTPv1Header(dict):
     def __init__(self, *args, **kwargs):
         dict.__init__(self, *args, **kwargs)
         self.update({
+            "date": "Date",
+            "etag": "ETag",
+            "allow": "Allow",
+            "cookie": "Cookie",
             "server": "Server",
+            "connection": "Connection",
+            "keep-alive": "Keep-Alive",
+            "set-cookie": "Set-Cookie",
+            "user-agent": "User-Agent",
+            "content-md5": "Content-MD5",
             "content-type": "Content-Type",
+            "content-range": "Content-Range",
+            "if-none-match": "If-None-Match",
+            "last-modified": "Last-Modified",
             "content-length": "Content-Length",
             "content-encoding": "Content-Encoding",
-            "user-agent": "User-Agent",
-            "set-cookie": "Set-Cookie",
-            "keep-alive": "Keep-Alive",
-            "etag": "ETag",
-            "if-none-match": "If-None-Match",
-            "date": "Date",
-            "allow": "Allow",
-            "content-md5": "Content-MD5",
-            "content-md5": "Content-md5",
-            "content-range": "Content-Range",
-            "last-modified": "Last-Modified",
         })
 
     def __getitem__(self, key: str) -> str:
@@ -178,7 +179,19 @@ class HTTPHeaders(TolerantMagicDict):
 
         return False
 
-    def accept_cookies(self, cookies: HTTPCookies):
+    def accept_cookies_for_request(self, cookies: HTTPCookies):
+        cookie_string = ""
+        if "cookie" in self.keys():
+            cookie_string += self["cookie"]
+        for cookie_name, cookie_morsel in cookies.items():
+            cookie_string += "%(cookie_name)s=%(cookie_value)s; " % {
+                "cookie_name": cookie_name,
+                "cookie_value": cookie_morsel.value
+            }
+        if cookie_string:
+            self["cookie"] = cookie_string
+
+    def accept_cookies_for_response(self, cookies: HTTPCookies):
         for cookie_morsel in cookies.values():
             self.add("set-cookie", cookie_morsel.OutputString())
 
@@ -331,6 +344,9 @@ class HTTPBody(TolerantMagicDict):
 
         return True
 
+    def make_http_v1_body(self):
+        pass
+
     __copy__ = copy
     __repr__ = __str__
 
@@ -476,7 +492,57 @@ class HTTPRequest:
         return True
 
     def make_http_v1_request(self):
-        pass
+        request = b""
+
+        if self.method not in _SUPPORTED_METHODS:
+            raise HTTPError(400)  # Unknown HTTP method
+
+        request += ensure_bytes(self.method) + b" "
+        parse_result = urllib.parse.urlparse(self.path)
+        if parse_result.netloc and not self.host:
+            self.host = parse_result.netloc
+
+        encoded_queries = urllib.parse.urlencode(self.queries)
+        if parse_result.query:
+            if encoded_queries:
+                encoded_queries += "&"
+            encoded_queries += parse_result.query
+
+        url = urllib.parse.urlunparse(urllib.parse.ParseResult(
+            scheme="", netloc="", path=parse_result.path,
+            params="", query=encoded_queries, fragment=""))
+
+        request += ensure_bytes(url) + b" "
+
+        if self.http_version == 11:
+            request += b"HTTP/1.1"
+        elif self.http_version == 10:
+            request += b"HTTP/1.1"
+        else:
+            raise HTTPError(400)  # Unknown HTTP Version
+
+        request += _CRLF_BYTES_MARK
+
+        headers = self.headers.copy()
+
+        headers.accept_cookies_for_request(self.cookies)
+
+        body = b""
+        if self.method in _BODY_EXPECTED_METHODS:
+            self.body_expected = True
+            body += self.body.make_http_v1_body()
+
+            if "content-length" not in headers.keys():
+                headers.add("content-length",
+                            str(len(self.body)))
+
+        request += headers.make_http_v1_header()
+
+        request += _CRLF_BYTES_MARK
+
+        request += body
+
+        return request
 
     def __str__(self):
         return ("HTTPRequest("
@@ -540,7 +606,7 @@ class HTTPResponse:
         if "date" not in headers.keys():
             headers.add("date", format_timestamp())
 
-        headers.accept_cookies(self.cookies)
+        headers.accept_cookies_for_response(self.cookies)
 
         response += headers.make_http_v1_header()
         response += _CRLF_BYTES_MARK
