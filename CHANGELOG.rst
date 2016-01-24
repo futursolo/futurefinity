@@ -17,7 +17,8 @@ v0.1.0
 - Using Template Interface instead of Overriding Function
 - Introduce Session Interface
 - Introduce Secure Cookie Based Session
-- Introduce Redis Based Sessionv
+- Introduce Redis Based Session
+- Etag Support
 
 0.0.1
 ------

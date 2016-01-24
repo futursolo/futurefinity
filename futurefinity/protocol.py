@@ -16,8 +16,9 @@
 #   limitations under the License.
 
 
-from futurefinity.utils import (ensure_str, ensure_bytes, split_data,
+from futurefinity.utils import (ensure_str, ensure_bytes,
                                 MagicDict, TolerantMagicDict)
+
 from http.cookies import SimpleCookie as HTTPCookies
 
 import io
@@ -25,6 +26,7 @@ import typing
 
 import urllib.parse
 
+__all__ = ["HTTPCookies"]
 
 _CR_MARK = "\r"
 _CR_BYTES_MARK = b"\r"
@@ -292,16 +294,15 @@ class HTTPRequest:
         self._pending_bytes = b""
         self._splitted_pending_bytes = []
         self._splitted_bytes_length = 0
-        self._crlf_mark = None
         self.path = path
         self.origin_path = None
         self.method = method
         self.host = host
-        self.parsed_path = None
         self.queries = MagicDict()
         self.cookies = cookies or HTTPCookies()
         self.headers = headers or HTTPHeaders()
         self.body = body or HTTPBody()
+        self.body_expected = False
 
     def split_request(self):
         if len(self._pending_bytes) == 0:
@@ -385,7 +386,11 @@ class HTTPRequest:
                 for cookie_header in self.headers.get_list("cookie"):
                     self.cookies.load(cookie_header)
 
+            if self.method not in _SUPPORTED_METHODS:
+                raise HTTPError(400)  # Bad Request
+
             if self.method in _BODY_EXPECTED_METHODS:
+                self.body_expected = True
                 content_length = int(self.headers.get_first("content-length"))
                 if content_length > _MAX_BODY_LENGTH:
                     self.stage = _REQUEST_BROKEN
@@ -400,7 +405,6 @@ class HTTPRequest:
                 self._splitted_pending_bytes = []
 
                 self.stage = _REQUEST_WAITING_BODY
-                return False
 
         if self.stage == _REQUEST_WAITING_BODY:
             try:
@@ -419,6 +423,27 @@ class HTTPRequest:
 
     def make_http_v1_request(self):
         pass
+
+    def __str__(self):
+        return ("HTTPRequest("
+                "method=%(method)s, "
+                "path=%(path)s, "
+                "http_version=%(http_version)s, "
+                "host=%(host)s, "
+                "headers=%(headers)s, "
+                "cookies=%(cookies)s, "
+                "queries=%(queries)s, "
+                ")") % {
+                    "method": repr(self.method),
+                    "path": repr(self.path),
+                    "http_version": repr(self.http_version),
+                    "host": repr(self.host),
+                    "headers": repr(self.headers),
+                    "cookies": repr(self.cookies),
+                    "queries": repr(self.queries)
+                }
+
+    __repr__ = __str__
 
 
 class HTTPResponse:

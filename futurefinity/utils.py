@@ -29,9 +29,6 @@ This class is recommend to be imported without namespace.
 
 import futurefinity
 
-import io
-import os
-import cgi
 import time
 import random
 import struct
@@ -43,8 +40,6 @@ import datetime
 import functools
 import collections
 import email.utils
-import http.cookies
-import urllib.parse
 import collections.abc
 
 MAX_HEADER_LENGTH = 4096
@@ -62,25 +57,6 @@ _CRLF_BYTES_MARK = b"\r\n"
 
 _LF_MARK = "\n"
 _LF_BYTES_MARK = b"\n"
-
-
-class HTTPError(Exception):
-    """
-    Common HTTPError class, this Error should be raised when a non-200 status
-    need to be responded.
-
-    Any additional message can be added to the response by message attribute.
-
-    .. code-block:: python3
-
-      async def get(self, *args, **kwargs):
-          raise HTTPError(500, message='Please contact system administor.')
-
-    """
-    def __init__(self, status_code: int=200, message: str=None,
-                 *args, **kwargs):
-        self.status_code = status_code
-        self.message = message
 
 
 def ensure_bytes(var: typing.Any) -> bytes:
@@ -122,8 +98,8 @@ class MagicDict(collections.abc.MutableMapping):
         self._as_list = {}
         self._last_key = None
         if (len(args) == 1 and len(kwargs) == 0 and
-                isinstance(args[0], HTTPHeaders)):
-            for k, v in args[0].get_all():
+                hasattr(args[0], "items")):
+            for k, v in args[0].items():
                 self.add(k, v)
         else:
             self.update(*args, **kwargs)
@@ -254,63 +230,6 @@ class TolerantMagicDict(MagicDict):
     __repr__ = __str__
 
 
-class HTTPHeaders(MagicDict):
-    """
-    HTTPHeaders class, based on MagicDict. But Keys must be str and are
-    case-insensitive.
-    """
-    def add(self, name: str, value: str):
-        """
-        Add a header and change the name to lowercase.
-        """
-        lower_name = name.lower()
-        return MagicDict.add(self, lower_name, value)
-
-    def get_list(self, name: str, default: typing.Optional[str]=None):
-        """
-        Get all headers with the name in a list.
-        """
-        lower_name = name.lower()
-        return MagicDict.get_list(self, lower_name, default=default)
-
-    def get_first(self, name: str, default: typing.Optional[str]=None):
-        """
-        Get first header with the name.
-        """
-        lower_name = name.lower()
-        return MagicDict.get_first(self, lower_name, default=default)
-
-    def __setitem__(self, name, value):
-        lower_name = name.lower()
-        return MagicDict.__setitem__(self, lower_name, value)
-
-    def __getitem__(self, name):
-        lower_name = name.lower()
-        return MagicDict.__getitem__(self, lower_name)
-
-    def __delitem__(self, name):
-        lower_name = name.lower()
-        return MagicDict.__delitem__(self, lower_name)
-
-    def __repr__(self):
-        return "HTTPHeaders()"
-
-    def __str__(self):
-        content_list = []
-        for key, value in self.items():
-            content_list.append((key, value))
-
-        return "HTTPHeaders(%s)" % str(content_list)
-
-    def copy(self):
-        """
-        Create another instance of HTTPHeaders but contains the same content.
-        """
-        return HTTPHeaders(self)
-
-    __copy__ = copy
-
-
 def render_template(template_name: str):
     """
     Decorator to render template gracefully.
@@ -335,148 +254,6 @@ def render_template(template_name: str):
             return self.render_string(template_name, template_dict)
         return wrapper
     return decorator
-
-
-def decide_http_v1_mark(data: bytes) -> typing.Optional[bool]:
-    """
-    Decide the request is CRLF or LF.
-
-    Return None if the request is still not finished.
-    Return True if CRLF is used.
-    Return False if LF is used.
-
-    Raise an HTTPError(413) if Header is larger than _MAX_HEADER_LENGTH.
-    """
-    crlf_position = data.find(_CRLF_BYTES_MARK * 2)
-    lf_position = data.find(_LF_BYTES_MARK * 2)
-    if (crlf_position == -1 and lf_position == -1) and len(
-       data) < _MAX_HEADER_LENGTH:
-        return None  # Request Not Completed, wait.
-    elif crlf_position != -1 and lf_position != -1:
-        if lf_position > crlf_position:
-            return True
-        return False
-    elif crlf_position != -1:
-        return True
-    elif lf_position != -1:
-        return False
-    else:
-        raise HTTPError(413)  # 413 Request Entity Too Large
-
-
-def split_data(data: typing.Union[str, bytes], use_crlf_mark: bool=True,
-               mark_repeat: int=1, max_part: int=0) -> list:
-    """
-    Split data by CRLF, or LF.
-    Raise an Error if data is not splittable.
-
-    """
-    spliter = _CRLF_BYTES_MARK
-    if isinstance(data, bytes):
-        if not use_crlf_mark:
-            spliter = _LF_BYTES_MARK
-    elif isinstance(data, str):
-        if not use_crlf_mark:
-            spliter = _LF_MARK
-        else:
-            spliter = _CRLF_MARK
-    else:
-        raise ValueError("%s type is not Splittable." % (type(data)))
-
-    spliter = spliter * mark_repeat
-
-    return data.split(spliter, max_part - 1)
-
-
-def parse_http_v1_header(data: typing.Union[str, bytes],
-                         use_crlf_mark: bool=True) -> HTTPHeaders:
-    """
-    Parse HTTP/1.x HTTP Header and return an HTTPHeader instance.
-    """
-    if isinstance(data, bytes):
-        data = data.decode()
-    parsed_headers = HTTPHeaders()
-    for header in split_data(data, use_crlf_mark=use_crlf_mark):
-        (key, value) = header.split(":", 1)
-        parsed_headers.add(key.strip(), value.strip())
-
-    return parsed_headers
-
-
-def parse_http_v1_initial(data: bytes, use_crlf_mark: bool=True) -> tuple:
-    """
-    Parse HTTP/1.x Initial Part of Data.
-    """
-    initial = {
-        "http_version": 10,
-        "parsed_path": None,
-        "parsed_queries": MagicDict(),
-        "parsed_headers": None,
-        "parsed_cookies": None
-    }
-    raw_initial, raw_body = split_data(data, use_crlf_mark=use_crlf_mark,
-                                       mark_repeat=2, max_part=2)
-    raw_initial = raw_initial.decode()
-
-    basic_info, headers = split_data(raw_initial,
-                                     use_crlf_mark=use_crlf_mark,
-                                     max_part=2)
-
-    basic_info = basic_info.split(" ")
-
-    if len(basic_info) != 3:
-        raise HTTPError(400)  # 400 Bad Request
-
-    method, path, http_version = basic_info
-
-    if http_version.lower() == "http/1.1":
-        initial["http_version"] = 11
-    elif http_version.lower() == "http/1.0":
-        initial["http_version"] = 10
-    else:
-        raise HTTPError(400)  # 400 Bad Request
-
-    initial["parsed_headers"] = parse_http_v1_header(
-        headers, use_crlf_mark=use_crlf_mark)
-
-    initial["parsed_headers"][":path"] = path
-    initial["parsed_headers"][":method"] = method
-    if "host" in initial["parsed_headers"].keys():
-        initial["parsed_headers"][
-            ":authority"] = initial["parsed_headers"].pop("host")
-
-    if "cookie" in initial["parsed_headers"]:
-        initial["parsed_cookies"] = http.cookies.SimpleCookie(
-            initial["parsed_headers"].get("cookie"))
-    else:
-        initial["parsed_cookies"] = http.cookies.SimpleCookie()
-
-    parsed_url = urllib.parse.urlparse(
-        initial["parsed_headers"].get(":path"))
-
-    initial["parsed_path"] = parsed_url.path
-
-    for query in urllib.parse.parse_qsl(parsed_url.query):
-        initial["parsed_queries"].add(query[0], query[1])
-
-    if initial["parsed_headers"][":method"] in BODY_EXPECTED_METHODS:
-        if int(initial["parsed_headers"].get_first(
-         "content-length")) > MAX_BODY_LENGTH:
-            raise HTTPError(413)  # 413 Request Entity Too Large
-
-    return initial, raw_body
-
-
-def parse_http_v1_body(data: bytes, content_length: typing.Union[str, int],
-                       content_type: str, boundary=None) -> cgi.FieldStorage:
-    """
-    Parse HTTP/1.x Body.
-    """
-    return cgi.FieldStorage(fp=io.BytesIO(data), environ={
-        "REQUEST_METHOD": "POST",
-        "CONTENT_TYPE": content_type,
-        "CONTENT_LENGTH": ensure_str(content_length)
-    })
 
 
 def security_secret_generator(length: int) -> str:

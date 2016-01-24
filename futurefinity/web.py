@@ -45,7 +45,8 @@ Finally, listen to the port you want, and start asyncio event loop::
 """
 
 
-from futurefinity.utils import *
+from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
+from futurefinity.protocol import HTTPHeaders, HTTPCookies, HTTPError
 
 import futurefinity
 import futurefinity.server
@@ -68,7 +69,6 @@ import hashlib
 import mimetypes
 import traceback
 import http.client
-import http.cookies
 
 
 __all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
@@ -91,22 +91,17 @@ class RequestHandler:
     def __init__(self, *args, **kwargs):
         self.app = kwargs.get("app")
         self.server = kwargs.get("server")
-        self.method = kwargs.get("method")
-        self.path = kwargs.get("path")
-        self.http_version = kwargs.get("http_version")
+        self.request = kwargs.get("request")
         self.make_response = kwargs.get("make_response")
 
-        self.status_code = 200
+        self.path = self.request.path
 
-        self._request_queries = kwargs.get("queries")
-        self._request_headers = kwargs.get("request_headers")
-        self._request_cookies = kwargs.get("request_cookies")
-        self._request_body = kwargs.get("request_body")
+        self.status_code = 200
 
         self._session = None
 
         self._response_headers = HTTPHeaders()
-        self._response_cookies = http.cookies.SimpleCookie()
+        self._response_cookies = HTTPCookies()
 
         self._csrf_value = None
 
@@ -118,25 +113,25 @@ class RequestHandler:
         """
         Return first argument in the link with the name.
         """
-        return self._request_queries.get_list(name, [default])[0]
+        return self.request.queries.get_first(name, default)
 
     def get_body_arg(self, name: str, default: str=None) -> str:
         """
         Return first argument in the body with the name.
         """
-        return self._request_body.getfirst(name, default)
+        return self.request.body.get_first(name, default)
 
     def get_header(self, name: str, default: str=None) -> str:
         """
         Return First Header with the name.
         """
-        return self._request_headers.get_list(name, [default])[0]
+        return self.request.headers.get_first(name, default)
 
     def get_all_headers(self, name: str, default: str=None) -> list:
         """
         Return All Header with the name by list.
         """
-        return self._request_headers.get_list(name, [default])
+        return self.request.headers.get_list(name, [default])
 
     def set_header(self, name: str, value: str):
         """
@@ -169,7 +164,7 @@ class RequestHandler:
         """
         Return first Cookie in the request header(s) with the name.
         """
-        cookie = self._request_cookies.get(name, default)
+        cookie = self.request.cookies.get(name, None)
         if not cookie:
             return default
         return cookie.value
@@ -201,7 +196,7 @@ class RequestHandler:
         """
         Clear response cookie(s).
         """
-        self._response_cookies = http.cookies.SimpleCookie()
+        self._response_cookies = HTTPCookies()
 
     def get_secure_cookie(self, name: str, max_age_days: int=31) -> str:
         """
@@ -249,7 +244,7 @@ class RequestHandler:
 
         The implementation depends on the interface you use.
         """
-        if not self._session:
+        if self._session is None:
             self._session = await self.app.interfaces.get(
                 "session").get_session(self)
         return self._session.get(name, default)
@@ -262,7 +257,7 @@ class RequestHandler:
 
         The implementation depends on the interface you use.
         """
-        if not self._session:
+        if self._session is None:
             self._session = await self.app.interfaces.get(
                 "session").get_session(self)
         self._session[name] = value
@@ -438,7 +433,7 @@ class RequestHandler:
         if "date" not in self._response_headers:
             self.set_header("date", format_timestamp())
 
-        if self.http_version == 11:
+        if self.request.http_version == 11:
             if "keep-alive" not in self._response_headers:
                 self.set_header("keep-alive", "timeout=100, max=100")
 
@@ -460,7 +455,7 @@ class RequestHandler:
                                 "last-modified"]:
                 self.clear_header(header_name)
 
-        if self.http_version == 20:
+        if self.request.http_version == 20:
             return  # HTTP/2 will be implemented later.
         else:
             self.make_response(self.status_code, self._response_headers,
@@ -492,15 +487,8 @@ class RequestHandler:
                            "message": ensure_str(message)})
 
         if self.app.settings.get("debug", False) and exc_info:
-            print("""HTTPError: %(error_code)d,
-                     Path: %(path)s,
-                     Headers: %(headers)s,
-                     Cookies: %(cookies)s.""" % {
-                         "error_code": error_code,
-                         "path": self.path,
-                         "headers": str(self._request_headers),
-                         "cookies": str(self._request_cookies)
-                     }, file=sys.stderr)
+            print(self.request, file=sys.stderr)
+
             traceback.print_exception(*exc_info)
             for line in traceback.format_exception(*exc_info):
                 self.write(
@@ -575,14 +563,14 @@ class RequestHandler:
         response body, and finishes the request.
         """
         try:
-            if self.method not in SUPPORTED_METHODS:
-                raise HTTPError(400)
-            if self.method not in self.allow_methods:
+            if self.request.method not in self.allow_methods:
                 raise HTTPError(405)
             if self.app.settings.get(
-             "csrf_protect", False) and self.method in BODY_EXPECTED_METHODS:
+             "csrf_protect", False
+             ) and self.request.body_expected is True:
                 self.check_csrf_value()
-            body = await getattr(self, self.method.lower())(*args, **kwargs)
+            body = await getattr(self,
+                                 self.request.method.lower())(*args, **kwargs)
             if not self._written:
                 self.write(body)
             await self.app.interfaces.get(
