@@ -29,8 +29,6 @@ import futurefinity
 
 import asyncio
 
-import re
-import cgi
 import ssl
 import typing
 import traceback
@@ -195,16 +193,27 @@ class HTTPServer(asyncio.Protocol):
         """
         Make HTTP/1.x response to client.
 
-        This function should not be called directly, make_response() function
+        This function should not be called directly, respond_request() function
         will handle it to right http version.
         """
         use_keep_alive = (self.http_version == 11 and
-                          self.app.settings.get("allow_keep_alive", True))
+                          self.app.settings.get("allow_keep_alive", True) and
+                          response.status_code == 200)
 
-        response.headers.add("server", "FutureFinity/" + futurefinity.version)
+        response.headers["server"] = "FutureFinity/" + futurefinity.version
 
-        if use_keep_alive and "keep-alive" not in response.headers:
-            response.headers.add("keep-alive", "timeout=100, max=100")
+        if "connection" not in response.headers:
+            if use_keep_alive:
+                response.headers.add("connection", "Keep-Alive")
+            else:
+                response.headers.add("connection", "Close")
+        else:
+            use_keep_alive = headers.get_first("connection"
+                                               ).lower() == "keep-alive"
+        if use_keep_alive and "connection" not in response.headers:
+            response.headers.add("connection", "Keep-Alive")
+        else:
+            response.headers.add("connection", "Close")
 
         self.transport.write(response.make_http_v1_response())
 
