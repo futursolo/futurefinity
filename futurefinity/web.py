@@ -65,6 +65,7 @@ import types
 import routes
 import typing
 import hashlib
+import functools
 import mimetypes
 import traceback
 
@@ -100,8 +101,9 @@ class RequestHandler:
         self.request = request
         self.path_args = path_kwargs or []
         self.path_kwargs = path_kwargs or {}
-        self.response = response or HTTPResponse()
         self.respond_request = respond_request
+        self.response = response or HTTPResponse()
+        self.response.http_version = self.request.http_version
 
         self.transport = None
         if self.stream_handler:
@@ -605,7 +607,8 @@ class StaticFileHandler(RequestHandler):
 
         file_size = os.path.getsize(file_path)
         if file_size >= 1024 * 1024 * 50:
-            # StaticFileHandler Currently does not file bigger than 50MB.
+            # StaticFileHandler Currently does not support
+            # file bigger than 50MB.
             raise HTTPError(500, "Static File Size Too Large.")
 
         mime = mimetypes.guess_type(file_uri_path)[0]
@@ -637,8 +640,8 @@ class Application:
         Make a asyncio compatible server.
         """
         self.interfaces.initialize()
-        return (lambda: futurefinity.server.HTTPServer(app=self,
-                                                       loop=self._loop))
+        return functools.partial(
+            futurefinity.server.HTTPServer, app=self, loop=self._loop)
 
     def listen(self, port: int,
                address: str="127.0.0.1") -> types.CoroutineType:

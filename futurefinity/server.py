@@ -39,7 +39,7 @@ class HTTPServer(asyncio.Protocol):
     FutureFinity HTTPServer Class.
 
     Generally, this class should not be used directly in your application.
-    If you want customize server before pass it event loop, call::
+    If you want customize server before pass it to event loop, call::
 
       app.make_server()
 
@@ -66,6 +66,7 @@ class HTTPServer(asyncio.Protocol):
         self.http_version = 10
 
         self._request_handlers = {}
+        self._futures = {}
 
     def set_keep_alive_handler(self):
         """
@@ -105,9 +106,9 @@ class HTTPServer(asyncio.Protocol):
         context = self.transport.get_extra_info("sslcontext", None)
         if context and ssl.HAS_ALPN:  # NPN will not be supported
             alpn_protocol = context.selected_alpn_protocol()
-            if alpn_protocol in ["h2", "h2-14", "h2-15", "h2-16", "h2-17"]:
+            if alpn_protocol in ("h2", "h2-14", "h2-15", "h2-16", "h2-17"):
                 self.http_version = 20
-            else:
+            elif alpn_protocol is not None:
                 self.transport.close()
                 raise Exception("Unsupported Protocol")
 
@@ -186,8 +187,9 @@ class HTTPServer(asyncio.Protocol):
             self._request_finished = True
 
         if self._request_finished:
-            self._request_handlers[0] = asyncio.ensure_future(
+            coro_future = asyncio.ensure_future(
                 self.handle_request(self._request_parser))
+            self._futures[self._request_parser] = coro_future
 
     def request_header_finished(self, request: HTTPRequest):
         matched_obj = self.app.find_handler(request.path)
@@ -246,6 +248,9 @@ class HTTPServer(asyncio.Protocol):
 
         self.transport.write(response.make_http_v1_response())
 
+        if request in self._futures.keys():
+            del self._futures[request]
+
         if use_keep_alive:
             self.reset_server()
         else:
@@ -256,6 +261,7 @@ class HTTPServer(asyncio.Protocol):
         Called by Event Loop when the connection lost.
         """
         self.cancel_keep_alive_handler()
-        """
-        for (key, value) in self._request_handlers.items():
-            value.cancel()"""
+
+        for coro_future in self._futures.values():
+            if not coro_future.cancelled():
+                coro_future.cancel()

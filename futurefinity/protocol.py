@@ -32,17 +32,8 @@ import urllib.parse
 
 __all__ = ["status_code_text", "HTTPCookies"]
 
-_CR_MARK = "\r"
-_CR_BYTES_MARK = b"\r"
-
-_LF_MARK = "\n"
-_LF_BYTES_MARK = b"\n"
-
-_CRLF_MARK = _CR_MARK + _LF_MARK
-_CRLF_BYTES_MARK = _CR_BYTES_MARK + _LF_BYTES_MARK
-
-_CRLF_MARK_LIST = (_CR_MARK, _LF_MARK, _CRLF_MARK)
-_CRLF_BYTES_MARK_LIST = (_CR_BYTES_MARK, _LF_BYTES_MARK, _CRLF_BYTES_MARK)
+_CRLF_MARK = "\r\n"
+_CRLF_BYTES_MARK = b"\r\n"
 
 _MAX_HEADER_NUMBER = 4096
 
@@ -53,20 +44,6 @@ _MAX_BODY_LENGTH = 52428800  # 50M
 _SUPPORTED_METHODS = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
                       "OPTIONS", "CONNECT")
 _BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
-
-
-def _clear_crlf(content: typing.Union[str, bytes]) -> typing.Union[str, bytes]:
-    if isinstance(content, str):
-        if content[-1:] in _CRLF_MARK_LIST:
-            content = content[:-1]
-        if content[-1:] in _CRLF_MARK_LIST:
-            content = content[:-1]
-    else:
-        if content[-1:] in _CRLF_BYTES_MARK_LIST:
-            content = content[:-1]
-        if content[-1:] in _CRLF_BYTES_MARK_LIST:
-            content = content[:-1]
-    return content
 
 
 def _split_initial_lines(content: typing.Union[str, bytes],
@@ -157,25 +134,22 @@ class HTTPHeaders(TolerantMagicDict):
         if isinstance(data, list):
             splitted_data = data
         else:
-            splitted_data = ensure_bytes(data).splitlines(keepends=True)
+            splitted_data = ensure_bytes(data).splitlines()
 
         for i in range(0, _MAX_HEADER_NUMBER + 1):
             if len(splitted_data) == 0:
-                return False
+                break
 
             header = ensure_str(splitted_data.pop(0))
-
-            if header in _CRLF_MARK_LIST:
-                return True
-
-            header = _clear_crlf(header)
+            if not header:
+                continue
             (key, value) = header.split(":", 1)
             self.add(key.strip(), value.strip())
 
         else:
             raise HTTPError(413)  # Too many Headers.
 
-        return False
+        return True
 
     def accept_cookies_for_request(self, cookies: HTTPCookies):
         cookie_string = ""
@@ -308,20 +282,19 @@ class HTTPBody(TolerantMagicDict):
             else:
                 raise HTTPError(400)  # Cannot Find Boundary
             full_boundary = b"--" + boundary
-            body_content, body_crlf_mark = self._pending_bytes[
-                :self._content_length].split(full_boundary + b"--")
+            body_content = self._pending_bytes[:self._content_length].split(
+                full_boundary + b"--")[0]
 
-            full_boundary += body_crlf_mark
+            full_boundary += _CRLF_BYTES_MARK
             splitted_body_content = body_content.split(full_boundary)
-            body_crlf_mark_length = len(body_crlf_mark)
 
             for part in splitted_body_content:
                 if not part:
                     continue
 
-                initial, splitter, content = part.partition(body_crlf_mark * 2)
+                initial, content = part.split(_CRLF_BYTES_MARK * 2)
                 headers = HTTPHeaders()
-                if not headers.parse_http_v1_header(initial + splitter):
+                if not headers.parse_http_v1_header(initial):
                     raise HTTPError(400)  # 400 Bad Request.
 
                 disposition = headers.get_first("content-disposition")
@@ -341,7 +314,7 @@ class HTTPBody(TolerantMagicDict):
                 if disposition_list[0] != "form-data":
                     raise HTTPError(400)
                     # Mixed form-data will be supported later.
-                content = content[:-body_crlf_mark_length]  # Drop CRLF Mark
+                content = content[:-2]  # Drop CRLF Mark
 
                 if "filename" in disposition_dict.keys():
                     self.add(disposition_dict.get_first("name", ""), HTTPFile(
