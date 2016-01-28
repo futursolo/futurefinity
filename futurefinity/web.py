@@ -47,7 +47,7 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
 from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPCookies,
-                                   HTTPResponse, HTTPError)
+                                   HTTPResponse, HTTPRequest, HTTPError)
 
 import futurefinity
 import futurefinity.server
@@ -86,18 +86,30 @@ class RequestHandler:
     By default, FutureFinity allows GET, POST, and HEAD.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.app = kwargs.get("app")
-        self.server = kwargs.get("server")
-        self.request = kwargs.get("request")
-        self.response = kwargs.get("response", HTTPResponse())
-        self.respond_request = kwargs.get("respond_request")
+    stream_handler = False
+
+    def __init__(self, app,
+                 server: futurefinity.server.HTTPServer,
+                 request: HTTPRequest,
+                 respond_request: types.FunctionType,
+                 path_args: dict=None,
+                 path_kwargs: dict=None,
+                 response: HTTPResponse=None):
+        self.app = app
+        self.server = server
+        self.request = request
+        self.path_args = path_kwargs or []
+        self.path_kwargs = path_kwargs or {}
+        self.response = response or HTTPResponse()
+        self.respond_request = respond_request
+
+        self.transport = None
+        if self.stream_handler:
+            self.transport = self.server.transport
 
         self.path = self.request.path
 
         self._session = None
-
-        self._response_cookies = HTTPCookies()
 
         self._csrf_value = None
 
@@ -527,7 +539,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def handle(self, *args, **kwargs):
+    async def handle(self):
         """
         Method to handle the request.
 
@@ -538,12 +550,11 @@ class RequestHandler:
         try:
             if self.request.method not in self.allow_methods:
                 raise HTTPError(405)
-            if self.app.settings.get(
-             "csrf_protect", False
-             ) and self.request.body_expected is True:
+            if self.app.settings.get("csrf_protect", False
+                                     ) and self.request.body_expected is True:
                 self.check_csrf_value()
-            body = await getattr(self,
-                                 self.request.method.lower())(*args, **kwargs)
+            body = await getattr(self, self.request.method.lower())(
+                *self.path_args, **self.path_kwargs)
             if not self._written:
                 self.write(body)
             await self.app.interfaces.get(
@@ -553,6 +564,12 @@ class RequestHandler:
         except Exception as e:
             self.write_error(500, None, sys.exc_info())
         self.finish()
+
+    def data_received(self):
+        """
+        For StreamRequestHandler.
+        """
+        raise NotImplementedError
 
 
 class NotFoundHandler(RequestHandler):

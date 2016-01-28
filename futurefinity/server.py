@@ -58,6 +58,10 @@ class HTTPServer(asyncio.Protocol):
 
         self._request_parser = None
         self._request_finished = False
+        self._request_header_finished = False
+        self._request_body_finished = False
+
+        self.direct_receiver = None
 
         self.http_version = 10
 
@@ -90,6 +94,8 @@ class HTTPServer(asyncio.Protocol):
 
         self._request_parser = None
         self._request_finished = False
+        self._request_header_finished = False
+        self._request_body_finished = False
 
     def connection_made(self, transport: asyncio.BaseTransport):
         """
@@ -130,7 +136,7 @@ class HTTPServer(asyncio.Protocol):
 
         response.headers["content-type"] = "text/plain"
 
-        response.body = ensure_bytes(status_code) + b": "
+        response.body = ensure_bytes(response.status_code) + b": "
         response.body += ensure_bytes(status_code_text[response.status_code])
 
         self.transport.write(response.make_http_v1_response())
@@ -152,32 +158,55 @@ class HTTPServer(asyncio.Protocol):
             self.handle_request_error(e)
 
     def http_v1_data_received(self, data: bytes):
-        if self._request_finished:
+        if self._request_header_finished is False:
+            if self._request_parser is None:
+                self._request_parser = HTTPRequest()
+
+            parse_result = self._request_parser.parse_http_v1_request(data)
+            if parse_result[0] is False:
+                return
+            self._request_header_finished = True
+            if self._request_parser.body_expected is False:
+                self._request_finished = True
+
+            self.http_version = self._request_parser.http_version
+            self.request_header_finished(request=self._request_parser)
+            data = parse_result[1]
+
+        if self.direct_receiver is not None:
+            self.direct_receiver(data)
             return
 
-        if self._request_parser is None:
-            self._request_parser = HTTPRequest()
+        if not (self._request_finished or self._request_body_finished):
+            parse_result = self._request_parser.body.parse_http_v1_body(data)
+            if parse_result is False:
+                return
 
-        self._request_finished = self._request_parser.parse_http_v1_request(
-            data)
-        self.http_version = self._request_parser.http_version
+            self._request_body_finished = True
+            self._request_finished = True
 
         if self._request_finished:
             self._request_handlers[0] = asyncio.ensure_future(
                 self.handle_request(self._request_parser))
 
-    async def handle_request(self, request: HTTPRequest):
-        """
-        Handle an HTTP Request to Right RequestHandler.
-        """
+    def request_header_finished(self, request: HTTPRequest):
         matched_obj = self.app.find_handler(request.path)
         request_handler = matched_obj.pop("__handler__")(
             app=self.app,
             server=self,
             request=request,
-            respond_request=self.respond_request
+            respond_request=self.respond_request,
+            path_kwargs=matched_obj
         )
-        await request_handler.handle(**matched_obj)
+        self._request_handlers[request] = request_handler
+        if request_handler.stream_handler:
+            self.direct_receiver = request_handler.data_received
+
+    async def handle_request(self, request: HTTPRequest):
+        """
+        Handle an HTTP Request to Right RequestHandler.
+        """
+        await self._request_handlers[request].handle()
 
     def respond_request(self, request: HTTPRequest, response: HTTPResponse):
         """
@@ -227,5 +256,6 @@ class HTTPServer(asyncio.Protocol):
         Called by Event Loop when the connection lost.
         """
         self.cancel_keep_alive_handler()
+        """
         for (key, value) in self._request_handlers.items():
-            value.cancel()
+            value.cancel()"""

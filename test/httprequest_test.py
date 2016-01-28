@@ -29,13 +29,18 @@ class HTTPRequestTestCollector(unittest.TestCase):
 
     def test_httprequest_parse_get(self):
         request = futurefinity.protocol.HTTPRequest()
-        self.assertFalse(request.parse_http_v1_request(b"GET / HTTP/1.1\r\n"))
-        self.assertFalse(request.parse_http_v1_request(b"Host: localhost\r\n"))
-        self.assertFalse(request.parse_http_v1_request(b"Custom: CHeader\r\n"))
-        self.assertFalse(request.parse_http_v1_request(b"Custom: CHeader\r\n"))
         self.assertFalse(request.parse_http_v1_request(
-            b"Cookie: a=b;c=d;e=f;\r\n"))
-        self.assertTrue(request.parse_http_v1_request(b"\r\n"))
+            b"GET / HTTP/1.1\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Host: localhost\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Custom: CHeader\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Custom: CHeader\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Cookie: a=b;c=d;e=f;\r\n")
+                [0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n")[0])
 
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.path, "/")
@@ -49,8 +54,9 @@ class HTTPRequestTestCollector(unittest.TestCase):
 
     def test_httprequest_parse_get_noheader(self):
         request = futurefinity.protocol.HTTPRequest()
-        self.assertFalse(request.parse_http_v1_request(b"GET /data HTTP/1.1"))
-        self.assertTrue(request.parse_http_v1_request(b"\r\n\r\n"))
+        self.assertFalse(request.parse_http_v1_request(
+            b"GET /data HTTP/1.1")[0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n\r\n")[0])
 
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.path, "/data")
@@ -59,13 +65,15 @@ class HTTPRequestTestCollector(unittest.TestCase):
     def test_httprequest_parse_post_encoded(self):
         request = futurefinity.protocol.HTTPRequest()
         body = b"a=b&c=d&anyway=itisok"
-        self.assertFalse(request.parse_http_v1_request(b"POST / HTTP/1.1\r\n"))
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Type: application/x-www-form-urlencoded\r\n"))
+            b"POST / HTTP/1.1\r\n")[0])
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Length: %d\r\n" % len(body)))
-        self.assertFalse(request.parse_http_v1_request(b"\r\n"))
-        self.assertTrue(request.parse_http_v1_request(body))
+            b"Content-Type: application/x-www-form-urlencoded\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Content-Length: %d\r\n" % len(body))[0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n")[0])
+
+        self.assertTrue(request.body.parse_http_v1_body(body))
 
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.path, "/")
@@ -95,13 +103,15 @@ filename=\"test.txt\"\r\n"
         body += file_content + b"\r\n"
         body += b"-------as7B98bFk--\r\n"
 
-        self.assertFalse(request.parse_http_v1_request(b"POST / HTTP/1.1\r\n"))
+        self.assertFalse(
+            request.parse_http_v1_request(b"POST / HTTP/1.1\r\n")[0])
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Type: multipart/form-data; boundary=-----as7B98bFk\r\n"))
+            b"Content-Type: multipart/form-data; boundary=-----as7B98bFk\r\n"
+        )[0])
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Length: %d\r\n" % len(body)))
-        self.assertFalse(request.parse_http_v1_request(b"\r\n"))
-        self.assertTrue(request.parse_http_v1_request(body))
+            b"Content-Length: %d\r\n" % len(body))[0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n")[0])
+        self.assertTrue(request.body.parse_http_v1_body(body))
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.path, "/")
         self.assertEqual(request.http_version, 11)

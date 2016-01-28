@@ -50,18 +50,6 @@ _MAX_HEADER_LENGTH = 4096
 
 _MAX_BODY_LENGTH = 52428800  # 50M
 
-_REQUEST_EMPTY = 0
-_REQUEST_WAITING_INITIAL = 1
-_REQUEST_WAITING_HEADER = 2
-_REQUEST_WAITING_BODY = 3
-_REQUEST_FINISHED = 4
-_REQUEST_BROKEN = -1
-_REQUEST_DESTROYED = -2
-
-_RESPONSE_EMPTY = 0
-_RESPONSE_FINISHED = 1
-_RESPONSE_DESTROYED = -1
-
 _SUPPORTED_METHODS = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
                       "OPTIONS", "CONNECT")
 _BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
@@ -427,10 +415,8 @@ class HTTPRequest:
                  headers: typing.Optional[HTTPHeaders]=None,
                  cookies: typing.Optional[HTTPCookies]=None,
                  body: typing.Optional[HTTPBody]=None):
-        self.stage = _REQUEST_EMPTY
         self.http_version = http_version or 10
         self._pending_bytes = b""
-        self._splitted_pending_bytes = []
         self._splitted_bytes_length = 0
         self.path = path
         self.origin_path = None
@@ -442,122 +428,69 @@ class HTTPRequest:
         self.body = body or HTTPBody()
         self.body_expected = False
 
-    def split_request(self):
-        if len(self._pending_bytes) == 0:
-            return
-        if self._splitted_bytes_length > _MAX_HEADER_LENGTH + 1:
-            return
-
-        self._splitted_bytes_length += len(self._pending_bytes)
-        self._splitted_pending_bytes.extend(
-            self._pending_bytes.splitlines(keepends=True))
-        if self._splitted_pending_bytes[-1][-1:] not in _CRLF_BYTES_MARK_LIST:
-            self._pending_bytes = self._splitted_pending_bytes.pop(-1)
-        else:
-            self._pending_bytes = b""
-
-        self._splitted_bytes_length -= len(self._pending_bytes)
-
-    def parse_http_v1_request(self, request_bytes: bytes) -> bool:
-        if self.stage in [_REQUEST_BROKEN, _REQUEST_DESTROYED,
-                          _REQUEST_FINISHED]:
-            raise HTTPError(500)
-            # Should Not Send Content to Parse Request on this point.
+    def parse_http_v1_request(self, request_bytes: bytes) -> (bool, bytes):
         self._pending_bytes += request_bytes
 
-        if self.stage == _REQUEST_EMPTY:
-            self.stage = _REQUEST_WAITING_INITIAL
+        if self._pending_bytes.find(_CRLF_BYTES_MARK * 2) == -1:
+            if len(self._pending_bytes) > _MAX_HEADER_LENGTH:
+                raise HTTPError(413)  # 413 Request Entity Too Large
+            return (False, b"")  # Request Not Completed, wait.
 
-        if self.stage == _REQUEST_WAITING_INITIAL:
-            self.split_request()
-            if len(self._splitted_pending_bytes) == 0:
-                if self._splitted_bytes_length > _MAX_HEADER_LENGTH:
-                    self.stage = _REQUEST_BROKEN
-                    raise HTTPError(413)  # 413 Request Entity Too Large
-                return False  # Request Not Completed, wait.
+        request_initial, request_body = _split_initial_lines(
+            self._pending_bytes, reply_times=2, max_split=1)
 
-            basic_info = ensure_str(_clear_crlf(
-                self._splitted_pending_bytes.pop(0))).split(" ")
+        origin_headers = _split_initial_lines(ensure_str(request_initial))
 
-            if len(basic_info) != 3:
-                self.stage = _REQUEST_BROKEN
-                raise HTTPError(400)  # 400 Bad Request
+        basic_info = ensure_str(origin_headers.pop(0)).split(" ")
 
-            self.method, self.origin_path, http_version = basic_info
+        if len(basic_info) != 3:
+            raise HTTPError(400)  # 400 Bad Request
 
-            if http_version.lower() == "http/1.1":
-                self.http_version = 11
-            elif http_version.lower() == "http/1.0":
-                self.http_version = 10
-            else:
-                self.stage = _REQUEST_BROKEN
-                raise HTTPError(400)  # 400 Bad Request
+        self.method, self.origin_path, http_version = basic_info
 
-            parsed_url = urllib.parse.urlparse(self.origin_path)
-            self.path = parsed_url.path
+        if http_version.lower() == "http/1.1":
+            self.http_version = 11
+        elif http_version.lower() == "http/1.0":
+            self.http_version = 10
+        else:
+            raise HTTPError(400)  # 400 Bad Request
 
-            for query_name, query_value in urllib.parse.parse_qsl(
-             parsed_url.query):
-                self.queries.add(query_name, query_value)
+        parsed_url = urllib.parse.urlparse(self.origin_path)
+        self.path = parsed_url.path
 
-            self.stage = _REQUEST_WAITING_HEADER
+        for query_name, query_value in urllib.parse.parse_qsl(
+         parsed_url.query):
+            self.queries.add(query_name, query_value)
 
-        if self.stage == _REQUEST_WAITING_HEADER:
-            self.split_request()
-            try:
-                if self.headers.parse_http_v1_header(
-                 self._splitted_pending_bytes) is False:
-                    if self._splitted_bytes_length > _MAX_HEADER_LENGTH:
-                        self.stage = _REQUEST_BROKEN
-                        raise HTTPError(413)  # 413 Request Entity Too Large
-                    return False  # Request Not Completed, wait.
-            except HTTPError as e:
-                raise e
-            except:
-                self.stage = _REQUEST_BROKEN
-                raise HTTPError(400)  # 413 Bad Request
+        try:
+            self.headers.parse_http_v1_header(origin_headers)
+        except HTTPError as e:
+            raise e
+        except:
+            raise HTTPError(400)  # 400 Bad Request
 
-            if "host" in self.headers.keys():
-                self.host = self.headers.pop("host")
+        if "host" in self.headers.keys():
+            self.host = self.headers.pop("host")
 
-            if "cookie" in self.headers:
-                for cookie_header in self.headers.get_list("cookie"):
-                    self.cookies.load(cookie_header)
+        if "cookie" in self.headers:
+            for cookie_header in self.headers.get_list("cookie"):
+                self.cookies.load(cookie_header)
 
-            if self.method not in _SUPPORTED_METHODS:
-                raise HTTPError(400)  # Bad Request
+        if self.method not in _SUPPORTED_METHODS:
+            raise HTTPError(400)  # Bad Request
 
-            if self.method in _BODY_EXPECTED_METHODS:
-                self.body_expected = True
-                content_length = int(self.headers.get_first("content-length"))
-                if content_length > _MAX_BODY_LENGTH:
-                    self.stage = _REQUEST_BROKEN
-                    raise HTTPError(413)  # 413 Request Entity Too Large
+        if self.method in _BODY_EXPECTED_METHODS:
+            self.body_expected = True
+            content_length = int(self.headers.get_first("content-length"))
+            if content_length > _MAX_BODY_LENGTH:
+                raise HTTPError(413)  # 413 Request Entity Too Large
 
-                self.body.set_content_type(
-                    self.headers.get_first("content-type"))
-                self.body.set_content_length(content_length)
-
-                self._pending_bytes = b"".join(
-                    self._splitted_pending_bytes) + self._pending_bytes
-                self._splitted_pending_bytes = []
-
-                self.stage = _REQUEST_WAITING_BODY
-
-        if self.stage == _REQUEST_WAITING_BODY:
-            try:
-                if self.body.parse_http_v1_body(self._pending_bytes) is False:
-                    self._pending_bytes = b""
-                    return False
-            except HTTPError as e:
-                raise e
-            except:
-                raise HTTPError(400)  # Unknown Error
+            self.body.set_content_type(
+                self.headers.get_first("content-type"))
+            self.body.set_content_length(content_length)
 
         self._pending_bytes = b""
-        self._splitted_pending_bytes = []
-        self.stage = _REQUEST_FINISHED
-        return True
+        return (True, request_body)
 
     def make_http_v1_request(self):
         request = b""
@@ -645,7 +578,6 @@ class HTTPResponse:
                  headers: typing.Optional[HTTPHeaders]=None,
                  cookies: typing.Optional[HTTPCookies]=None,
                  body: typing.Optional[bytes]=None):
-        self.stage = _REQUEST_EMPTY
         self.http_version = http_version or 10
         self.status_code = status_code or 200
 
@@ -692,7 +624,7 @@ class HTTPResponse:
     def parse_http_v1_response(self, response_bytes) -> (bool, bytes):
         self._pending_bytes += response_bytes
 
-        if self._pending_bytes.find(_CRLF_BYTES_MARK) == -1:
+        if self._pending_bytes.find(_CRLF_BYTES_MARK * 2) == -1:
             if len(self._pending_bytes) > _MAX_HEADER_LENGTH:
                 raise HTTPError(500)  # Server Response Header Too Large.
 
@@ -711,7 +643,6 @@ class HTTPResponse:
         elif http_version.lower() == "http/1.0":
             self.http_version = 10
         else:
-            self.stage = _REQUEST_BROKEN
             raise HTTPError(500)  # 500 Initial Server Error
 
         try:
