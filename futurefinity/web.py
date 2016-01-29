@@ -70,9 +70,6 @@ import mimetypes
 import traceback
 
 
-__all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
-
-
 class RequestHandler:
     """
     Basic Request Handler.

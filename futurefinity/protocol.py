@@ -134,13 +134,13 @@ class HTTPHeaders(TolerantMagicDict):
         if isinstance(data, list):
             splitted_data = data
         else:
-            splitted_data = ensure_bytes(data).splitlines()
+            splitted_data = _split_initial_lines(ensure_str(data))
 
         for i in range(0, _MAX_HEADER_NUMBER + 1):
             if len(splitted_data) == 0:
                 break
 
-            header = ensure_str(splitted_data.pop(0))
+            header = splitted_data.pop(0)
             if not header:
                 continue
             (key, value) = header.split(":", 1)
@@ -343,11 +343,11 @@ class HTTPBody(TolerantMagicDict):
         if self._content_type == "application/x-www-form-urlencoded":
             body += ensure_bytes(urllib.parse.urlencode(self))
 
-        if self._content_type.lower().startswith("multipart/form-data"):
+        elif self._content_type.lower().startswith("multipart/form-data"):
             boundary = "----------FutureFinityFormBoundary" + str(
                 uuid.uuid4()).upper()
             self.set_content_type(
-                "multipart/formdata; boundary=" + boundary)
+                "multipart/form-data; boundary=" + boundary)
 
             full_boundary = b"--" + boundary.encode()
 
