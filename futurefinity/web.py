@@ -46,8 +46,8 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 
 from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
-from futurefinity.protocol import (HTTPHeaders, HTTPCookies, HTTPResponse,
-                                   HTTPError)
+from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPCookies,
+                                   HTTPResponse, HTTPRequest, HTTPError)
 
 import futurefinity
 import futurefinity.server
@@ -58,21 +58,16 @@ import asyncio
 import os
 import re
 import sys
-import hmac
 import html
 import time
 import uuid
 import types
-import base64
 import routes
 import typing
 import hashlib
+import functools
 import mimetypes
 import traceback
-import http.client
-
-
-__all__ = ["ensure_bytes", "ensure_str", "render_template", "WebError"]
 
 
 class RequestHandler:
@@ -89,18 +84,31 @@ class RequestHandler:
     By default, FutureFinity allows GET, POST, and HEAD.
     """
 
-    def __init__(self, *args, **kwargs):
-        self.app = kwargs.get("app")
-        self.server = kwargs.get("server")
-        self.request = kwargs.get("request")
-        self.response = kwargs.get("response", HTTPResponse())
-        self.respond_request = kwargs.get("respond_request")
+    stream_handler = False
+
+    def __init__(self, app,
+                 server: futurefinity.server.HTTPServer,
+                 request: HTTPRequest,
+                 respond_request: types.FunctionType,
+                 path_args: dict=None,
+                 path_kwargs: dict=None,
+                 response: HTTPResponse=None):
+        self.app = app
+        self.server = server
+        self.request = request
+        self.path_args = path_kwargs or []
+        self.path_kwargs = path_kwargs or {}
+        self.respond_request = respond_request
+        self.response = response or HTTPResponse()
+        self.response.http_version = self.request.http_version
+
+        self.transport = None
+        if self.stream_handler:
+            self.transport = self.server.transport
 
         self.path = self.request.path
 
         self._session = None
-
-        self._response_cookies = HTTPCookies()
 
         self._csrf_value = None
 
@@ -364,7 +372,7 @@ class RequestHandler:
                    "</body>"
                    "</html>" % {
                        "status_code": status,
-                       "status_message": http.client.responses[status],
+                       "status_message": status_code_text[status],
                        "url": ensure_str(url)
                     })
         self.finish()
@@ -454,7 +462,7 @@ class RequestHandler:
                    "<body>"
                    "    <div>%(error_code)d: %(status_code_detail)s</div>" % {
                         "error_code": error_code,
-                        "status_code_detail": http.client.responses[error_code]
+                        "status_code_detail": status_code_text[error_code]
                    },
                    clear_text=True)
         if message:
@@ -530,7 +538,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def handle(self, *args, **kwargs):
+    async def handle(self):
         """
         Method to handle the request.
 
@@ -541,12 +549,11 @@ class RequestHandler:
         try:
             if self.request.method not in self.allow_methods:
                 raise HTTPError(405)
-            if self.app.settings.get(
-             "csrf_protect", False
-             ) and self.request.body_expected is True:
+            if self.app.settings.get("csrf_protect", False
+                                     ) and self.request.body_expected is True:
                 self.check_csrf_value()
-            body = await getattr(self,
-                                 self.request.method.lower())(*args, **kwargs)
+            body = await getattr(self, self.request.method.lower())(
+                *self.path_args, **self.path_kwargs)
             if not self._written:
                 self.write(body)
             await self.app.interfaces.get(
@@ -556,6 +563,12 @@ class RequestHandler:
         except Exception as e:
             self.write_error(500, None, sys.exc_info())
         self.finish()
+
+    def data_received(self):
+        """
+        For StreamRequestHandler.
+        """
+        raise NotImplementedError
 
 
 class NotFoundHandler(RequestHandler):
@@ -591,7 +604,8 @@ class StaticFileHandler(RequestHandler):
 
         file_size = os.path.getsize(file_path)
         if file_size >= 1024 * 1024 * 50:
-            # StaticFileHandler Currently does not file bigger than 50MB.
+            # StaticFileHandler Currently does not support
+            # file bigger than 50MB.
             raise HTTPError(500, "Static File Size Too Large.")
 
         mime = mimetypes.guess_type(file_uri_path)[0]
@@ -623,8 +637,8 @@ class Application:
         Make a asyncio compatible server.
         """
         self.interfaces.initialize()
-        return (lambda: futurefinity.server.HTTPServer(app=self,
-                                                       loop=self._loop))
+        return functools.partial(
+            futurefinity.server.HTTPServer, app=self, loop=self._loop)
 
     def listen(self, port: int,
                address: str="127.0.0.1") -> types.CoroutineType:

@@ -21,21 +21,28 @@ import futurefinity.protocol
 
 import os
 import nose2
+import base64
 import unittest
 import functools
+import email.parser
 
 
 class HTTPRequestTestCollector(unittest.TestCase):
 
     def test_httprequest_parse_get(self):
         request = futurefinity.protocol.HTTPRequest()
-        self.assertFalse(request.parse_http_v1_request(b"GET / HTTP/1.1\r\n"))
-        self.assertFalse(request.parse_http_v1_request(b"Host: localhost\r\n"))
-        self.assertFalse(request.parse_http_v1_request(b"Custom: CHeader\r\n"))
-        self.assertFalse(request.parse_http_v1_request(b"Custom: CHeader\r\n"))
         self.assertFalse(request.parse_http_v1_request(
-            b"Cookie: a=b;c=d;e=f;\r\n"))
-        self.assertTrue(request.parse_http_v1_request(b"\r\n"))
+            b"GET / HTTP/1.1\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Host: localhost\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Custom: CHeader\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Custom: CHeader\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Cookie: a=b;c=d;e=f;\r\n")
+                [0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n")[0])
 
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.path, "/")
@@ -49,8 +56,9 @@ class HTTPRequestTestCollector(unittest.TestCase):
 
     def test_httprequest_parse_get_noheader(self):
         request = futurefinity.protocol.HTTPRequest()
-        self.assertFalse(request.parse_http_v1_request(b"GET /data HTTP/1.1"))
-        self.assertTrue(request.parse_http_v1_request(b"\r\n\r\n"))
+        self.assertFalse(request.parse_http_v1_request(
+            b"GET /data HTTP/1.1")[0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n\r\n")[0])
 
         self.assertEqual(request.method, "GET")
         self.assertEqual(request.path, "/data")
@@ -59,13 +67,15 @@ class HTTPRequestTestCollector(unittest.TestCase):
     def test_httprequest_parse_post_encoded(self):
         request = futurefinity.protocol.HTTPRequest()
         body = b"a=b&c=d&anyway=itisok"
-        self.assertFalse(request.parse_http_v1_request(b"POST / HTTP/1.1\r\n"))
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Type: application/x-www-form-urlencoded\r\n"))
+            b"POST / HTTP/1.1\r\n")[0])
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Length: %d\r\n" % len(body)))
-        self.assertFalse(request.parse_http_v1_request(b"\r\n"))
-        self.assertTrue(request.parse_http_v1_request(body))
+            b"Content-Type: application/x-www-form-urlencoded\r\n")[0])
+        self.assertFalse(request.parse_http_v1_request(
+            b"Content-Length: %d\r\n" % len(body))[0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n")[0])
+
+        self.assertTrue(request.body.parse_http_v1_body(body))
 
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.path, "/")
@@ -95,13 +105,15 @@ filename=\"test.txt\"\r\n"
         body += file_content + b"\r\n"
         body += b"-------as7B98bFk--\r\n"
 
-        self.assertFalse(request.parse_http_v1_request(b"POST / HTTP/1.1\r\n"))
+        self.assertFalse(
+            request.parse_http_v1_request(b"POST / HTTP/1.1\r\n")[0])
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Type: multipart/form-data; boundary=-----as7B98bFk\r\n"))
+            b"Content-Type: multipart/form-data; boundary=-----as7B98bFk\r\n"
+        )[0])
         self.assertFalse(request.parse_http_v1_request(
-            b"Content-Length: %d\r\n" % len(body)))
-        self.assertFalse(request.parse_http_v1_request(b"\r\n"))
-        self.assertTrue(request.parse_http_v1_request(body))
+            b"Content-Length: %d\r\n" % len(body))[0])
+        self.assertTrue(request.parse_http_v1_request(b"\r\n")[0])
+        self.assertTrue(request.body.parse_http_v1_body(body))
         self.assertEqual(request.method, "POST")
         self.assertEqual(request.path, "/")
         self.assertEqual(request.http_version, 11)
@@ -120,3 +132,129 @@ filename=\"test.txt\"\r\n"
                          "test.txt")
         self.assertEqual(request.body.get_first("file-field").encoding,
                          "binary")
+
+    def test_httprequest_make_get_request(self):
+        request = futurefinity.protocol.HTTPRequest()
+        request.method = "GET"
+        request.path = "/"
+        request.headers.add("Custom", "CHeader")
+        request.queries.add("asdf", "fdsa")
+        request.cookies["custom"] = "cookie-value"
+
+        request_bytes = request.make_http_v1_request()
+
+        request_initial, request_rest = request_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(request_initial, b"GET /?asdf=fdsa HTTP/1.1")
+
+        message = email.parser.BytesParser().parsebytes(request_rest)
+
+        self.assertEqual(message["Custom"], "CHeader")
+        self.assertEqual(message["Cookie"], "custom=cookie-value; ")
+        self.assertFalse(message.is_multipart())
+
+    def test_httprequest_make_post_request(self):
+        request = futurefinity.protocol.HTTPRequest()
+        request.method = "POST"
+        request.path = "/"
+
+        request.body.set_content_type("application/x-www-form-urlencoded")
+        request.body.add("bodyfield", "hello")
+
+        request_bytes = request.make_http_v1_request()
+
+        request_initial, request_rest = request_bytes.split(b"\r\n", 1)
+
+        request_header, request_body = request_rest.split(b"\r\n\r\n", 1)
+
+        self.assertEqual(request_initial, b"POST / HTTP/1.1")
+
+        request_header += b"\r\n"
+        message = email.parser.BytesParser().parsebytes(request_header)
+
+        self.assertFalse(message.is_multipart())
+        self.assertEqual(message["Content-Type"],
+                         "application/x-www-form-urlencoded")
+
+        self.assertEqual(request_body, b"bodyfield=hello")
+
+
+
+    def test_httprequest_make_get_request(self):
+        request = futurefinity.protocol.HTTPRequest()
+        request.method = "GET"
+        request.path = "/"
+        request.headers.add("Custom", "CHeader")
+        request.queries.add("asdf", "fdsa")
+        request.cookies["custom"] = "cookie-value"
+
+        request_bytes = request.make_http_v1_request()
+
+        request_initial, request_rest = request_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(request_initial, b"GET /?asdf=fdsa HTTP/1.1")
+
+        message = email.parser.BytesParser().parsebytes(request_rest)
+
+        self.assertEqual(message["Custom"], "CHeader")
+        self.assertEqual(message["Cookie"], "custom=cookie-value; ")
+        self.assertFalse(message.is_multipart())
+
+    def test_httprequest_make_post_urlencoded_request(self):
+        request = futurefinity.protocol.HTTPRequest()
+        request.method = "POST"
+        request.path = "/"
+
+        request.body.set_content_type("application/x-www-form-urlencoded")
+        request.body.add("bodyfield", "hello")
+
+        request_bytes = request.make_http_v1_request()
+
+        request_initial, request_rest = request_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(request_initial, b"POST / HTTP/1.1")
+
+        message = email.parser.BytesParser().parsebytes(request_rest)
+
+        self.assertFalse(message.is_multipart())
+        self.assertEqual(message["Content-Type"],
+                         "application/x-www-form-urlencoded")
+
+        self.assertEqual(message.get_payload(), "bodyfield=hello")
+
+    def test_httprequest_make_post_multipart_request(self):
+        request = futurefinity.protocol.HTTPRequest()
+        request.method = "POST"
+        request.path = "/"
+
+        file_content = ensure_bytes(base64.b64encode(os.urandom(32)))
+
+        body_file = futurefinity.protocol.HTTPFile(fieldname="filefield",
+                                                   filename="test.txt",
+                                                   content=file_content)
+
+        request.body.set_content_type("multipart/form-data")
+        request.body.add("textfield", "hello")
+        request.body.add("filefield", body_file)
+
+        request_bytes = request.make_http_v1_request()
+
+        request_initial, request_rest = request_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(request_initial, b"POST / HTTP/1.1")
+
+        message = email.parser.BytesParser().parsebytes(request_rest)
+
+        self.assertTrue(message.is_multipart())
+        self.assertTrue(
+            message["Content-Type"].startswith("multipart/form-data"))
+
+        body_payload = message.get_payload()
+        for field in body_payload:
+            if field.get_filename() is None:
+                self.assertEqual(ensure_str(field.get_payload()), "hello")
+            else:
+                self.assertEqual(field.get_filename(), "test.txt")
+
+                self.assertEqual(ensure_bytes(field.get_payload()),
+                                 file_content)

@@ -3,6 +3,7 @@ dev
 - Abstract HTTP Protocol by HTTPRequest and HTTPResponse
 - Fixed Cookie Default Value Bug
 - Fixed SessionInterface Bug
+- Introduce Streamed RequestHandler
 
 
 v0.1.1
