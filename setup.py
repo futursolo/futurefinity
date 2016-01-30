@@ -32,11 +32,11 @@ tests_require = ["requests", "nose2", "jinja2", "cryptography"]
 
 if __name__ == "__main__":
     setup(
-        name="FutureFinity",
+        name="futurefinity",
         version=futurefinity.version,
         author="Futur Solo",
         author_email="futursolo@gmail.com",
-        url="https://github.com/futursolo/FutureFinity",
+        url="https://github.com/futursolo/futurefinity",
         license="Apache License 2.0",
         description="FutureFinity is an asynchronous Python web framework "
                     "designed for asyncio and native coroutines.",
