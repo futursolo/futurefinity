@@ -625,10 +625,10 @@ class Application:
 
         if "template_path" in self.settings.keys():
             self.template_loader = TemplateLoader(
-                self.settings["template_path"])
+                self.settings["template_path"], (not self.settings["debug"]))
 
         if "security_secret" in self.settings.keys():
-            if self.settings.get("aes_security", False):
+            if self.settings.get("aes_security", True):
                 self.security_object = AESGCMSecurityObject(
                     self.settings["security_secret"])
             else:

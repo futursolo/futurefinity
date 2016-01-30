@@ -158,7 +158,7 @@ class AESGCMSecurityObject:
             "l", int(time.time())) + ensure_bytes(origin_text)
 
         encryptor = AESCipher(
-            aes_algorithms.AES(ensure_bytes(self.security_secret)),
+            aes_algorithms.AES(ensure_bytes(self.__security_secret)),
             aes_modes.GCM(iv),
             backend=aes_backend()
         ).encryptor()
