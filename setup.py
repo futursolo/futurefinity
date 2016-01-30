@@ -26,7 +26,7 @@ if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
     raise RuntimeError("FutureFinity Requires Python 3.5.0 or higher.")
 
 
-install_requires = ["routes"]
+install_requires = []
 
 tests_require = ["requests", "nose2", "jinja2", "cryptography"]
 

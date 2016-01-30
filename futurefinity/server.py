@@ -193,12 +193,13 @@ class HTTPServer(asyncio.Protocol):
 
     def request_header_finished(self, request: HTTPRequest):
         matched_obj = self.app.find_handler(request.path)
-        request_handler = matched_obj.pop("__handler__")(
+        request_handler = matched_obj.handler(
             app=self.app,
             server=self,
             request=request,
             respond_request=self.respond_request,
-            path_kwargs=matched_obj
+            path_args=matched_obj.path_args,
+            path_kwargs=matched_obj.path_kwargs
         )
         self._request_handlers[request] = request_handler
         if request_handler.stream_handler:

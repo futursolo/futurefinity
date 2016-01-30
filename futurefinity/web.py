@@ -47,6 +47,7 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 from futurefinity.server import HTTPServer
 from futurefinity.template import TemplateLoader
+from futurefinity.routing import RoutingLocator, RoutingObject
 from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
 from futurefinity.security import AESGCMSecurityObject, HMACSecurityObject
 from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPCookies,
@@ -63,7 +64,6 @@ import html
 import time
 import uuid
 import types
-import routes
 import typing
 import hashlib
 import functools
@@ -617,7 +617,7 @@ class Application:
     """
     def __init__(self, **kwargs):
         self._loop = kwargs.get("loop", asyncio.get_event_loop())
-        self.handlers = routes.Mapper()
+        self.handlers = RoutingLocator()
         self.settings = kwargs
 
         self.template_loader = None
@@ -650,8 +650,8 @@ class Application:
         srv = self._loop.run_until_complete(f)
         return srv
 
-    def add_handler(self, route_str: str, name: str=None,
-                    handler: RequestHandler=None):
+    def add_handler(self, path: str, *args, name: str=None,
+                    handler: RequestHandler=None, **kwargs):
         """
         Add a handler to handler list.
         If you specific a handler in parameter, it will return nothing.
@@ -670,21 +670,22 @@ class Application:
           app.add_handler("/", handler=RootHandler)
         """
         def decorator(cls):
-            self.handlers.connect(name, route_str, __handler__=cls)
+            self.handlers.add(path, cls, *args, name=name, **kwargs)
             return cls
         if handler is not None:
             decorator(handler)
         else:
             return decorator
 
-    def find_handler(self, path: str) -> RequestHandler:
+    def find_handler(self, path: str) -> RoutingObject:
         """
         Find a handler that matches the path.
 
         If a handler that matches the path cannot be found, it will return
         NotFoundHandler, which returns 404 Not Found to client.
         """
-        matched_obj = self.handlers.match(path)
+        matched_obj = self.handlers.find(path)
         if not matched_obj:
-            matched_obj = {"__handler__": NotFoundHandler}
+            matched_obj = RoutingObject(handler=NotFoundHandler, path_args=(),
+                                        path_kwargs={})
         return matched_obj

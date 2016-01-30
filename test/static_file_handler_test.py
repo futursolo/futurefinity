@@ -33,9 +33,8 @@ class StaticFileHandlerTestCollector(unittest.TestCase):
 
     def test_static_file_handler_request(self):
         self.requests_result = None
-        self.app.add_handler(
-            "/static/{file}",
-            handler=futurefinity.web.StaticFileHandler)
+        self.app.add_handler("/static/(?P<file>.*?)",
+                             handler=futurefinity.web.StaticFileHandler)
 
         server = self.app.listen(8888)
 
