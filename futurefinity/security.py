@@ -22,63 +22,50 @@ import os
 import hmac
 import time
 import base64
-import typing
+import string
 import struct
+import random
 import hashlib
 
-try:
+try:  # Try to load cryptography.
     from cryptography.hazmat.primitives.ciphers import (
         Cipher as AESCipher,
         algorithms as aes_algorithms,
         modes as aes_modes
     )
     from cryptography.hazmat.backends import default_backend as aes_backend
-except ImportError:
+
+except ImportError:  # Point cryptography to None if they are not found.
     AESCipher = None
     aes_algorithms = None
     aes_modes = None
     aes_backend = None
 
 
-class SecureCookieInterfaceModel:
+def secret_generator(length: int) -> str:
     """
-    Model Of all the Secure Cookie Interface.
+    Generate a Security Secret securely with SystemGenerator.
+    If SystemGenerator not available, use fake random generator as instead.
     """
-    def __init__(self, app=None, security_secret=None, *args, **kwargs):
-        self.app = app
-        self._initialized = False
-        self.security_secret = security_secret
-
-    def initialize(self, app=None, security_secret=None):
-        if self._initialized:
-            return
-        if app:
-            self.app = app
-        if not self.app:
-            raise Exception(
-                "FutureFinity Application is not set for this Interface.")
-        if security_secret:
-            self.security_secret = security_secret
-        if not self.security_secret:
-            self.security_secret = self.app.settings.get(
-                "security_secret", None)
-        self._initialized = True
-
-    def lookup_origin_text(self, secure_text: str) -> str:
-        raise NotImplementedError("No Secure Cookie Interface Available.")
-
-    def generate_secure_text(self, origin_text: str) -> str:
-        raise NotImplementedError("No Secure Cookie Interface Available.")
+    try:
+        random_generator = random.SystemRandom()
+    except:
+        random_generator = random
+    random_string = ""
+    for i in range(0, length):
+        random_string += random_generator.choice(
+            string.ascii_letters + string.digits)
+    return random_string
 
 
-class HMACSecureCookieInterface(SecureCookieInterfaceModel):
+class HMACSecurityObject:
+    def __init__(self, security_secret: str):
+        self.__security_secret = hashlib.sha256(
+            ensure_bytes(security_secret)).digest()
+
     def lookup_origin_text(self, secure_text: str,
                            valid_length: int=None) -> str:
-        if not self.security_secret:
-            raise Exception(
-                "Cannot found Security Secret. "
-                "Please provide security_secret through Application "
-                "Settings or __init__ security_secret Parameter.")
+
         signed_text_reader = io.BytesIO(base64.b64decode(secure_text))
 
         iv = signed_text_reader.read(16)
@@ -86,7 +73,7 @@ class HMACSecureCookieInterface(SecureCookieInterfaceModel):
         content = signed_text_reader.read(length)
         signature = signed_text_reader.read(32)
 
-        hash = hmac.new(iv + ensure_bytes(self.security_secret),
+        hash = hmac.new(iv + ensure_bytes(self.__security_secret),
                         digestmod=hashlib.sha256)
         hash.update(ensure_bytes(content))
         if not hmac.compare_digest(signature, hash.digest()):
@@ -104,16 +91,11 @@ class HMACSecureCookieInterface(SecureCookieInterfaceModel):
             return None
 
     def generate_secure_text(self, origin_text: str) -> str:
-        if not self.security_secret:
-            raise Exception(
-                "Cannot found Security Secret. "
-                "Please provide security_secret through Application "
-                "Settings or __init__ security_secret Parameter.")
         iv = os.urandom(16)
 
         content = struct.pack(
             "l", int(time.time())) + ensure_bytes(origin_text)
-        hash = hmac.new(iv + ensure_bytes(self.security_secret),
+        hash = hmac.new(iv + ensure_bytes(self.__security_secret),
                         digestmod=hashlib.sha256)
         hash.update(ensure_bytes(content))
         signature = hash.digest()
@@ -126,22 +108,20 @@ class HMACSecureCookieInterface(SecureCookieInterfaceModel):
         return ensure_str(base64.b64encode(final_signed_text))
 
 
-class AESGCMSecureCookieInterface(SecureCookieInterfaceModel):
-    def initialize(self, *args, **kwargs):
-        SecureCookieInterfaceModel.initialize(self, *args, **kwargs)
-
+class AESGCMSecurityObject:
+    def __init__(self, security_secret: str):
         if None in [AESCipher, aes_algorithms, aes_modes, aes_backend]:
-            raise Exception("Cryptography is not installed, "
-                            "and aes_gcm_str_encrypt is called."
-                            " Please install Cryptography through pip.")
+            raise Exception(
+                "Currently, `futurefinity.security.AESGCMSecurityObject` "
+                "needs Cryptography to work. Please install it before "
+                "using security features(such as security_secret), "
+                "or turn aes_security to False in Application Settings.")
+
+        self.__security_secret = hashlib.sha256(
+            ensure_bytes(security_secret)).digest()
 
     def lookup_origin_text(self, secure_text: str,
                            valid_length: int=None) -> str:
-        if not self.security_secret:
-            raise Exception(
-                "Cannot found Security Secret. "
-                "Please provide security_secret through Application "
-                "Settings or __init__ security_secret Parameter.")
         encrypted_text_reader = io.BytesIO(base64.b64decode(secure_text))
 
         iv = encrypted_text_reader.read(16)
@@ -150,7 +130,7 @@ class AESGCMSecureCookieInterface(SecureCookieInterfaceModel):
         tag = encrypted_text_reader.read(16)
 
         decryptor = AESCipher(
-            aes_algorithms.AES(ensure_bytes(self.security_secret)),
+            aes_algorithms.AES(ensure_bytes(self.__security_secret)),
             aes_modes.GCM(iv, tag),
             backend=aes_backend()
         ).decryptor()
@@ -172,11 +152,6 @@ class AESGCMSecureCookieInterface(SecureCookieInterfaceModel):
             return None
 
     def generate_secure_text(self, origin_text: str) -> str:
-        if not self.security_secret:
-            raise Exception(
-                "Cannot found Security Secret. "
-                "Please provide security_secret through Application "
-                "Settings or __init__ security_secret Parameter.")
         iv = os.urandom(16)
 
         content = struct.pack(
@@ -196,9 +171,3 @@ class AESGCMSecureCookieInterface(SecureCookieInterfaceModel):
         final_encrypted_text += encryptor.tag
 
         return ensure_str(base64.b64encode(final_encrypted_text))
-
-
-if None not in [AESCipher, aes_algorithms, aes_modes, aes_backend]:
-    DefaultSecureCookieInterface = AESGCMSecureCookieInterface
-else:
-    DefaultSecureCookieInterface = HMACSecureCookieInterface

@@ -24,7 +24,6 @@ from http.client import responses as status_code_text
 
 import futurefinity
 
-import io
 import uuid
 import typing
 

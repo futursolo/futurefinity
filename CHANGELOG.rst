@@ -4,7 +4,9 @@ dev
 - Fixed Cookie Default Value Bug
 - Fixed SessionInterface Bug
 - Introduce Streamed RequestHandler
-
+- Removed Interface
+- Introduce Security Lib
+- Introduce TemplateLoader
 
 v0.1.1
 ------

@@ -15,9 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import *
-from futurefinity.interface.secure_cookie import AESGCMSecureCookieInterface
-from futurefinity.interface.secure_cookie import HMACSecureCookieInterface
+from futurefinity.security import secret_generator
 
 import futurefinity.web
 
@@ -33,34 +31,26 @@ import functools
 class SecureCookieTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.app_default = futurefinity.web.Application(
-            allow_keep_alive=False,
-            security_secret=security_secret_generator(32),
-            debug=True)
+
         self.app_aesgcm = futurefinity.web.Application(
             allow_keep_alive=False,
-            security_secret=security_secret_generator(32),
+            security_secret=secret_generator(32),
             debug=True)
-        self.app_aesgcm.interfaces.set("secure_cookie",
-                                       AESGCMSecureCookieInterface())
+
         self.app_hmac = futurefinity.web.Application(
             allow_keep_alive=False,
-            security_secret=security_secret_generator(32),
+            security_secret=secret_generator(32),
+            aes_security=False,
             debug=True)
-        self.app_hmac.interfaces.set("secure_cookie",
-                                     HMACSecureCookieInterface())
 
         class TestHandler(futurefinity.web.RequestHandler):
             async def get(self, *args, **kwargs):
                 cookie_value = self.get_secure_cookie("test_secure_cookie")
                 if not cookie_value:
-                    cookie_value = security_secret_generator(100)
+                    cookie_value = secret_generator(100)
                     self.set_secure_cookie("test_secure_cookie", cookie_value)
                     return json.dumps([False, cookie_value])
                 return json.dumps([True, cookie_value])
-
-        self.app_default.add_handler("/test_secure_cookie",
-                                     handler=TestHandler)
 
         self.app_aesgcm.add_handler("/test_secure_cookie",
                                     handler=TestHandler)
@@ -87,29 +77,6 @@ class SecureCookieTestCollector(unittest.TestCase):
             server.close()
             await server.wait_closed()
             self.loop.stop()
-
-    def test_default_secure_cookie_request(self):
-        self.requests_result = []
-        server = self.app_default.listen(8888)
-
-        asyncio.ensure_future(self.get_requests_result(server))
-        self.loop.run_forever()
-
-        self.assertEqual(self.requests_result[0].status_code, 200,
-                         "Wrong Status Code for First Default Request.")
-
-        self.assertEqual(self.requests_result[1].status_code, 200,
-                         "Wrong Status Code for Second Default Request.")
-
-        first_request = self.requests_result[0].json()
-        second_request = self.requests_result[1].json()
-
-        self.assertEqual(first_request[0], False,
-                         "Wrong Cookie Status for First Default Request.")
-        self.assertEqual(second_request[0], True,
-                         "Wrong Cookie Code for Second Default Request.")
-        self.assertEqual(first_request[1], second_request[1],
-                         "Wrong Cookie Content for Default Secure Cookie.")
 
     def test_aesgcm_secure_cookie_request(self):
         self.requests_result = []
