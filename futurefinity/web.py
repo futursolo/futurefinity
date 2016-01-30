@@ -45,13 +45,14 @@ Finally, listen to the port you want, and start asyncio event loop::
 """
 
 
+from futurefinity.server import HTTPServer
+from futurefinity.template import TemplateLoader
 from futurefinity.utils import ensure_str, ensure_bytes, format_timestamp
+from futurefinity.security import AESGCMSecurityObject, HMACSecurityObject
 from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPCookies,
                                    HTTPResponse, HTTPRequest, HTTPError)
 
 import futurefinity
-import futurefinity.server
-import futurefinity.interface
 
 import asyncio
 
@@ -87,7 +88,7 @@ class RequestHandler:
     stream_handler = False
 
     def __init__(self, app,
-                 server: futurefinity.server.HTTPServer,
+                 server: HTTPServer,
                  request: HTTPRequest,
                  respond_request: types.FunctionType,
                  path_args: dict=None,
@@ -107,8 +108,6 @@ class RequestHandler:
             self.transport = self.server.transport
 
         self.path = self.request.path
-
-        self._session = None
 
         self._csrf_value = None
 
@@ -211,6 +210,11 @@ class RequestHandler:
 
         The implementation depends on the interface you use.
         """
+        if "security_secret" not in self.app.settings.keys():
+            raise ValueError(
+                "Cannot found security_secret. "
+                "Please provide security_secret through Application Settings.")
+
         valid_length = None
         if max_age_days:
             valid_length = max_age_days * 86400
@@ -220,8 +224,8 @@ class RequestHandler:
         if cookie_content is None:
             return None
 
-        return self.app.interfaces.get(
-            "secure_cookie").lookup_origin_text(cookie_content, valid_length)
+        return self.app.security_object.lookup_origin_text(cookie_content,
+                                                           valid_length)
 
     def set_secure_cookie(self, name: str, value: str,
                           expires_days: int=30, **kwargs):
@@ -239,35 +243,15 @@ class RequestHandler:
         Once security_secret is generated, treat it as a password,
         change security_secret will cause all secure_cookie become invalid.
         """
-        content = self.app.interfaces.get(
-            "secure_cookie").generate_secure_text(value)
+        if "security_secret" not in self.app.settings.keys():
+            raise ValueError(
+                "Cannot found security_secret. "
+                "Please provide security_secret through Application Settings.")
+
+        content = self.app.security_object.generate_secure_text(value)
 
         self.set_cookie(ensure_str(name), ensure_str(content),
                         expires_days=expires_days, **kwargs)
-
-    async def get_session(self, name: str, default: str=None) -> str:
-        """
-        Get a session value in with if it exists or return the default.
-
-        The implementation depends on the interface you use.
-        """
-        if self._session is None:
-            self._session = await self.app.interfaces.get(
-                "session").get_session(self)
-        return self._session.get(name, default)
-
-    async def set_session(self, name: str, value: str):
-
-        """
-        Set a session value with the name. If the name exists,
-        it will override the value.
-
-        The implementation depends on the interface you use.
-        """
-        if self._session is None:
-            self._session = await self.app.interfaces.get(
-                "session").get_session(self)
-        self._session[name] = value
 
     def check_csrf_value(self):
         """
@@ -323,7 +307,8 @@ class RequestHandler:
         if clear_text:
             self.response.body = ensure_bytes(text)
 
-    def render_string(self, template_name: str, template_dict: dict) -> str:
+    async def render_string(self, template_name: str,
+                            template_dict: dict) -> str:
         """
         Render Template in template folder into string.
 
@@ -337,16 +322,22 @@ class RequestHandler:
             "csrf_form_html": self.csrf_form_html
         }
 
-        renderer = self.app.interfaces.get("template")
-        return renderer.render_template(template_name, template_dict)
+        if "template_path" not in self.app.settings.keys():
+            raise ValueError(
+                "Cannot found template_path. "
+                "Please provide template_path through Application Settings.")
 
-    def render(self, template_name: str, template_dict=None):
+        parsed_tpl = await self.app.template_loader.async_load_template(
+            template_name)
+        return parsed_tpl.render(**template_dict)
+
+    async def render(self, template_name: str, template_dict=None):
         """
         Render the template with render_string, and write them into response
         body directly.
         """
-        self.write(self.render_string(template_name,
-                                      template_dict=template_dict))
+        self.write((await self.render_string(template_name,
+                                             template_dict=template_dict)))
 
     def redirect(self, url: str, permanent: bool=False, status: int=None):
         """
@@ -556,8 +547,6 @@ class RequestHandler:
                 *self.path_args, **self.path_kwargs)
             if not self._written:
                 self.write(body)
-            await self.app.interfaces.get(
-                "session").write_session(self, self._session)
         except HTTPError as e:
             self.write_error(e.status_code, e.message, sys.exc_info())
         except Exception as e:
@@ -630,15 +619,27 @@ class Application:
         self._loop = kwargs.get("loop", asyncio.get_event_loop())
         self.handlers = routes.Mapper()
         self.settings = kwargs
-        self.interfaces = futurefinity.interface.InterfaceFactory(app=self)
+
+        self.template_loader = None
+        self.security_object = None
+
+        if "template_path" in self.settings.keys():
+            self.template_loader = TemplateLoader(
+                self.settings["template_path"], (not self.settings["debug"]))
+
+        if "security_secret" in self.settings.keys():
+            if self.settings.get("aes_security", True):
+                self.security_object = AESGCMSecurityObject(
+                    self.settings["security_secret"])
+            else:
+                self.security_object = HMACSecurityObject(
+                    self.settings["security_secret"])
 
     def make_server(self) -> asyncio.Protocol:
         """
         Make a asyncio compatible server.
         """
-        self.interfaces.initialize()
-        return functools.partial(
-            futurefinity.server.HTTPServer, app=self, loop=self._loop)
+        return functools.partial(HTTPServer, app=self, loop=self._loop)
 
     def listen(self, port: int,
                address: str="127.0.0.1") -> types.CoroutineType:

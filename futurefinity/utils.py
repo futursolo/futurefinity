@@ -27,36 +27,14 @@ This class is recommend to be imported without namespace.
 
 """
 
-import futurefinity
-
 import time
-import random
 import struct
 import typing
-import string
 import numbers
 import calendar
 import datetime
-import functools
-import collections
 import email.utils
 import collections.abc
-
-MAX_HEADER_LENGTH = 4096
-
-MAX_BODY_LENGTH = 52428800  # 50M
-
-MULTIPART_BOUNDARY_HANDLERS = {}
-
-SUPPORTED_METHODS = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
-                     "OPTIONS", "CONNECT")
-BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
-
-_CRLF_MARK = "\r\n"
-_CRLF_BYTES_MARK = b"\r\n"
-
-_LF_MARK = "\n"
-_LF_BYTES_MARK = b"\n"
 
 
 def ensure_bytes(var: typing.Any) -> bytes:
@@ -228,48 +206,6 @@ class TolerantMagicDict(MagicDict):
 
     __copy__ = copy
     __repr__ = __str__
-
-
-def render_template(template_name: str):
-    """
-    Decorator to render template gracefully.
-
-    Only effective when nothing is written.
-
-    Example:
-
-    .. code-block:: python3
-
-      @render_template("index.htm")
-      async def get(self, *args, **kwargs):
-          return {'content': 'Hello, World!!'}
-
-    """
-    def decorator(f):
-        @functools.wraps(f)
-        async def wrapper(self, *args, **kwargs):
-            template_dict = await f(self, *args, **kwargs)
-            if self._written:
-                return
-            return self.render_string(template_name, template_dict)
-        return wrapper
-    return decorator
-
-
-def security_secret_generator(length: int) -> str:
-    """
-    Generate a Security Secret securely with SystemGenerator.
-    If SystemGenerator not available, use fake random generator as instead.
-    """
-    try:
-        random_generator = random.SystemRandom()
-    except:
-        random_generator = random
-    random_string = ""
-    for i in range(0, length):
-        random_string += random_generator.choice(
-            string.ascii_letters + string.digits + string.punctuation)
-    return random_string
 
 
 def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,

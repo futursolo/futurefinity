@@ -10,7 +10,7 @@ services:
   - redis-server
 
 # command to run tests
-script: coverage run --source=futurefinity,futurefinity.interface setup.py test
+script: coverage run --source=futurefinity setup.py test
 
 after_success:
   coveralls

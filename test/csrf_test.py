@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import *
+from futurefinity.security import secret_generator
 
 import futurefinity.web
 
@@ -33,7 +33,7 @@ class CSRFTestCollector(unittest.TestCase):
         self.loop = asyncio.get_event_loop()
         self.app = futurefinity.web.Application(
             allow_keep_alive=False, csrf_protect=True,
-            security_secret=security_secret_generator(32),
+            security_secret=secret_generator(32),
             debug=True)
 
     async def get_requests_result(self, server):
