@@ -29,7 +29,7 @@ class StaticFileHandlerTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
         self.app = futurefinity.web.Application(
-            allow_keep_alive=False, static_path="example/static", debug=True)
+            allow_keep_alive=False, static_path="examples/static", debug=True)
 
     def test_static_file_handler_request(self):
         self.requests_result = None
@@ -59,6 +59,6 @@ class StaticFileHandlerTestCollector(unittest.TestCase):
                          "application/octet-stream")
 
         random_string = b""
-        with open("example/static/random_string", "rb") as f:
+        with open("examples/static/random_string", "rb") as f:
             random_string = f.read()
         self.assertEqual(self.requests_result.content, random_string)

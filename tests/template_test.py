@@ -34,7 +34,7 @@ class TemplateInterfaceTestCollector(unittest.TestCase):
         self.loop = asyncio.get_event_loop()
         self.app = futurefinity.web.Application(
             allow_keep_alive=False, debug=True,
-            template_path="example/template"
+            template_path="examples/template"
         )
 
     def test_jinja2_template_request(self):
@@ -64,7 +64,7 @@ class TemplateInterfaceTestCollector(unittest.TestCase):
         self.loop.run_forever()
 
         jinja2_envir = jinja2.Environment(loader=jinja2.FileSystemLoader(
-            "example/template",
+            "examples/template",
             encoding="utf-8"
         ))
 
