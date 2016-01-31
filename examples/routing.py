@@ -22,10 +22,10 @@ loop = asyncio.get_event_loop()
 app = futurefinity.web.Application()
 
 
-@app.add_handler("/{name}")
+@app.add_handler("/(.*)/(?P<name>.*?)")
 class DynamicRoutingHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        return "Hello, " + kwargs["name"] + "!"
+        return "You accessed a(n) %s called %s" % (args[0], kwargs["name"])
 
 app.listen(23333)
 

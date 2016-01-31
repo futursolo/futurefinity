@@ -24,7 +24,7 @@ Installation
 
 The installation of FutureFinity is as sample as install other applications through pip::
 
-  pip install FutureFinity
+  pip install futurefinity
 
 Install the latest GitHub Master Version::
 

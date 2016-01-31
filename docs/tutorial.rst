@@ -4,3 +4,4 @@ FutureFinity Tutorial
    :titlesonly:
 
    tutorial/getstarted
+   tutorial/routing

@@ -4,15 +4,15 @@ FutureFinity is an asynchronous Python web framework designed for asyncio and na
 Benefit from the non-blocking model and asyncio, FutureFinity can handle thousands of requests
 at the same time.
 
-Hello, World!
--------------
+Let's look at the ``Hello, World!``.
 
 .. literalinclude:: ../../examples/hello_world.py
    :language: python3
    :lines: 17-
 
 We have seen that ``Hello, World!`` example on the index of the documentation.
-It looks pretty easy, but some part looks quite strange. Let's divide them up step-by-step.
+It looks pretty easy, but some parts look like quite strange.
+Let's divide them up step-by-step.
 
 At the beginning of the example, there are two imports, which are
 ``futurefinity.web`` and ``asyncio``. ``futurefinity.web`` is the core part when
@@ -54,15 +54,10 @@ For more information about ``@`` decorator, please visit `decorator on Python Do
 
 ``asyncio.get_event_loop().run_forever()`` is to get the event loop from asyncio and start it.
 
+These are the basis of a minimal FutureFinity Application.
 
 
 Based on the "Hello, World!" example, we can add more exciting features to it.
-
-Dynamic Routing:
-
-.. literalinclude:: ../examples/dynamic_routing.py
-   :language: python3
-   :lines: 24-28
 
 Custom HTTP Header:
 
