@@ -18,27 +18,35 @@
 import futurefinity.web
 import asyncio
 
-loop = asyncio.get_event_loop()
-app = futurefinity.web.Application()
+app = futurefinity.web.Application(security_secret="__PUT_YOUR_SECRET_HERE__")
 
 
-@app.add_handler("/link_arg_body_arg_and_utf8")
-class LinkArgBodyArgAndUTF8Handler(futurefinity.web.RequestHandler):
+@app.add_handler("/")
+class MainHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        if self.get_link_arg("ping", default=None):
-            return "I heard your ping!"
-        else:
-            return "Where is your ping?"
+        username = self.get_secure_cookie("username", default=None)
+        if not username:
+            return self.redirect("/login")
+
+        return "Hi, %s!" % username
+
+
+@app.add_handler("/login")
+class LoginHandler(futurefinity.web.RequestHandler):
+    async def get(self, *args, **kwargs):
+        return ("<form method=\"post\">"
+                "<input type=\"text\" name=\"username\">"
+                "<input type=\"submit\" value=\"submit\">"
+                "</form>")
 
     async def post(self, *args, **kwargs):
-        if self.get_body_arg("ping", default=None):
-            return "I heard your body ping!"
-        else:
-            return "Where is your body ping?"
+        username = self.get_body_arg("username")
+        self.set_secure_cookie("username", username)
+        return self.redirect("/")
 
 app.listen(23333)
 
 try:
-    loop.run_forever()
+    asyncio.get_event_loop().run_forever()
 except KeyboardInterrupt:
     pass

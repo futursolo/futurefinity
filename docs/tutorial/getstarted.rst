@@ -55,24 +55,3 @@ For more information about ``@`` decorator, please visit `decorator on Python Do
 ``asyncio.get_event_loop().run_forever()`` is to get the event loop from asyncio and start it.
 
 These are the basis of a minimal FutureFinity Application.
-
-
-Based on the "Hello, World!" example, we can add more exciting features to it.
-
-Custom HTTP Header:
-
-.. literalinclude:: ../examples/custom_header.py
-   :language: python3
-   :lines: 24-33
-
-User Cookie:
-
-.. literalinclude:: ../examples/user_cookie.py
-   :language: python3
-   :lines: 25-31
-
-Link argument(s), Body argument(s), and UTF-8 support:
-
-.. literalinclude:: ../examples/link_arg_body_arg_and_utf8.py
-   :language: python3
-   :lines: 25-37

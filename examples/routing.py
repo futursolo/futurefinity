@@ -18,18 +18,17 @@
 import futurefinity.web
 import asyncio
 
-loop = asyncio.get_event_loop()
 app = futurefinity.web.Application()
 
 
 @app.add_handler("/(.*)/(?P<name>.*?)")
-class DynamicRoutingHandler(futurefinity.web.RequestHandler):
+class RoutingHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
         return "You accessed a(n) %s called %s" % (args[0], kwargs["name"])
 
 app.listen(23333)
 
 try:
-    loop.run_forever()
+    asyncio.get_event_loop().run_forever()
 except KeyboardInterrupt:
     pass

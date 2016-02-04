@@ -18,24 +18,29 @@
 import futurefinity.web
 import asyncio
 
-loop = asyncio.get_event_loop()
 app = futurefinity.web.Application()
 
 
-@app.add_handler("/custom-header")
-class CustomHeaderHandler(futurefinity.web.RequestHandler):
+@app.add_handler("/")
+class MainHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        header = self.get_header("user-agent",
-                                 default="The UA God Only Knows.")
-        self.set_header("request-user-agent", header)
-        self.add_header("request-user_cookie",
-                        "Your US should be shown on the above.")
-        return "If you saw nothing except this sentence, use curl -i."
+        username = self.get_link_arg("username", default=None)
+        if self.get_link_arg("username"):
+            return "Hi, %s!" % username
+
+        return ("<form method=\"post\">"
+                "<input type=\"text\" name=\"username\">"
+                "<input type=\"submit\" value=\"submit\">"
+                "</form>")
+
+    async def post(self, *args, **kwargs):
+        username = self.get_body_arg("username")
+        return "Hi, %s!" % username
 
 
 app.listen(23333)
 
 try:
-    loop.run_forever()
+    asyncio.get_event_loop().run_forever()
 except KeyboardInterrupt:
     pass

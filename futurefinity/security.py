@@ -42,7 +42,7 @@ except ImportError:  # Point cryptography to None if they are not found.
     aes_backend = None
 
 
-def secret_generator(length: int) -> str:
+def get_random_str(length: int) -> str:
     """
     Generate a Security Secret securely with SystemGenerator.
     If SystemGenerator not available, use fake random generator as instead.

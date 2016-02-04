@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.security import secret_generator
+from futurefinity.security import get_random_str
 
 import futurefinity.web
 
@@ -34,12 +34,12 @@ class SecureCookieTestCollector(unittest.TestCase):
 
         self.app_aesgcm = futurefinity.web.Application(
             allow_keep_alive=False,
-            security_secret=secret_generator(32),
+            security_secret=get_random_str(32),
             debug=True)
 
         self.app_hmac = futurefinity.web.Application(
             allow_keep_alive=False,
-            security_secret=secret_generator(32),
+            security_secret=get_random_str(32),
             aes_security=False,
             debug=True)
 
@@ -47,7 +47,7 @@ class SecureCookieTestCollector(unittest.TestCase):
             async def get(self, *args, **kwargs):
                 cookie_value = self.get_secure_cookie("test_secure_cookie")
                 if not cookie_value:
-                    cookie_value = secret_generator(100)
+                    cookie_value = get_random_str(100)
                     self.set_secure_cookie("test_secure_cookie", cookie_value)
                     return json.dumps([False, cookie_value])
                 return json.dumps([True, cookie_value])

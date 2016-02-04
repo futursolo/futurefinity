@@ -5,7 +5,7 @@ Different buses are identified by bus numbers. Different Requests are identified
 
 If you don't know what is regular expressions, please visit `Regular Expressions on Python Docs <https://docs.python.org/3/library/re.html>`_.
 
-The simplest regular expression is just plain string, like "/" or "/index.htm".
+The simplest regular expression is just plain string, like ``/`` or ``/index.htm``.
 We can add routes like ``@app.add_handler("/")`` or ``@app.add_handler("/index.htm")``,
 but how about ``/posts/???.htm`` (??? can be any strings) that identifies posts in a blog system?
 

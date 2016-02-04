@@ -98,7 +98,7 @@ class MagicDict(collections.abc.MutableMapping):
         """
         return self._as_list.get(name, default)
 
-    def get_all(self):
+    def items(self):
         """
         Iter all values.
         """
@@ -111,8 +111,6 @@ class MagicDict(collections.abc.MutableMapping):
         Get the first value with the name.
         """
         return self._as_list.get(name, [default])[0]
-
-    items = get_all
 
     def __setitem__(self, name, value):
         self._dict[name] = value

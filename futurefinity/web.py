@@ -204,7 +204,8 @@ class RequestHandler:
         for cookie_name in self.request.cookies.keys():
             self.clear_cookie(cookie_name)
 
-    def get_secure_cookie(self, name: str, max_age_days: int=31) -> str:
+    def get_secure_cookie(self, name: str, max_age_days: int=31,
+                          default=None) -> str:
         """
         Get a secure cookie with the name, if it validates, or None.
 
@@ -219,13 +220,16 @@ class RequestHandler:
         if max_age_days:
             valid_length = max_age_days * 86400
 
-        cookie_content = self.get_cookie(name)
+        cookie_content = self.get_cookie(name, default=None)
 
         if cookie_content is None:
-            return None
+            return default
 
-        return self.app.security_object.lookup_origin_text(cookie_content,
-                                                           valid_length)
+        try:
+            return self.app.security_object.lookup_origin_text(cookie_content,
+                                                               valid_length)
+        except:
+            return None
 
     def set_secure_cookie(self, name: str, value: str,
                           expires_days: int=30, **kwargs):
