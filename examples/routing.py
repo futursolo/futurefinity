@@ -16,6 +16,7 @@
 #   limitations under the License.
 
 import futurefinity.web
+
 import asyncio
 
 app = futurefinity.web.Application()

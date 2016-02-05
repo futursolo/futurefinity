@@ -47,9 +47,8 @@ class HTTPServer(asyncio.Protocol):
     instance, which can pass right Application Instance and Application
     Configuration to server.
     """
-    def __init__(self, app, loop=asyncio.get_event_loop(),
-                 enable_h2: bool=False):
-        self._loop = loop
+    def __init__(self, app, loop=None, enable_h2: bool=False):
+        self._loop = loop or asyncio.get_event_loop()
         self.app = app
         self.enable_h2 = enable_h2
 
@@ -187,12 +186,12 @@ class HTTPServer(asyncio.Protocol):
             self._request_finished = True
 
         if self._request_finished:
-            coro_future = asyncio.ensure_future(
+            coro_future = self._loop.create_task(
                 self.handle_request(self._request_parser))
             self._futures[self._request_parser] = coro_future
 
     def request_header_finished(self, request: HTTPRequest):
-        matched_obj = self.app.find_handler(request.path)
+        matched_obj = self.app.handlers.find(request.path)
         request_handler = matched_obj.handler(
             app=self.app,
             server=self,

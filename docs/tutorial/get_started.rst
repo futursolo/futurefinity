@@ -36,7 +36,7 @@ Let's move to the class.
            return "Hello, World!"
 
 Unlike Flask or Bottle, which use functions as request handlers, FutureFinity uses
-inherit classes from ``futurefinity.web.RequestHandler`` to handle requests.
+inherited classes from ``futurefinity.web.RequestHandler`` to handle requests.
 To specify the method to handle, please override the method as shown above.
 The returned string/bytes will be the body content. All methods should use a
 ``async def`` keyword instead of ``def`` to indicate that this is a coroutine function,

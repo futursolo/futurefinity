@@ -16,6 +16,7 @@
 #   limitations under the License.
 
 import futurefinity.web
+
 import asyncio
 
 app = futurefinity.web.Application(security_secret="__PUT_YOUR_SECRET_HERE__")

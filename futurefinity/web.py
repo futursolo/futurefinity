@@ -620,9 +620,10 @@ class Application:
     and passes it to server.
     """
     def __init__(self, **kwargs):
-        self._loop = kwargs.get("loop", asyncio.get_event_loop())
-        self.handlers = RoutingLocator()
         self.settings = kwargs
+        self._loop = self.settings.get("loop", asyncio.get_event_loop())
+
+        self.handlers = RoutingLocator(default_handler=NotFoundHandler)
 
         self.template_loader = None
         self.security_object = None
@@ -680,16 +681,3 @@ class Application:
             decorator(handler)
         else:
             return decorator
-
-    def find_handler(self, path: str) -> RoutingObject:
-        """
-        Find a handler that matches the path.
-
-        If a handler that matches the path cannot be found, it will return
-        NotFoundHandler, which returns 404 Not Found to client.
-        """
-        matched_obj = self.handlers.find(path)
-        if not matched_obj:
-            matched_obj = RoutingObject(handler=NotFoundHandler, path_args=(),
-                                        path_kwargs={})
-        return matched_obj

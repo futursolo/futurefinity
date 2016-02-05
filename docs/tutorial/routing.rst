@@ -13,7 +13,7 @@ Let's look at the example below:
 
 .. literalinclude:: ../../examples/routing.py
    :language: python3
-   :lines: 24-28
+   :lines: 17-
 
 
 This example contains two types of dynamic routing example:
@@ -24,4 +24,5 @@ This example contains two types of dynamic routing example:
 Theortically, all positional matches will be positional arguments passed to the method function,
 and all keyword matches will be keyword arguments passed to the method function.
 
-**However, all keyword matches also have a position in a regular expression.**
+**However, all keyword matches also have a position in a regular expression.
+Therefore, we recommend you to use keyword match.**

@@ -28,6 +28,7 @@ class RoutingLocator:
     def __init__(self, *args, **kwargs):
         self.handlers_dict = collections.OrderedDict()
         self.links_dict = collections.OrderedDict()
+        self.default_handler = kwargs.get("default_handler", None)
 
     def add(self, path: str, handler: object, *args, name=None, **kwargs):
         if isinstance(path, str):
@@ -40,7 +41,13 @@ class RoutingLocator:
                                                  path_args=args,
                                                  path_kwargs=kwargs)
 
-    def find(self, path: str) -> typing.Optional[RoutingObject]:
+    def find(self, path: str) -> RoutingObject:
+        """
+        Find a handler that matches the path.
+
+        If a handler that matches the path cannot be found, it will return
+        NotFoundHandler, which returns 404 Not Found to client.
+        """
         for (key, value) in self.handlers_dict.items():
             matched_obj = key.fullmatch(path)
 
@@ -64,4 +71,6 @@ class RoutingLocator:
                                  path_args=path_args,
                                  path_kwargs=path_kwargs)
         else:
-            return None
+            return RoutingObject(handler=self.default_handler,
+                                 path_args=(),
+                                 path_kwargs={})

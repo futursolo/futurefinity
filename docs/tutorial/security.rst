@@ -9,7 +9,7 @@ Let's look at the example below:
 
 .. literalinclude:: ../../examples/cookie.py
    :language: python3
-   :lines: 24-46
+   :lines: 17-
 
 It will try to get the user information from the cookie first, if it fails,
 redirect visitors to login page to submit a username. After that, redirect

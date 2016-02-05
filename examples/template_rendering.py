@@ -15,34 +15,35 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.template import render_template
+
 import futurefinity.web
 
 import asyncio
 
-app = futurefinity.web.Application()
+app = futurefinity.web.Application(template_path="./template/",
+                                   security_secret="__PUT_YOUR_SECRET_HERE__")
 
 
 @app.add_handler("/")
 class MainHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        username = self.get_cookie("username", default=None)
+        username = self.get_secure_cookie("username", default=None)
         if not username:
             return self.redirect("/login")
 
-        return "Hi, %s!" % username
+        return self.render("main.htm", template_dict={"name": username})
 
 
 @app.add_handler("/login")
 class LoginHandler(futurefinity.web.RequestHandler):
+    @render_template("login.htm")
     async def get(self, *args, **kwargs):
-        return ("<form method=\"post\">"
-                "<input type=\"text\" name=\"username\">"
-                "<input type=\"submit\" value=\"submit\">"
-                "</form>")
+        return
 
     async def post(self, *args, **kwargs):
         username = self.get_body_arg("username")
-        self.set_cookie("username", username)
+        self.set_secure_cookie("username", username)
         return self.redirect("/")
 
 app.listen(23333)

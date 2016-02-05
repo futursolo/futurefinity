@@ -40,7 +40,7 @@ class TemplateInterfaceTestCollector(unittest.TestCase):
     def test_jinja2_template_request(self):
         @self.app.add_handler("/template_test")
         class TestHandler(futurefinity.web.RequestHandler):
-            @render_template("jinja2.htm")
+            @render_template("main.htm")
             async def get(self, *args, **kwargs):
                 return {"name": "John Smith"}
 
@@ -68,7 +68,7 @@ class TemplateInterfaceTestCollector(unittest.TestCase):
             encoding="utf-8"
         ))
 
-        template = jinja2_envir.get_template("jinja2.htm")
+        template = jinja2_envir.get_template("main.htm")
 
         self.assertEqual(self.requests_result.status_code, 200,
                          "Wrong Status Code")

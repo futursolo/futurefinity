@@ -68,13 +68,13 @@ class Template:
 
 class TemplateLoader:
     def __init__(self, template_path: typing.Union[list, str],
-                 loop: asyncio.BaseEventLoop=None,
+                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
                  cache_template: bool=True):
         if jinja2 is None:
             raise NotImplementedError(
                 ("Currently, `futurefinity.template` needs Jinja2 to work. "
                  "Please install it before using template rendering."))
-        self.loop = loop or asyncio.get_event_loop()
+        self._loop = loop or asyncio.get_event_loop()
         if isinstance(template_path, str):
             self.template_path = [template_path]
         elif isinstance(template_path, list):
@@ -119,10 +119,10 @@ class TemplateLoader:
         if template_name in self._template_cache:
             return self._template_cache[template_name]
 
-        file_path = await self.loop.run_in_executor(None, self.find_abs_path,
-                                                    template_name)
+        file_path = await self._loop.run_in_executor(None, self.find_abs_path,
+                                                     template_name)
 
-        template_content = await self.loop.run_in_executor(
+        template_content = await self._loop.run_in_executor(
             None, self.load_template_file_content, file_path)
 
         parsed_tpl = jinja2.Template(template_content)

@@ -19,29 +19,22 @@ import futurefinity.web
 
 import asyncio
 
-app = futurefinity.web.Application()
+loop = asyncio.get_event_loop()
+
+loop.set_debug(True)
+
+app = futurefinity.web.Application(debug=True, loop=loop)
 
 
 @app.add_handler("/")
 class MainHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        username = self.get_link_arg("username", default=None)
-        if self.get_link_arg("username"):
-            return "Hi, %s!" % username
-
-        return ("<form method=\"post\">"
-                "<input type=\"text\" name=\"username\">"
-                "<input type=\"submit\" value=\"submit\">"
-                "</form>")
-
-    async def post(self, *args, **kwargs):
-        username = self.get_body_arg("username")
-        return "Hi, %s!" % username
-
+        raise HTTPError(500)
+        return "Hello, World!"
 
 app.listen(23333)
 
 try:
-    asyncio.get_event_loop().run_forever()
+    loop.run_forever()
 except KeyboardInterrupt:
     pass
