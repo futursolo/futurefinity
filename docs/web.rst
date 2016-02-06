@@ -1,11 +1,13 @@
-`futurefinity.web` -- FutureFinty Web Application and Web RequestHandler
-=============================================================================
+``futurefinity.web`` -- FutureFinty Web ``Application`` and Web ``RequestHandler``
+==================================================================================
 
 .. highlight:: python3
 
 .. automodule:: futurefinity.web
 
 .. autoclass:: futurefinity.web.RequestHandler
+
+.. autoattribute:: futurefinity.web.RequestHandler.allow_methods
 
 .. automethod:: futurefinity.web.RequestHandler.get_link_arg
 
@@ -34,10 +36,6 @@
 .. automethod:: futurefinity.web.RequestHandler.get_secure_cookie
 
 .. automethod:: futurefinity.web.RequestHandler.set_secure_cookie
-
-.. automethod:: futurefinity.web.RequestHandler.get_session
-
-.. automethod:: futurefinity.web.RequestHandler.set_session
 
 .. automethod:: futurefinity.web.RequestHandler.check_csrf_value
 
@@ -81,8 +79,6 @@
 
 .. automethod:: futurefinity.web.RequestHandler.handle
 
-.. autoattribute:: futurefinity.web.RequestHandler.allow_methods
-
 .. autoclass:: futurefinity.web.NotFoundHandler
 
 .. autoclass:: futurefinity.web.StaticFileHandler
@@ -94,5 +90,3 @@
 .. automethod:: futurefinity.web.Application.listen
 
 .. automethod:: futurefinity.web.Application.add_handler
-
-.. automethod:: futurefinity.web.Application.find_handler

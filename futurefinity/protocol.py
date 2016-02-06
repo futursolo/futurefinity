@@ -48,6 +48,9 @@ _BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
 def _split_initial_lines(content: typing.Union[str, bytes],
                          reply_times: int=1,
                          max_split: int=-1) -> typing.Union[str, bytes]:
+    """
+    Split HTTP Initial Lines to a list.
+    """
     if isinstance(content, str):
         return content.split(_CRLF_MARK * reply_times, max_split)
     if isinstance(content, bytes):
@@ -559,40 +562,6 @@ class HTTPResponse:
 
         self._pending_bytes = b""
 
-    def make_http_v1_response(self):
-        response = b""
-        if self.http_version == 11:
-            response += b"HTTP/1.1 "
-        elif self.http_version == 10:
-            response += b"HTTP/1.1 "
-        else:
-            raise HTTPError(500)  # Unknown HTTP Version
-
-        response += ensure_bytes(str(self.status_code)) + b" "
-        response += ensure_bytes(status_code_text[self.status_code])
-        response += _CRLF_BYTES_MARK
-
-        headers = self.headers.copy()
-
-        if "content-type" not in headers.keys():
-            headers.add("content-type", "text/html; charset=utf-8;")
-
-        if "content-length" not in headers.keys():
-            headers.add("content-length",
-                        str(len(self.body)))
-
-        if "date" not in headers.keys():
-            headers.add("date", format_timestamp())
-
-        headers.accept_cookies_for_response(self.cookies)
-
-        response += headers.make_http_v1_header()
-        response += _CRLF_BYTES_MARK
-
-        response += self.body
-
-        return response
-
     def parse_http_v1_response(self, response_bytes) -> (bool, bytes):
         self._pending_bytes += response_bytes
 
@@ -674,3 +643,37 @@ class HTTPResponse:
 
         self._pending_bytes = b""
         return (True, response_body)
+
+    def make_http_v1_response(self):
+        response = b""
+        if self.http_version == 11:
+            response += b"HTTP/1.1 "
+        elif self.http_version == 10:
+            response += b"HTTP/1.1 "
+        else:
+            raise HTTPError(500)  # Unknown HTTP Version
+
+        response += ensure_bytes(str(self.status_code)) + b" "
+        response += ensure_bytes(status_code_text[self.status_code])
+        response += _CRLF_BYTES_MARK
+
+        headers = self.headers.copy()
+
+        if "content-type" not in headers.keys():
+            headers.add("content-type", "text/html; charset=utf-8;")
+
+        if "content-length" not in headers.keys():
+            headers.add("content-length",
+                        str(len(self.body)))
+
+        if "date" not in headers.keys():
+            headers.add("date", format_timestamp())
+
+        headers.accept_cookies_for_response(self.cookies)
+
+        response += headers.make_http_v1_header()
+        response += _CRLF_BYTES_MARK
+
+        response += self.body
+
+        return response

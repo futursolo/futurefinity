@@ -194,8 +194,7 @@ class RequestHandler:
         """
         Clear a cookie with the name.
         """
-        self.set_cookie(name=name, value="",
-                        expires=format_timestamp(0))
+        self.set_cookie(name=name, value="", expires=format_timestamp(0))
 
     def clear_all_cookies(self):
         """

@@ -1,5 +1,5 @@
 FutureFinity |release| Documentation
-========================================
+====================================
 
 .. highlight:: python3
 
@@ -9,8 +9,7 @@ Overview
   Benefit from the non-blocking model and asyncio, FutureFinity can handle thousands of requests
   at the same time.
 
-  The Source Code is hosted on `GitHub <https://github.com/futursolo/futurefinity>`_,
-  you can also submit issues through `GitHub Issues <https://github.com/futursolo/futurefinity/issues>`_.
+  The Source Code is hosted on `GitHub <https://github.com/futursolo/futurefinity>`_.
 
 Hello, World!
 -------------
@@ -42,7 +41,7 @@ If this is not a stable release of FutureFinity, please do unittest before you u
 
   python setup.py test
 
-If any tests failed, please report an issue on `GitHub <https://github.com/futursolo/futurefinity/issues/new>`_.
+If any tests failed, please report an issue.
 
 System Dependencies
 -------------------
@@ -77,6 +76,10 @@ Also see:
    tutorial
    web
    server
+   protocol
+   routing
+   security
+   template
    utils
 
 

@@ -1,5 +1,5 @@
-`futurefinity.server` -- FutureFinity Web Server Class
-======================================================
+``futurefinity.server`` -- FutureFinity HTTPServer Class
+========================================================
 
 .. highlight:: python3
 
@@ -17,18 +17,18 @@
 
 .. automethod:: futurefinity.server.HTTPServer.handle_request_error
 
-.. automethod:: futurefinity.server.HTTPServer.handle_request_error_http_v1
+.. automethod:: futurefinity.server.HTTPServer.handle_http_v1_request_error
 
 .. automethod:: futurefinity.server.HTTPServer.data_received
 
-.. automethod:: futurefinity.server.HTTPServer.data_received_http_v1
+.. automethod:: futurefinity.server.HTTPServer.http_v1_data_received
 
-.. automethod:: futurefinity.server.HTTPServer.parse_body_http_v1
+.. automethod:: futurefinity.server.HTTPServer.request_header_finished
 
 .. automethod:: futurefinity.server.HTTPServer.handle_request
 
-.. automethod:: futurefinity.server.HTTPServer.make_response
+.. automethod:: futurefinity.server.HTTPServer.respond_request
 
-.. automethod:: futurefinity.server.HTTPServer.make_http_v1_response
+.. automethod:: futurefinity.server.HTTPServer.respond_http_v1_request
 
 .. automethod:: futurefinity.server.HTTPServer.connection_lost
