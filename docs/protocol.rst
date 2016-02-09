@@ -49,6 +49,6 @@
 
 .. autoclass:: futurefinity.protocol.HTTPResponse
 
-.. automethod:: futurefinity.protocol.HTTPResponse.make_http_v1_response
-
 .. automethod:: futurefinity.protocol.HTTPResponse.parse_http_v1_response
+
+.. automethod:: futurefinity.protocol.HTTPResponse.make_http_v1_response
