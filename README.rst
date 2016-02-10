@@ -2,19 +2,19 @@ FutureFinity
 ============
 FutureFinity is an asynchronous Python web framework designed for asyncio and native coroutines.
 
-.. image:: https://travis-ci.org/futursolo/FutureFinity.svg?branch=master
-    :target: https://travis-ci.org/futursolo/FutureFinity
+.. image:: https://travis-ci.org/futursolo/futurefinity.svg?branch=master
+    :target: https://travis-ci.org/futursolo/futurefinity
 
-.. image:: https://coveralls.io/repos/futursolo/FutureFinity/badge.svg?branch=master&service=github
-    :target: https://coveralls.io/github/futursolo/FutureFinity?branch=master
+.. image:: https://coveralls.io/repos/futursolo/futurefinity/badge.svg?branch=master&service=github
+    :target: https://coveralls.io/github/futursolo/futurefinity?branch=master
 
-.. image:: https://img.shields.io/pypi/v/FutureFinity.svg?style=flat
-    :target: https://pypi.python.org/pypi/FutureFinity
+.. image:: https://img.shields.io/pypi/v/futurefinity.svg?style=flat
+    :target: https://pypi.python.org/pypi/futurefinity
 
-.. image:: https://img.shields.io/github/license/futursolo/FutureFinity.svg
+.. image:: https://img.shields.io/github/license/futursolo/futurefinity.svg
     :target: https://github.com/futursolo/FutureFinity/blob/master/LICENSE
 
-.. image:: https://img.shields.io/pypi/pyversions/FutureFinity.svg
+.. image:: https://img.shields.io/pypi/pyversions/futurefinity.svg
     :target: https://www.python.org/downloads/release/python-350/
 
 
@@ -28,17 +28,16 @@ and do `cd doc; make html`.
 Requirements
 ------------
 - Python>=3.5.0
-- Routes>=2.0.0
+
 - Cryptography>=1.0.0(Optional, Recommended, Used by AES GCM Secure Cookie)
 - Jinja2>=2.0.0(Optional, Used by Template Rendering)
-- aioredis>=1.0.0(Optional, Used by Redis Session)
 
 Installation
 ------------
 
 .. code-block:: shell
 
-  $ pip install FutureFinity
+  $ pip install futurefinity
 
 License
 -------

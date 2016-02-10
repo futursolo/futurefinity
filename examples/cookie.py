@@ -16,20 +16,38 @@
 #   limitations under the License.
 
 import futurefinity.web
+
 import asyncio
 
-loop = asyncio.get_event_loop()
 app = futurefinity.web.Application()
 
 
-@app.add_handler("/{name}")
-class DynamicRoutingHandler(futurefinity.web.RequestHandler):
+@app.add_handler("/")
+class MainHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        return "Hello, " + kwargs["name"] + "!"
+        username = self.get_cookie("username", default=None)
+        if not username:
+            return self.redirect("/login")
+
+        return "Hi, %s!" % username
+
+
+@app.add_handler("/login")
+class LoginHandler(futurefinity.web.RequestHandler):
+    async def get(self, *args, **kwargs):
+        return ("<form method=\"post\">"
+                "<input type=\"text\" name=\"username\">"
+                "<input type=\"submit\" value=\"submit\">"
+                "</form>")
+
+    async def post(self, *args, **kwargs):
+        username = self.get_body_arg("username")
+        self.set_cookie("username", username)
+        return self.redirect("/")
 
 app.listen(23333)
 
 try:
-    loop.run_forever()
+    asyncio.get_event_loop().run_forever()
 except KeyboardInterrupt:
     pass

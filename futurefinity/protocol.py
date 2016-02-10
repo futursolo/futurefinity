@@ -26,10 +26,7 @@ import futurefinity
 
 import uuid
 import typing
-
 import urllib.parse
-
-__all__ = ["status_code_text", "HTTPCookies"]
 
 _CRLF_MARK = "\r\n"
 _CRLF_BYTES_MARK = b"\r\n"
@@ -48,6 +45,9 @@ _BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
 def _split_initial_lines(content: typing.Union[str, bytes],
                          reply_times: int=1,
                          max_split: int=-1) -> typing.Union[str, bytes]:
+    """
+    Split HTTP Initial Lines to a list.
+    """
     if isinstance(content, str):
         return content.split(_CRLF_MARK * reply_times, max_split)
     if isinstance(content, bytes):
@@ -64,8 +64,7 @@ class HTTPError(Exception):
     .. code-block:: python3
 
       async def get(self, *args, **kwargs):
-          raise HTTPError(500, message='Please contact system administor.')
-
+          raise HTTPError(500, message='Please contact system administrator.')
     """
     def __init__(self, status_code: int=200, message: str=None,
                  *args, **kwargs):
@@ -74,6 +73,21 @@ class HTTPError(Exception):
 
 
 class CapitalizedHTTPv1Header(dict):
+    """
+    Convert a string to HTTPHeader style capiltalize.
+
+    .. code-block:: python3
+
+      >>> capitalize_header = CapitalizedHTTPv1Header()
+      >>> capitalize_header["set-cookie"]
+      'Set-Cookie'
+      >>> capitalize_header["SET-COOKIE"]
+      'Set-Cookie'
+      >>> capitalize_header["sET-CooKIe"]
+      'Set-Cookie'
+      >>> capitalize_header["MY-cUsToM-heAdER"]
+      'My-Custom-Header'
+    """
     def __init__(self, *args, **kwargs):
         dict.__init__(self, *args, **kwargs)
         self.update({
@@ -108,7 +122,7 @@ capitalize_header = CapitalizedHTTPv1Header()
 
 class HTTPHeaders(TolerantMagicDict):
     """
-    HTTPHeaders class, based on MagicDict.
+    HTTPHeaders class, based on TolerantMagicDict.
 
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Headers.
@@ -121,14 +135,13 @@ class HTTPHeaders(TolerantMagicDict):
         return "HTTPHeaders(%s)" % str(content_list)
 
     def copy(self):
-        """
-        Create another instance of HTTPHeaders but contains the same content.
-        """
         return HTTPHeaders(self)
 
     def parse_http_v1_header(self, data: typing.Union[str, bytes, list]):
         """
         Parse HTTP/1.x HTTP Header.
+
+        It will return True if it is finished successfully, or raise an Error.
         """
         if isinstance(data, list):
             splitted_data = data
@@ -151,6 +164,9 @@ class HTTPHeaders(TolerantMagicDict):
         return True
 
     def accept_cookies_for_request(self, cookies: HTTPCookies):
+        """
+        Insert all the cookies as a request cookie header.
+        """
         cookie_string = ""
         if "cookie" in self.keys():
             cookie_string += self["cookie"]
@@ -163,17 +179,21 @@ class HTTPHeaders(TolerantMagicDict):
             self["cookie"] = cookie_string
 
     def accept_cookies_for_response(self, cookies: HTTPCookies):
+        """
+        Insert all the cookies as response set cookie headers.
+        """
         for cookie_morsel in cookies.values():
             self.add("set-cookie", cookie_morsel.OutputString())
 
     def make_http_v1_header(self) -> bytes:
+        """
+        Convert all the headers to bytes.
+        """
         header_bytes = b""
         for (header_name, header_value) in self.items():
-            header_bytes += ensure_bytes(
-                "%(header_name)s: %(header_value)s" % {
-                    "header_name": capitalize_header[header_name],
-                    "header_value": header_value
-                }) + _CRLF_BYTES_MARK
+            header_bytes += ensure_bytes("%s: %s" % (
+                capitalize_header[header_name],
+                header_value)) + _CRLF_BYTES_MARK
 
         return header_bytes
 
@@ -182,6 +202,9 @@ class HTTPHeaders(TolerantMagicDict):
 
 
 class HTTPFile:
+    """
+    Containing a file as a http form field.
+    """
     def __init__(self, fieldname: str, filename: str,
                  content: typing.Union[str, bytes],
                  content_type: str="application/octet-stream",
@@ -206,6 +229,9 @@ class HTTPFile:
                 }
 
     def make_http_v1_form_field(self) -> bytes:
+        """
+        Convert this form field to bytes.
+        """
         field = b""
         headers = self.headers.copy()
 
@@ -226,6 +252,12 @@ class HTTPFile:
 
 
 class HTTPBody(TolerantMagicDict):
+    """
+    HTTPBody class, based on TolerantMagicDict.
+
+    It has not only all the features from TolerantMagicDict, but also
+    can parse and make HTTP Body.
+    """
     def __init__(self, *args, **kwargs):
         TolerantMagicDict.__init__(self, *args, **kwargs)
         self._content_length = 0
@@ -234,15 +266,27 @@ class HTTPBody(TolerantMagicDict):
         self._pending_bytes = b""
 
     def set_content_length(self, content_length: int):
+        """
+        Set the Content Length of the body.
+        """
         self._content_length = content_length
 
     def get_content_length(self):
+        """
+        Get the Content Length of the body.
+        """
         return self._content_length
 
     def set_content_type(self, content_type: str):
+        """
+        Set the Content Type of the body.
+        """
         self._content_type = content_type
 
     def get_content_type(self):
+        """
+        Get the Content Type of the body.
+        """
         return self._content_type
 
     def __str__(self):
@@ -253,12 +297,15 @@ class HTTPBody(TolerantMagicDict):
         return "HTTPBody(%s)" % str(content_list)
 
     def copy(self):
-        """
-        Create another instance of HTTPBody but contains the same content.
-        """
         return HTTPBody(self)
 
     def parse_http_v1_body(self, data: typing.Union[str, bytes]) -> bool:
+        """
+        Parse HTTP v1 Body.
+
+        It will return ``True`` is it is finished successfully, or ``False``
+        when it is still missing some content.
+        """
         self._pending_bytes += ensure_bytes(data)
         if len(self._pending_bytes) < self._content_length:
             return False  # Request Not Completed, wait.
@@ -338,6 +385,9 @@ class HTTPBody(TolerantMagicDict):
         return True
 
     def make_http_v1_body(self):
+        """
+        Generate HTTP v1 Body to bytes.
+        """
         body = b""
         if self._content_type == "application/x-www-form-urlencoded":
             body += ensure_bytes(urllib.parse.urlencode(self))
@@ -380,6 +430,11 @@ class HTTPBody(TolerantMagicDict):
 
 
 class HTTPRequest:
+    """
+    HTTP Request Implmentation.
+
+    This class contains a HTTP Request.
+    """
     def __init__(self, path: typing.Optional[str]=None,
                  host: typing.Optional[str]="",
                  method: typing.Optional[str]="GET",
@@ -401,6 +456,12 @@ class HTTPRequest:
         self.body_expected = False
 
     def parse_http_v1_request(self, request_bytes: bytes) -> (bool, bytes):
+        """
+        Parse a HTTP v1 Request.
+
+        If the request header is successfully parsed,  It will return true
+        and tuple contains the rest part of request.
+        """
         self._pending_bytes += request_bytes
 
         if self._pending_bytes.find(_CRLF_BYTES_MARK * 2) == -1:
@@ -465,6 +526,9 @@ class HTTPRequest:
         return (True, request_body)
 
     def make_http_v1_request(self):
+        """
+        Make a HTTP v1 Request to bytes.
+        """
         request = b""
 
         if self.method not in _SUPPORTED_METHODS:
@@ -544,6 +608,11 @@ class HTTPRequest:
 
 
 class HTTPResponse:
+    """
+    HTTP Response Implmentation.
+
+    This class contains a HTTP Response.
+    """
     def __init__(self,
                  http_version: typing.Optional[int]=None,
                  status_code: typing.Optional[int]=None,
@@ -559,41 +628,13 @@ class HTTPResponse:
 
         self._pending_bytes = b""
 
-    def make_http_v1_response(self):
-        response = b""
-        if self.http_version == 11:
-            response += b"HTTP/1.1 "
-        elif self.http_version == 10:
-            response += b"HTTP/1.1 "
-        else:
-            raise HTTPError(500)  # Unknown HTTP Version
-
-        response += ensure_bytes(str(self.status_code)) + b" "
-        response += ensure_bytes(status_code_text[self.status_code])
-        response += _CRLF_BYTES_MARK
-
-        headers = self.headers.copy()
-
-        if "content-type" not in headers.keys():
-            headers.add("content-type", "text/html; charset=utf-8;")
-
-        if "content-length" not in headers.keys():
-            headers.add("content-length",
-                        str(len(self.body)))
-
-        if "date" not in headers.keys():
-            headers.add("date", format_timestamp())
-
-        headers.accept_cookies_for_response(self.cookies)
-
-        response += headers.make_http_v1_header()
-        response += _CRLF_BYTES_MARK
-
-        response += self.body
-
-        return response
-
     def parse_http_v1_response(self, response_bytes) -> (bool, bytes):
+        """
+        Parse a HTTP v1 Response.
+
+        If the response header is successfully parsed, It will return true
+        and tuple contains the rest part of response.
+        """
         self._pending_bytes += response_bytes
 
         if self._pending_bytes.find(_CRLF_BYTES_MARK * 2) == -1:
@@ -674,3 +715,40 @@ class HTTPResponse:
 
         self._pending_bytes = b""
         return (True, response_body)
+
+    def make_http_v1_response(self):
+        """
+        Make a HTTP v1 Response to bytes.
+        """
+        response = b""
+        if self.http_version == 11:
+            response += b"HTTP/1.1 "
+        elif self.http_version == 10:
+            response += b"HTTP/1.1 "
+        else:
+            raise HTTPError(500)  # Unknown HTTP Version
+
+        response += ensure_bytes(str(self.status_code)) + b" "
+        response += ensure_bytes(status_code_text[self.status_code])
+        response += _CRLF_BYTES_MARK
+
+        headers = self.headers.copy()
+
+        if "content-type" not in headers.keys():
+            headers.add("content-type", "text/html; charset=utf-8;")
+
+        if "content-length" not in headers.keys():
+            headers.add("content-length",
+                        str(len(self.body)))
+
+        if "date" not in headers.keys():
+            headers.add("date", format_timestamp())
+
+        headers.accept_cookies_for_response(self.cookies)
+
+        response += headers.make_http_v1_header()
+        response += _CRLF_BYTES_MARK
+
+        response += self.body
+
+        return response

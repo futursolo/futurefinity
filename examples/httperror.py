@@ -15,30 +15,23 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.protocol import HTTPError
+
 import futurefinity.web
+
 import asyncio
 
-loop = asyncio.get_event_loop()
-app = futurefinity.web.Application()
+app = futurefinity.web.Application(debug=True)
 
 
-@app.add_handler("/link_arg_body_arg_and_utf8")
-class LinkArgBodyArgAndUTF8Handler(futurefinity.web.RequestHandler):
+@app.add_handler("/")
+class RootHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        if self.get_link_arg("ping", default=None):
-            return "I heard your ping!"
-        else:
-            return "Where is your ping?"
-
-    async def post(self, *args, **kwargs):
-        if self.get_body_arg("ping", default=None):
-            return "I heard your body ping!"
-        else:
-            return "Where is your body ping?"
+        raise HTTPError(500)
 
 app.listen(23333)
 
 try:
-    loop.run_forever()
+    asyncio.get_event_loop().run_forever()
 except KeyboardInterrupt:
     pass

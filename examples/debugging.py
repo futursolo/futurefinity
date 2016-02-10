@@ -16,18 +16,21 @@
 #   limitations under the License.
 
 import futurefinity.web
+
 import asyncio
 
 loop = asyncio.get_event_loop()
-app = futurefinity.web.Application()
+
+loop.set_debug(True)
+
+app = futurefinity.web.Application(debug=True, loop=loop)
 
 
-@app.add_handler("/user_cookie")
-class UserCookieHandler(futurefinity.web.RequestHandler):
+@app.add_handler("/")
+class MainHandler(futurefinity.web.RequestHandler):
     async def get(self, *args, **kwargs):
-        round_num = int(self.get_cookie("rofl-round", default=450))
-        self.set_cookie("rofl-round", str(round_num + 100))
-        return "If you saw nothing except this sentence, use curl -i."
+        raise HTTPError(500)
+        return "Hello, World!"
 
 app.listen(23333)
 

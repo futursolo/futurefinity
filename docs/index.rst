@@ -1,23 +1,7 @@
 FutureFinity |release| Documentation
-========================================
+====================================
 
 .. highlight:: python3
-
-.. image:: https://travis-ci.org/futursolo/FutureFinity.svg?branch=master
-    :target: https://travis-ci.org/futursolo/FutureFinity
-
-.. image:: https://coveralls.io/repos/futursolo/FutureFinity/badge.svg?branch=master&service=github
-    :target: https://coveralls.io/github/futursolo/FutureFinity?branch=master
-
-.. image:: https://img.shields.io/pypi/v/FutureFinity.svg?style=flat
-    :target: https://pypi.python.org/pypi/FutureFinity
-
-.. image:: https://img.shields.io/github/license/futursolo/FutureFinity.svg
-    :target: https://github.com/futursolo/FutureFinity/blob/master/LICENSE
-
-.. image:: https://img.shields.io/pypi/pyversions/FutureFinity.svg
-    :target: https://www.python.org/downloads/release/python-350/
-
 
 Overview
 --------
@@ -25,60 +9,73 @@ Overview
   Benefit from the non-blocking model and asyncio, FutureFinity can handle thousands of requests
   at the same time.
 
+  The Source Code is hosted on `GitHub <https://github.com/futursolo/futurefinity>`_.
+
 Hello, World!
 -------------
 
-.. literalinclude:: ../example/hello_world.py
+.. literalinclude:: ../examples/hello_world.py
    :language: python3
    :lines: 17-
 
 Installation
 ------------
 
-The installation of FutureFinity is as sample as install other applications thourgh pip::
+The installation of FutureFinity is as sample as install other applications through pip::
 
-  pip install FutureFinity
+  pip install futurefinity
 
-For system requirements and other installation method, please read :doc:`install`.
+Install from GitHub master branch::
 
-Tutorial
---------
-Based on the "Hello, World!" example, we can add more exciting features to it.
+  pip install git+git://github.com/futursolo/futurefinity.git
 
-Dynamic Routing:
+Install from source code:
 
-.. literalinclude:: ../example/dynamic_routing.py
-   :language: python3
-   :lines: 24-28
+Download :current_tarball:`z`::
 
-Custom HTTP Header:
+  tar xvzf futurefinity-(version).tar.gz
+  cd futurefinity-(version)
+  python setup.py install
 
-.. literalinclude:: ../example/custom_header.py
-   :language: python3
-   :lines: 24-33
+If this is not a stable release of FutureFinity, please do unittest before you use it::
 
-User Cookie:
+  python setup.py test
 
-.. literalinclude:: ../example/user_cookie.py
-   :language: python3
-   :lines: 25-31
+If any tests failed, please report an issue.
 
-Link argument(s), Body argument(s), and UTF-8 support:
+System Dependencies
+-------------------
+FutureFinity |version| will only work on Python 3.5 or higher.
 
-.. literalinclude:: ../example/link_arg_body_arg_and_utf8.py
-   :language: python3
-   :lines: 25-37
+**Optional Dependencies**:
+
+* `Cryptograhy <https://pypi.python.org/pypi/cryptography/>`_ is the crypto library
+  currently used by FutureFinity's security features.
+
+* `Jinja2 <https://pypi.python.org/pypi/cryptography/>`_ is the template library
+  currently used by FutureFinity's template rendering.
+
+**Platform**:
+
+Theoretically, FutureFinity can run on any system that supports asyncio.
+However, asyncio.SelectorEventLoop has a really low performance on windows
+and cannot handle over 512 handlers at the same time, and asyncio.ProactorEventLoop
+cannot support many features of asyncio. We recommend that running FutureFinity
+on Windows for only development use.
 
 Also see:
 ---------
 .. toctree::
    :titlesonly:
 
-   install
+   tutorial
    web
    server
+   protocol
+   routing
+   security
+   template
    utils
-   interface
 
 
 Indices and tables

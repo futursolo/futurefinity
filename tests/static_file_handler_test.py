@@ -15,62 +15,50 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str
-from futurefinity.template import render_template
-
 import futurefinity.web
 
 import asyncio
 
 import nose2
-import jinja2
 import requests
 import unittest
 import functools
 
 
-class TemplateInterfaceTestCollector(unittest.TestCase):
+class StaticFileHandlerTestCollector(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
         self.app = futurefinity.web.Application(
-            allow_keep_alive=False, debug=True,
-            template_path="example/template"
-        )
+            allow_keep_alive=False, static_path="examples/static", debug=True)
 
-    def test_jinja2_template_request(self):
-        @self.app.add_handler("/template_test")
-        class TestHandler(futurefinity.web.RequestHandler):
-            @render_template("jinja2.htm")
-            async def get(self, *args, **kwargs):
-                return {"name": "John Smith"}
+    def test_static_file_handler_request(self):
+        self.requests_result = None
+        self.app.add_handler("/static/(?P<file>.*?)",
+                             handler=futurefinity.web.StaticFileHandler)
 
         server = self.app.listen(8888)
 
         async def get_requests_result(self):
-            try:
+            if not self.requests_result:
                 self.requests_result = await self.loop.run_in_executor(
                     None, functools.partial(
-                        requests.get, "http://127.0.0.1:8888/template_test"
+                        requests.get,
+                        "http://127.0.0.1:8888/static/random_string"
                     )
                 )
-            except:
-                traceback.print_exc()
-            finally:
-                server.close()
-                await server.wait_closed()
-                self.loop.stop()
-
+            server.close()
+            await server.wait_closed()
+            self.loop.stop()
         asyncio.ensure_future(get_requests_result(self))
         self.loop.run_forever()
 
-        jinja2_envir = jinja2.Environment(loader=jinja2.FileSystemLoader(
-            "example/template",
-            encoding="utf-8"
-        ))
-
-        template = jinja2_envir.get_template("jinja2.htm")
-
         self.assertEqual(self.requests_result.status_code, 200,
                          "Wrong Status Code")
-        self.assertEqual(ensure_str(self.requests_result.text),
-                         ensure_str(template.render(name="John Smith")))
+
+        self.assertEqual(self.requests_result.headers["content-type"],
+                         "application/octet-stream")
+
+        random_string = b""
+        with open("examples/static/random_string", "rb") as f:
+            random_string = f.read()
+        self.assertEqual(self.requests_result.content, random_string)

@@ -19,24 +19,25 @@ try:
     from setuptools import setup
 except ImportError:
     from distutils.core import setup
-import sys
+
 import futurefinity
+
+import sys
 
 if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
     raise RuntimeError("FutureFinity Requires Python 3.5.0 or higher.")
 
-
-install_requires = ["routes"]
+install_requires = []
 
 tests_require = ["requests", "nose2", "jinja2", "cryptography"]
 
 if __name__ == "__main__":
     setup(
-        name="FutureFinity",
+        name="futurefinity",
         version=futurefinity.version,
         author="Futur Solo",
         author_email="futursolo@gmail.com",
-        url="https://github.com/futursolo/FutureFinity",
+        url="https://github.com/futursolo/futurefinity",
         license="Apache License 2.0",
         description="FutureFinity is an asynchronous Python web framework "
                     "designed for asyncio and native coroutines.",
