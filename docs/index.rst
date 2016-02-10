@@ -25,16 +25,16 @@ The installation of FutureFinity is as sample as install other applications thro
 
   pip install futurefinity
 
-Install the latest GitHub Master Version::
+Install from GitHub master branch::
 
   pip install git+git://github.com/futursolo/futurefinity.git
 
-Install From Source Code:
+Install from source code:
 
 Download :current_tarball:`z`::
 
-  tar xvzf FutureFinity-(version).tar.gz
-  cd FutureFinity-(version)
+  tar xvzf futurefinity-(version).tar.gz
+  cd futurefinity-(version)
   python setup.py install
 
 If this is not a stable release of FutureFinity, please do unittest before you use it::
@@ -47,12 +47,7 @@ System Dependencies
 -------------------
 FutureFinity |version| will only work on Python 3.5 or higher.
 
-**Required**:
-
-* `Routes <https://pypi.python.org/pypi/Routes>`_ is the routing system
-  currently used by FutureFinity.
-
-**Optional**:
+**Optional Dependencies**:
 
 * `Cryptograhy <https://pypi.python.org/pypi/cryptography/>`_ is the crypto library
   currently used by FutureFinity's security features.
