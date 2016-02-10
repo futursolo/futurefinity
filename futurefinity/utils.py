@@ -16,15 +16,7 @@
 #   limitations under the License.
 
 """
-``futurefinity.utils`` contains a series of utilities that are useful to
-dealing with HTTP Protocol.
-
-This class is recommend to be imported without namespace.
-
-.. code-block:: python3
-
-  from futurefinity.utils import *
-
+``futurefinity.utils`` contains a series of utilities for common use.
 """
 
 import time
@@ -98,19 +90,25 @@ class MagicDict(collections.abc.MutableMapping):
         """
         return self._as_list.get(name, default)
 
-    def items(self):
-        """
-        Iter all values.
-        """
-        for name, values in self._as_list.items():
-            for value in values:
-                yield (name, value)
-
     def get_first(self, name, default=None):
         """
         Get the first value with the name.
         """
         return self._as_list.get(name, [default])[0]
+
+    def items(self):
+        for name, values in self._as_list.items():
+            for value in values:
+                yield (name, value)
+
+    def keys(self):
+        for key in self._as_list.keys():
+            yield key
+
+    def values(self):
+        for values in self._as_list.values():
+            for value in values:
+                yield value
 
     def __setitem__(self, name, value):
         self._dict[name] = value
@@ -137,9 +135,6 @@ class MagicDict(collections.abc.MutableMapping):
         return "MagicDict(%s)" % str(content_list)
 
     def copy(self):
-        """
-        Create another instance of MagicDict but contains the same content.
-        """
         return MagicDict(self)
 
     __copy__ = copy
@@ -155,24 +150,16 @@ class TolerantMagicDict(MagicDict):
 
     **This doesn't mean that the normal MagicDict is mean.**
     """
+
     def add(self, name: str, value: str):
-        """
-        Add an element and change the name to lowercase.
-        """
         lower_name = name.lower()
         return MagicDict.add(self, lower_name, value)
 
     def get_list(self, name: str, default: typing.Optional[str]=None):
-        """
-        Get all elements with the name in a list.
-        """
         lower_name = name.lower()
         return MagicDict.get_list(self, lower_name, default=default)
 
     def get_first(self, name: str, default: typing.Optional[str]=None):
-        """
-        Get the first element with the name.
-        """
         lower_name = name.lower()
         return MagicDict.get_first(self, lower_name, default=default)
 
@@ -196,10 +183,6 @@ class TolerantMagicDict(MagicDict):
         return "TolerantMagicDict(%s)" % str(content_list)
 
     def copy(self):
-        """
-        Create another instance of TolerantMagicDict,
-        but contains the same content.
-        """
         return TolerantMagicDict(self)
 
     __copy__ = copy
@@ -210,7 +193,7 @@ def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,
                                       time.struct_time,
                                       datetime.datetime]=None) -> str:
     """
-    Make a timestamp that fits HTTP Response.
+    Make a HTTP Protocol timestamp.
     """
     if ts is None:
         ts = time.time()
