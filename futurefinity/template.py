@@ -54,19 +54,13 @@ def render_template(template_name: str):
     return decorator
 
 
-class Template:
-    def __init__(self, *args, **kwargs):
-        raise NotImplementedError("Currently, `futurefinity.template` needs "
-                                  "Jinja2 to work. Please install it before "
-                                  "using template rendering.")
-
-    def render(self, *args, **kwargs):
-        raise NotImplementedError("Currently, `futurefinity.template` needs "
-                                  "Jinja2 to work. Please install it before "
-                                  "using template rendering.")
-
-
 class TemplateLoader:
+    """
+    The Multithread TemplateLoader.
+
+    This library is used to take the advantage of multithreading
+    to avoid blocking I/O during loading library.
+    """
     def __init__(self, template_path: typing.Union[list, str],
                  loop: typing.Optional[asyncio.BaseEventLoop]=None,
                  cache_template: bool=True):
@@ -87,6 +81,11 @@ class TemplateLoader:
         self._template_cache = {}
 
     def find_abs_path(self, template_name: str) -> str:
+        """
+        Find the absolute path of the template from the template_path.
+
+        If no matched file found, it will raise a ``FileNotFoundError``.
+        """
         for current_path in self.template_path:
             file_path = os.path.join(os.path.realpath(current_path),
                                      template_name)
@@ -96,12 +95,20 @@ class TemplateLoader:
             "No such file %s in template_path" % repr(template_name))
 
     def load_template_file_content(self, file_path):
+        """
+        Load a file synchronously. This function can be put into a thread
+        executor to load the file content concurrently.
+        """
         with open(file_path) as tpl:
             return tpl.read()
 
-    def load_template(self,
-                      template_name: str) -> typing.Union[Template,
-                                                          jinja2.Template]:
+    def load_template(self, template_name: str) -> jinja2.Template:
+        """
+        Load and parse the template synchronously.
+
+        **This function should only be used when the eventloop is
+        unavailable.**
+        """
         if template_name in self._template_cache:
             return self._template_cache[template_name]
 
@@ -114,8 +121,10 @@ class TemplateLoader:
 
         return parsed_tpl
 
-    async def async_load_template(
-     self, template_name: str) -> typing.Union[Template, jinja2.Template]:
+    async def async_load_template(self, template_name: str) -> jinja2.Template:
+        """
+        Load and parse the template concurrently from the other thread.
+        """
         if template_name in self._template_cache:
             return self._template_cache[template_name]
 
