@@ -43,7 +43,7 @@ class HTTPServer(asyncio.Protocol):
 
       app.make_server()
 
-    The make_server() function will return a lambda warpped HTTPServer
+    The make_server() function will return a warpped HTTPServer
     instance, which can pass right Application Instance and Application
     Configuration to server.
     """
@@ -158,6 +158,11 @@ class HTTPServer(asyncio.Protocol):
             self.handle_request_error(e)
 
     def http_v1_data_received(self, data: bytes):
+        """
+        Called when http version is 1. This function should not be called
+        directly, data_received() function will handle it to right
+        http version.
+        """
         if self._request_header_finished is False:
             if self._request_parser is None:
                 self._request_parser = HTTPRequest()
@@ -191,6 +196,10 @@ class HTTPServer(asyncio.Protocol):
             self._futures[self._request_parser] = coro_future
 
     def request_header_finished(self, request: HTTPRequest):
+        """
+        Called when header is successfully loaded.
+        """
+
         matched_obj = self.app.handlers.find(request.path)
         request_handler = matched_obj.handler(
             app=self.app,
@@ -208,12 +217,14 @@ class HTTPServer(asyncio.Protocol):
         """
         Handle an HTTP Request to Right RequestHandler.
         """
+
         await self._request_handlers[request].handle()
 
     def respond_request(self, request: HTTPRequest, response: HTTPResponse):
         """
         Make http response to client.
         """
+
         if self.http_version == 20:
             pass  # HTTP/2 will be implemented later.
         else:
@@ -227,6 +238,7 @@ class HTTPServer(asyncio.Protocol):
         This function should not be called directly, respond_request() function
         will handle it to right http version.
         """
+
         use_keep_alive = (self.http_version == 11 and
                           self.app.settings.get("allow_keep_alive", True) and
                           response.status_code == 200)
@@ -260,6 +272,7 @@ class HTTPServer(asyncio.Protocol):
         """
         Called by Event Loop when the connection lost.
         """
+
         self.cancel_keep_alive_handler()
 
         for coro_future in self._futures.values():

@@ -29,6 +29,9 @@ import email.utils
 import collections.abc
 
 
+default_mark = object()
+
+
 def ensure_bytes(var: typing.Any) -> bytes:
     """
     Try to convert passed variable to a bytes object.
