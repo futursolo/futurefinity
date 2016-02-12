@@ -91,22 +91,46 @@ class CapitalizedHTTPv1Header(dict):
     def __init__(self, *args, **kwargs):
         dict.__init__(self, *args, **kwargs)
         self.update({
+            "te": "TE",
+            "age": "Age",
             "date": "Date",
             "etag": "ETag",
+            "from": "From",
+            "host": "Host",
+            "vary": "Vary",
             "allow": "Allow",
+            "range": "Range",
+            "accept": "Accept",
             "cookie": "Cookie",
+            "expect": "Expect",
             "server": "Server",
+            "referer": "Referer",
+            "if-match": "If-Match",
+            "if-range": "If-Range",
+            "location": "Location",
             "connection": "Connection",
             "keep-alive": "Keep-Alive",
             "set-cookie": "Set-Cookie",
             "user-agent": "User-Agent",
             "content-md5": "Content-MD5",
+            "retry-after": "Retry-After",
             "content-type": "Content-Type",
+            "max-forwards": "Max-Forwards",
+            "accept-ranges": "Accept-Ranges",
+            "authorization": "Authorization",
             "content-range": "Content-Range",
             "if-none-match": "If-None-Match",
             "last-modified": "Last-Modified",
+            "accept-charset": "Accept-Charset",
             "content-length": "Content-Length",
+            "accept-encoding": "Accept-Encoding",
+            "accept-language": "Accept-Language",
             "content-encoding": "Content-Encoding",
+            "www-authenticate": "WWW-Authenticate",
+            "if-modified-since": "If-Modified-Since",
+            "proxy-authenticate": "Proxy-Authenticate",
+            "if-unmodified-since": "If-Unmodified-Since",
+            "proxy-authorization": "Proxy-Authorization",
         })
 
     def __getitem__(self, key: str) -> str:
@@ -436,13 +460,17 @@ class HTTPRequest:
     This class contains a HTTP Request.
     """
     def __init__(self, path: typing.Optional[str]=None,
+                 scheme: typing.Optional[str]="http",
                  host: typing.Optional[str]="",
+                 port: typing.Optional[str]=0,
                  method: typing.Optional[str]="GET",
                  http_version: typing.Optional[int]=None,
                  headers: typing.Optional[HTTPHeaders]=None,
                  cookies: typing.Optional[HTTPCookies]=None,
                  body: typing.Optional[HTTPBody]=None):
         self.http_version = http_version or 10
+        self.scheme = scheme
+        self.port = port
         self._pending_bytes = b""
         self._splitted_bytes_length = 0
         self.path = path
@@ -554,7 +582,7 @@ class HTTPRequest:
         if self.http_version == 11:
             request += b"HTTP/1.1"
         elif self.http_version == 10:
-            request += b"HTTP/1.1"
+            request += b"HTTP/1.0"
         else:
             raise HTTPError(400)  # Unknown HTTP Version
 
@@ -563,7 +591,7 @@ class HTTPRequest:
         headers = self.headers.copy()
 
         headers.accept_cookies_for_request(self.cookies)
-
+        headers.add("host", self.host)
         body = b""
         if self.method in _BODY_EXPECTED_METHODS:
             self.body_expected = True
@@ -724,7 +752,7 @@ class HTTPResponse:
         if self.http_version == 11:
             response += b"HTTP/1.1 "
         elif self.http_version == 10:
-            response += b"HTTP/1.1 "
+            response += b"HTTP/1.0 "
         else:
             raise HTTPError(500)  # Unknown HTTP Version
 

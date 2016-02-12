@@ -63,6 +63,8 @@ class HTTPServer(asyncio.Protocol):
         self.direct_receiver = None
 
         self.http_version = 10
+        self.scheme = "http"
+        self.port = 0
 
         self._request_handlers = {}
         self._futures = {}
@@ -103,13 +105,17 @@ class HTTPServer(asyncio.Protocol):
         """
         self.transport = transport
         context = self.transport.get_extra_info("sslcontext", None)
-        if context and ssl.HAS_ALPN:  # NPN will not be supported
-            alpn_protocol = context.selected_alpn_protocol()
-            if alpn_protocol in ("h2", "h2-14", "h2-15", "h2-16", "h2-17"):
-                self.http_version = 20
-            elif alpn_protocol is not None:
-                self.transport.close()
-                raise Exception("Unsupported Protocol")
+        if context:
+            self.scheme = "https"
+            if ssl.HAS_ALPN:  # NPN will not be supported
+                alpn_protocol = context.selected_alpn_protocol()
+                if alpn_protocol in ("h2", "h2-14", "h2-15", "h2-16", "h2-17"):
+                    self.http_version = 20
+                elif alpn_protocol is not None:
+                    self.transport.close()
+                    raise Exception("Unsupported Protocol")
+
+        self.port = self.transport.get_extra_info("sockname")[1]
 
     def handle_request_error(self, e: Exception):
         """
@@ -165,7 +171,8 @@ class HTTPServer(asyncio.Protocol):
         """
         if self._request_header_finished is False:
             if self._request_parser is None:
-                self._request_parser = HTTPRequest()
+                self._request_parser = HTTPRequest(scheme=self.scheme,
+                                                   port=self.port)
 
             parse_result = self._request_parser.parse_http_v1_request(data)
             if parse_result[0] is False:
