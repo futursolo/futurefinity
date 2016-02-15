@@ -91,6 +91,7 @@ class HTTPRequestTestCollector(unittest.TestCase):
 
     def test_httprequest_parse_post_multipart(self):
         request = futurefinity.protocol.HTTPRequest()
+        request.http_version = 11
         file_content = os.urandom(32)
         body = b"-------as7B98bFk\r\n"
         body += b"Content-Disposition: form-data; name=\"normal-field\"\r\n"
@@ -140,6 +141,7 @@ filename=\"test.txt\"\r\n"
         request.headers.add("Custom", "CHeader")
         request.queries.add("asdf", "fdsa")
         request.cookies["custom"] = "cookie-value"
+        request.http_version = 11
 
         request_bytes = request.make_http_v1_request()
 
@@ -157,6 +159,7 @@ filename=\"test.txt\"\r\n"
         request = futurefinity.protocol.HTTPRequest()
         request.method = "POST"
         request.path = "/"
+        request.http_version = 11
 
         request.body.set_content_type("application/x-www-form-urlencoded")
         request.body.add("bodyfield", "hello")
@@ -178,8 +181,6 @@ filename=\"test.txt\"\r\n"
 
         self.assertEqual(request_body, b"bodyfield=hello")
 
-
-
     def test_httprequest_make_get_request(self):
         request = futurefinity.protocol.HTTPRequest()
         request.method = "GET"
@@ -187,6 +188,7 @@ filename=\"test.txt\"\r\n"
         request.headers.add("Custom", "CHeader")
         request.queries.add("asdf", "fdsa")
         request.cookies["custom"] = "cookie-value"
+        request.http_version = 11
 
         request_bytes = request.make_http_v1_request()
 
@@ -204,6 +206,7 @@ filename=\"test.txt\"\r\n"
         request = futurefinity.protocol.HTTPRequest()
         request.method = "POST"
         request.path = "/"
+        request.http_version = 11
 
         request.body.set_content_type("application/x-www-form-urlencoded")
         request.body.add("bodyfield", "hello")
@@ -226,6 +229,7 @@ filename=\"test.txt\"\r\n"
         request = futurefinity.protocol.HTTPRequest()
         request.method = "POST"
         request.path = "/"
+        request.http_version = 11
 
         file_content = ensure_bytes(base64.b64encode(os.urandom(32)))
 

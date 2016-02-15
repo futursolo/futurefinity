@@ -124,6 +124,39 @@ class HTTPClient:
 
         return self.fetch(request)
 
+    def get(self, url, headers=None, queries=None):
+        url_info = self.parse_url(url)
+        request = HTTPRequest(host=url_info["host"], port=url_info["port"],
+                              path=url_info["path"], scheme=url_info["scheme"])
+        if url_info["queries"]:
+            request.queries.update(url_info["queries"])
+        if headers:
+            request.headers.update(headers)
+        if queries:
+            request.queries.update(queries)
+
+        return self.fetch(request)
+
+    def post(self, url, headers=None, queries=None,
+             content_type="application/x-www-form-urlencoded",
+             body_fields=None):
+        url_info = self.parse_url(url)
+        request = HTTPRequest(host=url_info["host"], port=url_info["port"],
+                              path=url_info["path"], scheme=url_info["scheme"])
+        request.method = "POST"
+        if url_info["queries"]:
+            request.queries.update(url_info["queries"])
+        if headers:
+            request.headers.update(headers)
+        if queries:
+            request.queries.update(queries)
+
+        request.body.set_content_type(content_type)
+        if body_fields:
+            request.body.update(body_fields)
+
+        return self.fetch(request)
+
     def fetch(self, request):
         future = asyncio.Future()
 
