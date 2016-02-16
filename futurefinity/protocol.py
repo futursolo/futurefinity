@@ -24,6 +24,7 @@ from http.client import responses as status_code_text
 
 import futurefinity
 
+import json
 import uuid
 import typing
 import urllib.parse
@@ -403,6 +404,9 @@ class HTTPBody(TolerantMagicDict):
                     except UnicodeDecodeError:
                         pass
                     self.add(disposition_dict.get_first("name", ""), content)
+        if self._content_type.lower().strip() == "application/json":
+            self.update(json.loads(
+                ensure_str(self._pending_bytes[:self._content_length])))
         else:
             raise HTTPError(400)  # Unknown content-type.
 
