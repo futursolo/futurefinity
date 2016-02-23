@@ -57,7 +57,7 @@ class HTTPClientConnection(asyncio.Protocol):
         """
         self.cancel_timeout_handler()
         self._timeout_handler = self._loop.call_later(
-            30, self.close_timeout_connection)
+            60, self.close_timeout_connection)
 
     def cancel_timeout_handler(self):
         """
