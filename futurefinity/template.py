@@ -102,7 +102,7 @@ class TemplateLoader:
         with open(file_path) as tpl:
             return tpl.read()
 
-    def load_template(self, template_name: str) -> jinja2.Template:
+    def load_template(self, template_name: str) -> object:
         """
         Load and parse the template synchronously.
 
@@ -121,7 +121,7 @@ class TemplateLoader:
 
         return parsed_tpl
 
-    async def async_load_template(self, template_name: str) -> jinja2.Template:
+    async def async_load_template(self, template_name: str) -> object:
         """
         Load and parse the template concurrently from the other thread.
         """

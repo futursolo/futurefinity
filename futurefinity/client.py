@@ -31,7 +31,9 @@ class HTTPClientConnection(asyncio.Protocol):
     def __init__(self, request: HTTPRequest, response_future: asyncio.Future,
                  *args, loop: asyncio.BaseEventLoop=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
+
         self.transport = None
+        self._timeout_handler = None
 
         self.request = request
         if "user-agent" not in self.request.headers:
@@ -43,11 +45,36 @@ class HTTPClientConnection(asyncio.Protocol):
         self._response_header_finished = False
         self._response_body_finished = False
 
+    def close_timeout_connection(self):
+        if self.transport is not None:
+            self.transport.close()
+
+        self.response_future.set_exception(Exception)
+
+    def set_timeout_handler(self):
+        """
+        Set a EventLoop.call_later instance, close transport after timeout.
+        """
+        self.cancel_timeout_handler()
+        self._timeout_handler = self._loop.call_later(
+            30, self.close_timeout_connection)
+
+    def cancel_timeout_handler(self):
+        """
+        Cancel the EventLoop.call_later instance, prevent transport be closed
+        accidently.
+        """
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+        self._timeout_handler = None
+
     def connection_made(self, transport):
         self.transport = transport
         self.transport.write(self.request.make_http_v1_request())
+        self.set_timeout_handler()
 
     def data_received(self, data: bytes):
+        self.set_timeout_handler()
         try:
             self.http_v1_data_received(data)
         except Exception as e:
@@ -81,10 +108,11 @@ class HTTPClientConnection(asyncio.Protocol):
             self.transport.close()
 
     def connection_lost(self, exc):
+        self.cancel_timeout_handler()
         if not self._response_finished:
             if not (self.response_future.cancelled() or
                     self.response_future.done()):
-                self.response_future.set_exception(exc)
+                self.response_future.set_exception(Exception)
 
 
 class HTTPClient:

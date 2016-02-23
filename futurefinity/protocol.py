@@ -404,8 +404,8 @@ class HTTPBody(TolerantMagicDict):
                     except UnicodeDecodeError:
                         pass
                     self.add(disposition_dict.get_first("name", ""), content)
-        if self._content_type.lower().strip() == "application/json":
-            self.update(json.loads(
+        elif self._content_type.lower().strip() == "application/json":
+            self.update(**json.loads(
                 ensure_str(self._pending_bytes[:self._content_length])))
         else:
             raise HTTPError(400)  # Unknown content-type.
@@ -417,7 +417,7 @@ class HTTPBody(TolerantMagicDict):
         Generate HTTP v1 Body to bytes.
         """
         body = b""
-        if self._content_type == "application/x-www-form-urlencoded":
+        if self._content_type.lower() == "application/x-www-form-urlencoded":
             body += ensure_bytes(urllib.parse.urlencode(self))
 
         elif self._content_type.lower().startswith("multipart/form-data"):
@@ -447,6 +447,8 @@ class HTTPBody(TolerantMagicDict):
 
             body += full_boundary + b"--" + _CRLF_BYTES_MARK
 
+        elif self._content_type.lower() == "application/json":
+            body += ensure_bytes(json.dumps(self))
         else:
             raise HTTPError(400)  # Unknown POST Content Type.
 
