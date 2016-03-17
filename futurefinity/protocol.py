@@ -1007,6 +1007,10 @@ class HTTPv1Connection:
         if self.stage is _CONN_CLOSED:
             return  # This connection has been closed.
 
+        if self.stage is _CONN_INIT:
+            self.stage = _CONN_CLOSED
+            return  # This connection has nothing, so nothing to cleanup.
+
         if self.is_client:
             if self.stage is _CONN_BODY_WAITING:
                 self._pending_body = ensure_bytes(self._pending_bytes)
@@ -1016,10 +1020,6 @@ class HTTPv1Connection:
                 self.incoming.body = self._pending_body
                 self.stage = _CONN_MESSAGE_PARSED
                 self._parse_incoming_message()  # Trigger Message Received.
-
-        if self.stage is _CONN_INIT:
-            self.stage = _CONN_CLOSED
-            return  # This connection has nothing, so nothing to cleanup.
 
         self._close_connection()
 
