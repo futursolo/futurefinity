@@ -47,7 +47,7 @@ def render_template(template_name: str):
         @functools.wraps(f)
         async def wrapper(self, *args, **kwargs):
             template_dict = await f(self, *args, **kwargs)
-            if self._written:
+            if self._body_written:
                 return
             await self.render(template_name, template_dict)
         return wrapper
@@ -102,7 +102,7 @@ class TemplateLoader:
         with open(file_path) as tpl:
             return tpl.read()
 
-    def load_template(self, template_name: str) -> jinja2.Template:
+    def load_template(self, template_name: str) -> object:
         """
         Load and parse the template synchronously.
 
@@ -121,7 +121,7 @@ class TemplateLoader:
 
         return parsed_tpl
 
-    async def async_load_template(self, template_name: str) -> jinja2.Template:
+    async def async_load_template(self, template_name: str) -> object:
         """
         Load and parse the template concurrently from the other thread.
         """
