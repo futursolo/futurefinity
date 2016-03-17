@@ -47,7 +47,7 @@ def render_template(template_name: str):
         @functools.wraps(f)
         async def wrapper(self, *args, **kwargs):
             template_dict = await f(self, *args, **kwargs)
-            if self._written:
+            if self._body_written:
                 return
             await self.render(template_name, template_dict)
         return wrapper

@@ -59,4 +59,3 @@ class HeadTestCollector(unittest.TestCase):
 
         self.assertEqual(self.requests_result.status_code, 200,
                          "Wrong Status Code")
-        self.assertEqual(self.requests_result.headers["content-length"], "13")

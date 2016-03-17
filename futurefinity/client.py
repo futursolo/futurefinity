@@ -15,41 +15,133 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.protocol import TolerantMagicDict
-from futurefinity.protocol import HTTPRequest, HTTPResponse
+from futurefinity.utils import TolerantMagicDict, FutureFinityError
+from futurefinity import protocol
+
+import futurefinity
 
 import asyncio
 
+import ssl
+import sys
+import json
+import typing
 import functools
+import traceback
 import urllib.parse
 
 
-class HTTPClientConnection(asyncio.Protocol):
+class ClientError(FutureFinityError):
     """
-    HTTPClientConnection Class.
-    """
-    def __init__(self, request: HTTPRequest, response_future: asyncio.Future,
-                 *args, loop: asyncio.BaseEventLoop=None, **kwargs):
-        self._loop = loop or asyncio.get_event_loop()
+    FutureFinity Client Error.
 
-        self.transport = None
+    All Errors from FutureFinity Client Side are based on this class.
+    """
+    pass
+
+
+class RequestTimeoutError(ClientError, TimeoutError):
+    """
+    FutureFinity Client Timeout Error.
+
+    This Error is raised when the server has no response until the timeout.
+    """
+    pass
+
+
+class BadResponse(ClientError):
+    """
+    FutureFinity Client Bad Response Error.
+
+    This Error is raised when futurefinity received a bad response from the
+    server.
+    """
+    pass
+
+
+class ResponseEntityTooLarge(ClientError):
+    """
+    FutureFinity Client Response Entity Too Large Error.
+
+    This Error is raised when futurefinity received a response that entity
+    larger than the largest allowed size of entity from the server.
+    """
+    pass
+
+
+class HTTPClientConnectionController(protocol.HTTPConnectionController):
+    def __init__(self, host: str, port: int, *args,
+                 allow_keep_alive: bool=True,
+                 http_version: int=11,
+                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+                 context: ssl.SSLContext=None, **kwargs):
+        self._loop = loop or asyncio.get_event_loop()
+        self.http_version = http_version
+        self.allow_keep_alive = allow_keep_alive
+
+        protocol.HTTPConnectionController.__init__(self)
+
+        self.port = port
+        self.host = host
+        self.context = context
+
+        self.reader = None
+        self.writer = None
+        self.connection = None
+        self.incoming = None
+        self._exc = None
+
+        self.default_timeout_length = 10
         self._timeout_handler = None
 
-        self.request = request
-        if "user-agent" not in self.request.headers:
-            self.request.headers.add("user-agent", "FutureFinity/0.2.0")
+    def error_received(
+     self, incoming: typing.Optional[protocol.HTTPIncomingResponse],
+     exc: tuple):
+        if isinstance(tuple[1], protocol.ConnectionEntityTooLarge):
+            self._exc = ResponseEntityTooLarge(tuple[1].message)
+        else:
+            self._exc = BadResponse(tuple[1].message)
+        self.close_stream_and_connection()
 
-        self.response_future = response_future
-        self.response = HTTPResponse()
-        self._response_finished = False
-        self._response_header_finished = False
-        self._response_body_finished = False
+    def message_received(self, incoming: protocol.HTTPIncomingResponse):
+        self.incoming = incoming
 
-    def close_timeout_connection(self):
-        if self.transport is not None:
-            self.transport.close()
+    async def get_stream_and_connection_ready(self):
+        self.cancel_timeout_handler()
+        async def _create_new_stream_and_connection():
+            self.reader, self.writer = await asyncio.open_connection(
+                host=self.host,  port=self.port, ssl=self.context,
+                loop=self._loop)
+            self.transport = self.writer.transport
 
-        self.response_future.set_exception(Exception)
+            if self.http_version < 20:
+                self.connection = protocol.HTTPv1Connection(
+                    is_client=True,
+                    http_version=self.http_version,
+                    allow_keep_alive=self.allow_keep_alive,
+                    use_tls=self.context,
+                    sockname=self.writer.get_extra_info("sockname"),
+                    peername=self.writer.get_extra_info("peername"),
+                    controller=self)
+            else:
+                pass
+            self.set_timeout_handler()
+        if not (self.reader and self.writer and self.transport):
+            await _create_new_stream_and_connection()
+
+        if self.writer.transport.is_closing():
+            await _create_new_stream_and_connection()
+
+    def close_stream_and_connection(self):
+        self.cancel_timeout_handler()
+        if self.connection:
+            self.connection.connection_lost()
+            self.connection = None
+        if self.writer:
+            self.writer.close()
+            self.reader = None
+            self.writer = None
+            self.transport = None
 
     def set_timeout_handler(self):
         """
@@ -57,7 +149,7 @@ class HTTPClientConnection(asyncio.Protocol):
         """
         self.cancel_timeout_handler()
         self._timeout_handler = self._loop.call_later(
-            60, self.close_timeout_connection)
+            self.default_timeout_length, self.close_stream_and_connection)
 
     def cancel_timeout_handler(self):
         """
@@ -68,151 +160,185 @@ class HTTPClientConnection(asyncio.Protocol):
             self._timeout_handler.cancel()
         self._timeout_handler = None
 
-    def connection_made(self, transport):
-        self.transport = transport
-        self.transport.write(self.request.make_http_v1_request())
-        self.set_timeout_handler()
+    async def fetch(self, method, path, headers, body):
+        await self.get_stream_and_connection_ready()
+        headers["host"] = self.host
+        self.connection.write_initial(
+            http_version=self.http_version,
+            method=method,
+            path=path,
+            headers=headers)
 
-    def data_received(self, data: bytes):
-        self.set_timeout_handler()
-        try:
-            self.http_v1_data_received(data)
-        except Exception as e:
-            if not (self.response_future.cancelled() or
-                    self.response_future.done()):
-                self.response_future.set_exception(e)
-            self.transport.close()
+        if body:
+            self.connection.write_body(body)
 
-    def http_v1_data_received(self, data: bytes):
-        if self._response_header_finished is False:
-            parse_result = self.response.parse_http_v1_response(data)
-            if parse_result[0] is False:
-                return
-            self._response_header_finished = True
-            data = parse_result[1]
+        self.connection.finish_writing()
+        while True:
+            try:
+                incoming_data = await asyncio.wait_for(
+                    self.reader.read(4096), 60)
+            except asyncio.TimeoutError:
+                self.close_stream_and_connection()
+                raise RequestTimeoutError("Request Timeout.")
 
-        if not (self._response_finished or self._response_body_finished):
-            self.response.body += data
-            content_length = int(
-                self.response.headers.get_first("content-length", 0))
-            if len(self.response.body) < content_length:
-                return
-            self.response.body = self.response.body[:content_length]
-            self._response_body_finished = True
-            self._response_finished = True
+            if not incoming_data:
+                if (not self.writer) or self.writer.transport.is_closing():
+                    self.close_stream_and_connection()
+                    raise BadResponse("Unexpected Remote Close.")
 
-        if self._response_finished:
-            if not (self.response_future.cancelled() or
-                    self.response_future.done()):
-                self.response_future.set_result(self.response)
-            self.transport.close()
+            self.connection.data_received(incoming_data)
+            if self._exc is not None:
+                _exc = self._exc
+                self._exc = None
+                raise self._exc
 
-    def connection_lost(self, exc):
-        self.cancel_timeout_handler()
-        if not self._response_finished:
-            if not (self.response_future.cancelled() or
-                    self.response_future.done()):
-                self.response_future.set_exception(Exception)
+            if self.incoming is not None:
+                incoming = self.incoming
+                self.incoming = None
+                self.set_timeout_handler()
+                return incoming
 
 
 class HTTPClient:
-    """
-    HTTPClient Class.
-    """
-    def __init__(self, *args, loop: asyncio.BaseEventLoop=None, **kwargs):
+    def __init__(self, *args, http_version=11,
+                 allow_keep_alive: bool=True,
+                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+                 context: ssl.SSLContext=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
+        self.allow_keep_alive = allow_keep_alive
+        self.http_version = http_version
 
-    def parse_url(self, url):
+        self.context = context or ssl.create_default_context(
+            ssl.Purpose.CLIENT_AUTH)
+
+        self._connection_controllers = {}
+
+    def _makeup_url(self, url: str,
+                    link_args: typing.Optional[typing.Mapping[str, str]]):
         parsed_url = urllib.parse.urlsplit(url)
 
         if parsed_url.query:
-            queries = TolerantMagicDict(
-                urllib.parse.parse_qsl(parsed_url.query))
+            if link_args is None:
+                link_args = TolerantMagicDict()
+            link_args.update(urllib.parse.parse_qsl(parsed_url.query))
+
+        if link_args is not None:
+            encoded_link_args = urllib.parse.urlencode(link_args)
         else:
-            queries = TolerantMagicDict()
+            encoded_link_args = ""
+
+        path = urllib.parse.urlunparse(urllib.parse.ParseResult(
+            scheme="", netloc="", path=(parsed_url.path or "/"),
+            params="", query=encoded_link_args, fragment=""))
 
         return {
             "host": parsed_url.hostname,
             "port": parsed_url.port,
             "scheme": parsed_url.scheme,
-            "queries": queries,
-            "path": parsed_url.path
+            "path": path
         }
 
-    def get(self, url, headers=None, queries=None):
-        url_info = self.parse_url(url)
-        request = HTTPRequest(host=url_info["host"], port=url_info["port"],
-                              path=url_info["path"], scheme=url_info["scheme"])
-        if url_info["queries"]:
-            request.queries.update(url_info["queries"])
-        if headers:
-            request.headers.update(headers)
-        if queries:
-            request.queries.update(queries)
+    def _get_connection_controller(self, host, port, scheme):
+        controller_identifier = (host, port, scheme)
+        if controller_identifier in self._connection_controllers.keys():
+            return self._connection_controllers.pop(controller_identifier)
 
-        return self.fetch(request)
-
-    def get(self, url, headers=None, queries=None):
-        url_info = self.parse_url(url)
-        request = HTTPRequest(host=url_info["host"], port=url_info["port"],
-                              path=url_info["path"], scheme=url_info["scheme"])
-        if url_info["queries"]:
-            request.queries.update(url_info["queries"])
-        if headers:
-            request.headers.update(headers)
-        if queries:
-            request.queries.update(queries)
-
-        return self.fetch(request)
-
-    def post(self, url, headers=None, queries=None,
-             content_type="application/x-www-form-urlencoded",
-             body_fields=None):
-        url_info = self.parse_url(url)
-        request = HTTPRequest(host=url_info["host"], port=url_info["port"],
-                              path=url_info["path"], scheme=url_info["scheme"])
-        request.method = "POST"
-        if url_info["queries"]:
-            request.queries.update(url_info["queries"])
-        if headers:
-            request.headers.update(headers)
-        if queries:
-            request.queries.update(queries)
-
-        request.body.set_content_type(content_type)
-        if body_fields:
-            request.body.update(body_fields)
-
-        return self.fetch(request)
-
-    def fetch(self, request):
-        future = asyncio.Future()
-
-        if request.scheme not in ("http", "https"):
-            raise Exception("Unknown Protocol Scheme.")
-
-        if request.scheme == "http":
-            request.port = 80
+        if scheme == "https":
+            context = self.context
         else:
-            request.port = 443
+            context = None
 
-        if request.scheme == "https":
-            use_ssl = True
+        return HTTPClientConnectionController(
+            allow_keep_alive=self.allow_keep_alive,
+            http_version=self.http_version,
+            host=host, port=port, context=context)
+
+    def _put_connection_controller(self, controller):
+        if controller.context:
+            scheme = "https"
         else:
-            use_ssl = None
+            scheme = "http"
+        controller_identifier = (controller.host, controller.port, scheme)
+        if controller_identifier in self._connection_controllers.keys():
+            return  # Only cache one controller for each identifier.
+        self._connection_controllers[controller_identifier] = controller
 
-        def connection_callback(conn_future):
-            try:
-                conn_future.result()
-            except Exception as e:
-                if future.cancelled() or future.done():
-                    return
-                future.set_exception(e)
+    async def fetch(self, method, url, headers=None,
+                    cookies=None, link_args=None, body=None):
+        if link_args is not None and not isinstance(link_args,
+                                                    TolerantMagicDict):
+            link_args = TolerantMagicDict(link_args)
 
-        self._loop.create_task(self._loop.create_connection(
-            functools.partial(HTTPClientConnection, request=request,
-                              response_future=future, loop=self._loop),
-            host=request.host, port=request.port, ssl=use_ssl)
-        ).add_done_callback(connection_callback)
+        url_info = self._makeup_url(url, link_args)
+        if not isinstance(headers, protocol.HTTPHeaders):
+            if headers is None:
+                headers = protocol.HTTPHeaders()
+            else:
+                headers = protocol.HTTPHeaders(headers)
+        if cookies:
+            if not isinstance(cookies, protocol.HTTPCookies):
+                cookies = protocol.HTTPCookies(cookies)
+            headers.accept_cookies_for_request(cookies)
 
-        return future
+        if url_info["scheme"] not in ("http", "https"):
+            raise ClientError("Unknown Protocol Scheme.")
+
+        if not url_info["port"]:
+            if url_info["scheme"] == "http":
+                url_info["port"] = 80
+            else:
+                url_info["port"] = 443
+
+        controller = self._get_connection_controller(
+            host=url_info["host"], port=url_info["port"],
+            scheme=url_info["scheme"])
+
+        response = await controller.fetch(method=method,
+                                          path=url_info["path"],
+                                          headers=headers,
+                                          body=body)
+        self._put_connection_controller(controller)
+        return response
+
+    async def get(self, url, headers=None, cookies=None, link_args=None):
+        response = await self.fetch(method="GET", url=url, headers=headers,
+                                    cookies=cookies, link_args=link_args)
+        return response
+
+    async def post(self, url, headers=None, cookies=None, link_args=None,
+                   body_args=None, files=None):
+        if "content-type" not in headers.keys():
+            if not files:  # Automatic Content-Type Decision.
+                content_type = "application/x-www-form-urlencoded"
+            else:
+                content_type = "multipart/form-data"
+        else:
+            content_type = headers["content-type"]
+            if files:
+                if not content_type.lower().startswith("multipart/form-data"):
+                    raise ClientError(
+                        "Files can only be sent by multipart/form-data")
+
+        if content_type.lower() == "application/x-www-form-urlencoded":
+            body = ensure_bytes(urllib.parse.urlencode(body_args))
+
+        elif content_type.lower() == "application/json":
+            body = ensure_bytes(json.dumps(body_args))
+
+        elif content_type.lower().startswith("multipart/form-data"):
+            multipart_body = protocol.HTTPMultipartBody()
+            multipart_body.update(body_args)
+            multipart_body.files.update(files)
+            body, content_type = multipart_body.assemble()
+        else:
+            raise ClientError("Unsupported Content-Type.")
+
+        content_length = str(len(body))
+        headers["content-length"] = content_length
+
+        headers["content-type"] = content_type
+
+        response = await self.fetch(method="POST", url=url, headers=headers,
+                                    cookies=cookies, link_args=link_args,
+                                    body=body)
+        return response

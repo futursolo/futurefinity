@@ -62,7 +62,7 @@ class CSRFTestCollector(unittest.TestCase):
         @self.app.add_handler("/csrf_test")
         class TestHandler(futurefinity.web.RequestHandler):
             async def get(self, *args, **kwargs):
-                return self.get_csrf_value()
+                return self._csrf_value
 
             def check_csrf_value(self, *args, **kwargs):
                 futurefinity.web.RequestHandler.check_csrf_value(self, *args,

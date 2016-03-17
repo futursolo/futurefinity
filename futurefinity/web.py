@@ -44,15 +44,13 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 """
 
-
-from futurefinity.server import HTTPServer
-from futurefinity.template import TemplateLoader
-from futurefinity.routing import RoutingLocator, RoutingObject
 from futurefinity.utils import (ensure_str, ensure_bytes, format_timestamp,
                                 default_mark)
-from futurefinity.security import AESGCMSecurityObject, HMACSecurityObject
-from futurefinity.protocol import (status_code_text, HTTPHeaders, HTTPCookies,
-                                   HTTPResponse, HTTPRequest, HTTPError)
+from futurefinity import server
+from futurefinity import routing
+from futurefinity import protocol
+from futurefinity import template
+from futurefinity import security
 
 import futurefinity
 
@@ -61,15 +59,105 @@ import asyncio
 import os
 import re
 import sys
+import hmac
 import html
-import time
-import uuid
 import types
 import typing
 import hashlib
 import functools
 import mimetypes
 import traceback
+
+
+class HTTPError(server.ServerError):
+    """
+    Common HTTPError class, this Error should be raised when a non-200 status
+    need to be responded.
+
+    Any additional message can be added to the response by message attribute.
+
+    .. code-block:: python3
+
+      async def get(self, *args, **kwargs):
+          raise HTTPError(500, message='Please contact system administrator.')
+    """
+    def __init__(self, status_code: int=200, message: str=None,
+                 *args, **kwargs):
+        self.status_code = status_code
+        self.message = message
+
+
+class ApplicationHTTPServer(server.HTTPServer):
+    def __init__(self, app: "Application",
+                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+                 *args, **kwargs):
+        self._loop = loop or asyncio.get_event_loop()
+        self.app = app
+
+        server.HTTPServer.__init__(self, *args, **kwargs)
+
+        self._request_handlers = {}
+        self._futures = {}
+
+    def stream_received(self, incoming: protocol.HTTPIncomingRequest,
+                        data: bytes):
+        self._request_handlers[incoming].data_received(data)
+
+    def error_received(self,
+                       incoming: typing.Optional[protocol.HTTPIncomingRequest],
+                       exc: tuple):
+        if not incoming:  # Message unable to parse, create an placeholder.
+            incoming = protocol.HTTPIncomingRequest(
+                method="GET",
+                origin_path="/",
+                http_version=11,
+                headers=protocol.HTTPHeaders(),
+                connection=self.connection)
+        handler = self.app.settings.get("default_handler", NotFoundHandler)
+        request_handler = handler(
+            app=self.app,
+            server=self,
+            request=incoming,
+            path_args=[],
+            path_kwargs={}
+        )
+        error_code = 400
+        if isinstance(exc[1], protocol.ConnectionEntityTooLarge):
+            error_code = 413
+        request_handler.write_error(error_code)
+        request_handler.finish()
+
+    def initial_received(self, incoming: protocol.HTTPIncomingRequest):
+        matched_obj = self.app.handlers.find(incoming.path)
+        request_handler = matched_obj.handler(
+            app=self.app,
+            server=self,
+            request=incoming,
+            path_args=matched_obj.path_args,
+            path_kwargs=matched_obj.path_kwargs
+        )
+        self._request_handlers[incoming] = request_handler
+        if request_handler.stream_handler:
+            self.use_stream = True
+
+    def message_received(self, incoming: protocol.HTTPIncomingRequest):
+        def _future_done(coro_future):
+            if incoming in self._futures.keys():
+                del self._request_handlers[incoming]
+                del self._futures[incoming]
+        coro_future = self._loop.create_task(
+            self._request_handlers[incoming]._handle_request())
+        coro_future.add_done_callback(_future_done)
+        self._futures[incoming] = coro_future
+
+    def connection_lost(self, exc: tuple):
+        """
+        Called by Event Loop when the connection lost.
+        """
+        for coro_future in self._futures.values():
+            coro_future.cancel()
+
+        server.HTTPServer.connection_lost(self, exc)
 
 
 class RequestHandler:
@@ -88,34 +176,36 @@ class RequestHandler:
 
     stream_handler = False
 
-    def __init__(self, app,
-                 server: HTTPServer,
-                 request: HTTPRequest,
-                 respond_request: types.FunctionType,
-                 path_args: dict=None,
-                 path_kwargs: dict=None,
-                 response: HTTPResponse=None):
+    def __init__(self, app: "Application",
+                 server: ApplicationHTTPServer,
+                 request: protocol.HTTPIncomingRequest,
+                 path_args: typing.Mapping[str, str]=None,
+                 path_kwargs: typing.Mapping[str, str]=None):
         self.app = app
         self.server = server
+        self.settings = self.app.settings
+        self.connection = self.server.connection
+
         self.request = request
         self.path_args = path_kwargs or []
         self.path_kwargs = path_kwargs or {}
-        self.respond_request = respond_request
-        self.response = response or HTTPResponse()
-        self.response.http_version = self.request.http_version
+        self.http_version = self.request.http_version
+
+        self._status_code = 200
+        self._headers = protocol.HTTPHeaders()
+        self._cookies = protocol.HTTPCookies()
+        self._response_body = bytearray()
 
         self.transport = None
         if self.stream_handler:
             self.transport = self.server.transport
 
-        self.path = self.request.path
-
-        self._csrf_value = None
-
-        self._written = False
+        self._initial_written = False
+        self._body_written = False
         self._finished = False
 
-    def get_link_arg(self, name: str, default: str=default_mark) -> str:
+    def get_link_arg(self, name: str,
+                     default: typing.Optional[str]=default_mark) -> str:
         """
         Return first argument in the link with the name.
 
@@ -124,12 +214,12 @@ class RequestHandler:
             value is not specified, it means that the argument is required, it
             will produce an error if the argument cannot be found.
         """
-        arg_content = self.request.queries.get_first(name, default)
+        arg_content = self.request.link_args.get_first(name, default)
         if arg_content is default_mark:
             raise KeyError("The name %s cannot be found in link args." % name)
         return arg_content
 
-    def get_all_link_args(self, name: str) -> list:
+    def get_all_link_args(self, name: str) -> typing.List[str]:
         """
         Return all link args with the name by list.
 
@@ -137,7 +227,8 @@ class RequestHandler:
         """
         return self.request.queries.get_list(name, [])
 
-    def get_body_arg(self, name: str, default: str=None) -> str:
+    def get_body_arg(self, name: str,
+                     default: typing.Optional[str]=default_mark) -> str:
         """
         Return first argument in the body with the name.
 
@@ -146,20 +237,21 @@ class RequestHandler:
             value is not specified, it means that the argument is required, it
             will produce an error if the argument cannot be found.
         """
-        arg_content = self.request.body.get_first(name, default)
+        arg_content = self.request.body_args.get_first(name, default)
         if arg_content is default_mark:
             raise KeyError("The name %s cannot be found in body args." % name)
         return arg_content
 
-    def get_all_body_args(self, name: str) -> list:
+    def get_all_body_args(self, name: str) -> typing.List[str]:
         """
         Return all body args with the name by list.
 
         If the arg cannot be found, it will return an empty list.
         """
-        return self.request.body.get_list(name, [])
+        return self.request.body_args.get_list(name, [])
 
-    def get_header(self, name: str, default: str=default_mark) -> str:
+    def get_header(self, name: str,
+                   default: typing.Optional[str]=default_mark) -> str:
         """
         Return First Header with the name.
 
@@ -173,7 +265,7 @@ class RequestHandler:
             raise KeyError("The name %s cannot be found in headers." % name)
         return header_content
 
-    def get_all_headers(self, name: str) -> list:
+    def get_all_headers(self, name: str) -> typing.List[str]:
         """
         Return all headers with the name by list.
 
@@ -186,29 +278,29 @@ class RequestHandler:
         Set a response header with the name and value, this will override any
         former value(s) with the same name.
         """
-        self.response.headers[name] = ensure_str(value)
+        self._headers[name] = ensure_str(value)
 
     def add_header(self, name: str, value: str):
         """
         Add a response header with the name and value, this will not override
         any former value(s) with the same name.
         """
-        self.response.headers.add(name, ensure_str(value))
+        self._headers.add(name, ensure_str(value))
 
     def clear_header(self, name: str):
         """
         Clear response header(s) with the name.
         """
-        if name in self.response.headers.keys():
-            del self.response.headers[name]
+        if name in self._headers.keys():
+            del self._headers[name]
 
     def clear_all_headers(self):
         """
         Clear all response header(s).
         """
-        self.response.headers = HTTPHeaders()
+        self._headers = HTTPHeaders()
 
-    def get_cookie(self, name: str, default: str=None) -> str:
+    def get_cookie(self, name: str, default: typing.Optional[str]=None) -> str:
         """
         Return first Cookie in the request header(s) with the name.
 
@@ -220,8 +312,10 @@ class RequestHandler:
             return default
         return cookie.value
 
-    def set_cookie(self, name: str, value: str, domain: str=None,
-                   expires: str=None, path: str="/", expires_days: int=None,
+    def set_cookie(self, name: str, value: str,
+                   domain: typing.Optional[str]=None,
+                   expires: typing.Optional[str]=None,
+                   path: str="/", expires_days: typing.Optional[int]=None,
                    secure: bool=False, httponly: bool=False):
         """
         Set a cookie with attribute(s).
@@ -236,15 +330,15 @@ class RequestHandler:
         :arg httponly: is the property if the cookie can only be passed by
             http.
         """
-        self.response.cookies[name] = value
+        self._cookies[name] = value
         if domain:
-            self.response.cookies[name]["domain"] = domain
+            self._cookies[name]["domain"] = domain
         if expires:
-            self.response.cookies[name]["expires"] = expires
-        self.response.cookies[name]["path"] = path
-        self.response.cookies[name]["max-age"] = expires_days
-        self.response.cookies[name]["secure"] = secure
-        self.response.cookies[name]["httponly"] = httponly
+            self._cookies[name]["expires"] = expires
+        self._cookies[name]["path"] = path
+        self._cookies[name]["max-age"] = expires_days
+        self._cookies[name]["secure"] = secure
+        self._cookies[name]["httponly"] = httponly
 
     def clear_cookie(self, name: str):
         """
@@ -272,7 +366,7 @@ class RequestHandler:
             always be valid, please set it to None.
         :arg default: is the default value if the cookie is invalid.
         """
-        if "security_secret" not in self.app.settings.keys():
+        if "security_secret" not in self.settings.keys():
             raise ValueError(
                 "Cannot found security_secret. "
                 "Please provide security_secret through Application Settings.")
@@ -315,7 +409,7 @@ class RequestHandler:
         :arg \*\*kwargs: all the other keyword arguments will be passed to
             ``RequestHandler.set_cookie``.
         """
-        if "security_secret" not in self.app.settings.keys():
+        if "security_secret" not in self.settings.keys():
             raise ValueError(
                 "Cannot found security_secret. "
                 "Please provide security_secret through Application Settings.")
@@ -338,32 +432,22 @@ class RequestHandler:
         if not (cookie_value and form_value):
             raise HTTPError(403)  # CSRF Value is not set.
 
-        if cookie_value != form_value:
+        if not hmac.compare_digest(cookie_value, form_value):
             raise HTTPError(403)  # CSRF Value does not match.
 
-    def set_csrf_value(self):
-        """
-        Generate CSRF value and set it to secure cookie.
-        """
-        if self._csrf_value is not None:
-            return
-        self._csrf_value = str(uuid.uuid4())
-        self.set_secure_cookie("_csrf", self._csrf_value, expires_days=1)
+    @property
+    def _csrf_value(self):
+        if not hasattr(self, "__csrf_value"):
+            self.__csrf_value = security.get_random_str(32)
+            self.set_secure_cookie("_csrf", self.__csrf_value, expires_days=1)
 
-    def get_csrf_value(self):
-        """
-        Return a valid CSRF value to this request.
-
-        If csrf value does not exist, generate and set it.
-        """
-        self.set_csrf_value()
-        return self._csrf_value
+        return self.__csrf_value
 
     def csrf_form_html(self) -> str:
         """
         Return a HTML form field contains _csrf value.
         """
-        value = self.get_csrf_value()
+        value = self._csrf_value
         return "<input type=\"hidden\" name=\"_csrf\" value=\"%s\">" % value
 
     def write(self, text: typing.Union[str, bytes], clear_text: bool=False):
@@ -377,13 +461,14 @@ class RequestHandler:
         if self._finished:
             raise HTTPError(
                 500, "Cannot write to request when it has already finished.")
-        self._written = True
-        self.response.body += ensure_bytes(text)
+        self._body_written = True
         if clear_text:
-            self.response.body = ensure_bytes(text)
+            self._response_body.clear()
+        self._response_body += ensure_bytes(text)
 
-    async def render_string(self, template_name: str,
-                            template_dict: dict) -> str:
+    async def render_string(
+     self, template_name: str,
+     template_dict: typing.Optional[typing.Mapping[str, str]]=None) -> str:
         """
         Render Template in template folder into string.
 
@@ -399,7 +484,7 @@ class RequestHandler:
             "csrf_form_html": self.csrf_form_html
         }
 
-        if "template_path" not in self.app.settings.keys():
+        if "template_path" not in self.settings.keys():
             raise ValueError(
                 "Cannot found template_path. "
                 "Please provide template_path through Application Settings.")
@@ -408,7 +493,9 @@ class RequestHandler:
             template_name)
         return parsed_tpl.render(**template_dict)
 
-    async def render(self, template_name: str, template_dict=None):
+    async def render(
+     self, template_name: str,
+     template_dict: typing.Optional[typing.Mapping[str, str]]=None):
         """
         Render the template with render_string, and write them into response
         body directly.
@@ -418,7 +505,8 @@ class RequestHandler:
         self.finish((await self.render_string(template_name,
                                               template_dict=template_dict)))
 
-    def redirect(self, url: str, permanent: bool=False, status: int=None):
+    def redirect(self, url: str, permanent: bool=False,
+                 status: typing.Optional[int]=None):
         """
         Rediect request to other location.
 
@@ -427,13 +515,13 @@ class RequestHandler:
         :arg permanent: True if this is 301 or 302.
         :arg status: Custom the status code.
         """
-        if self._finished:
-            raise Exception("Cannot redirect after request finished.")
+        if self._initial_written:
+            raise HTTPError(400, "Cannot redirect after initial written.")
         if status is None:
             status = 301 if permanent else 302
         else:
             assert isinstance(status, int) and 300 <= status <= 399
-        self.response.status_code = status
+        self._status_code = status
         self.set_header("location", ensure_str(url))
         self.finish("<!DOCTYPE HTML>"
                     "<html>"
@@ -447,23 +535,26 @@ class RequestHandler:
                     "</body>"
                     "</html>" % {
                         "status_code": status,
-                        "status_message": status_code_text[status],
+                        "status_message": protocol.status_code_text[status],
                         "url": ensure_str(url)
                      })
 
-    def compute_etag(self):
-        """
-        Compute etag header of response_body.
-        """
-        hasher = hashlib.sha1()
-        hasher.update(self.response.body)
-        return '"%s"' % hasher.hexdigest()
+    @property
+    def _body_etag(self) -> str:
+        if not hasattr(self, "__body_etag"):
+            sha1_hash_object = hashlib.sha1()
+            sha1_hash_object.update(self._response_body)
 
-    def check_etag_header(self):
+            self.__body_etag = '"%s"' % sha1_hash_object.hexdigest()
+            if self.__body_etag is not None:
+                self.set_header("etag", self.__body_etag)
+        return self.__body_etag
+
+    def check_etag_header(self) -> bool:
         """
         Check etag header of response_body.
         """
-        computed_etag = ensure_bytes(self.response.headers.get_first("etag"))
+        computed_etag = ensure_bytes(self._body_etag)
         etags = re.findall(
             br'\*|(?:W/)?"[^"]*"',
             ensure_bytes(self.get_header("if-none-match", ""))
@@ -485,15 +576,63 @@ class RequestHandler:
                     break
         return match
 
-    def set_etag_header(self):
-        """
-        Set response etag header.
-        """
-        etag = self.compute_etag()
-        if etag is not None:
-            self.set_header("etag", etag)
+    def write_initial(self):
+        if self._initial_written:
+            raise HTTPError(500, "Cannot write initial twice.")
+        if "content-type" not in self._headers.keys():
+            self.set_header("content-type", "text/html; charset=utf-8;")
 
-    def finish(self, text: typing.Union[str, bytes]=None):
+        if self.connection._can_keep_alive:
+            if "connection" not in self._headers:
+                self.set_header("connection", "Keep-Alive")
+        else:
+            self.set_header("connection", "Close")
+
+        if self._headers["connection"] == "Keep-Alive":
+            self.set_header("transfer-encoding", "Chunked")
+            if "content-length" in self._headers.keys():
+                del self._headers["content-length"]
+
+        if "date" not in self._headers.keys():
+            self.set_header("date", format_timestamp())
+
+        self._headers.accept_cookies_for_response(self._cookies)
+
+        if self.settings.get("csrf_protect", False):
+            self._csrf_value
+
+        if "etag" not in self._headers and self._status_code == 200:
+            self._body_etag
+
+        if self.check_etag_header():
+            self._status_code = 304
+            self._response_body.clear()
+            for header_name in ("allow", "content-encoding",
+                                "content-language", "content-length",
+                                "content-md5", "content-range", "content-type",
+                                "last-modified"):
+                self.clear_header(header_name)
+
+        self.connection.write_initial(
+            http_version=self.http_version,
+            status_code=self._status_code, headers=self._headers)
+
+        self._initial_written = True
+
+    def flush(self):
+        if self._finished:
+            raise HTTPError(
+                500, "Cannot Flush the request when it has already finished.")
+
+        if not self._initial_written:
+            self.write_initial()
+
+        if not self._body_written:
+            raise HTTPError(500, "Body is not written.")
+        self.connection.write_body(self._response_body)
+        self._response_body.clear()
+
+    def finish(self, text: typing.Optional[typing.Union[str, bytes]]=None):
         """
         Finish the request, send the response. If a text is passed, it will be
         write first, after that, the request will be finished.
@@ -502,41 +641,31 @@ class RequestHandler:
         """
         if self._finished:
             raise HTTPError(
-                500, "Cannot Finish the request when it has already finished.")
+                500,
+                "Cannot Finish the request when it has already finished.")
 
         if text is not None:
             self.write(text)
 
+        self.flush()
         self._finished = True
 
-        if self.app.settings.get("csrf_protect", False):
-            self.set_csrf_value()
-
-        if ("etag" not in self.response.headers and
-           self.response.status_code == 200):
-            self.set_etag_header()
-
-        if self.check_etag_header():
-            self.response.status_code = 304
-            self.response.body = b""
-            for header_name in ["allow", "content-encoding",
-                                "content-language", "content-length",
-                                "content-md5", "content-range", "content-type",
-                                "last-modified"]:
-                self.clear_header(header_name)
-
-        self.respond_request(self.request, self.response)
+        self.connection.finish_writing()
 
     def write_error(self, error_code: int,
-                    message: typing.Union[str, bytes]=None,
-                    exc_info: tuple=None):
+                    message: typing.Optional[typing.Union[str, bytes]]=None,
+                    exc_info: typing.Optional[tuple]=None):
         """
         Respond an error to client.
 
         You may override this page if you want to custom the error page.
         """
-        self.response.status_code = error_code
-        self.set_header("Content-Type", "text/html")
+        self._status_code = error_code
+        self.set_header("Content-Type", "text/html; charset=UTF-8")
+
+        if self._status_code >= 400:
+            self.set_header("Connection", "Close")
+
         self.write("<!DOCTYPE HTML>"
                    "<html>"
                    "<head>"
@@ -546,7 +675,8 @@ class RequestHandler:
                    "<body>"
                    "    <div>%(error_code)d: %(status_code_detail)s</div>" % {
                         "error_code": error_code,
-                        "status_code_detail": status_code_text[error_code]
+                        "status_code_detail": protocol.status_code_text[
+                            error_code]
                    },
                    clear_text=True)
         if message:
@@ -554,14 +684,13 @@ class RequestHandler:
                        "    <div>%(message)s</div>" % {
                            "message": ensure_str(message)})
 
-        if self.app.settings.get("debug", False) and exc_info:
+        if self.settings.get("debug", False) and exc_info:
             print(self.request, file=sys.stderr)
 
             traceback.print_exception(*exc_info)
             for line in traceback.format_exception(*exc_info):
-                self.write(
-                    "    <div>%s</div>" % html.escape(line).replace(" ",
-                                                                    "&nbsp;"))
+                self.write("    <div>%s</div>" % html.escape(line).replace(
+                    " ", "&nbsp;"))
 
         self.write(""
                    "</body>"
@@ -574,12 +703,14 @@ class RequestHandler:
         **This is a Coroutine.**
         """
         get_return_text = await self.get(*args, **kwargs)
-        if self.response.status_code != 200:
+        if self._status_code != 200:
             return
-        if self._written is True:
-            self.set_header("content-length", str(len(self.response.body)))
+        if self._body_written is True:
+            content_length = len(self._response_body)
         else:
-            self.set_header("content-length", str(len(get_return_text)))
+            content_length = len(get_return_text)
+        if not self.connection._can_keep_alive:
+            self.set_header("content-length", str(content_length))
         self.write(b"", clear_text=True)
 
     async def get(self, *args, **kwargs):
@@ -636,7 +767,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def handle(self):
+    async def _handle_request(self):
         """
         Method to handle the request.
 
@@ -649,12 +780,12 @@ class RequestHandler:
         try:
             if self.request.method not in self.allow_methods:
                 raise HTTPError(405)
-            if self.app.settings.get("csrf_protect", False
-                                     ) and self.request.body_expected is True:
+            if self.settings.get("csrf_protect", False
+                                 ) and self.request._body_expected is True:
                 self.check_csrf_value()
             body = await getattr(self, self.request.method.lower())(
                 *self.path_args, **self.path_kwargs)
-            if not self._written:
+            if not self._body_written:
                 self.write(body)
         except HTTPError as e:
             self.write_error(e.status_code, e.message, sys.exc_info())
@@ -677,9 +808,11 @@ class NotFoundHandler(RequestHandler):
 
     By default, it just returns a 404 Error to the client.
     """
-    async def handle(self, *args, **kwargs):
-        self.write_error(404)
-        self.finish()
+    async def get(self, *args, **kwargs):
+        raise HTTPError(404)
+
+    # By default, FutureFinity only allows ("HEAD", "GET", and "POST")
+    post = get
 
 
 class StaticFileHandler(RequestHandler):
@@ -690,16 +823,18 @@ class StaticFileHandler(RequestHandler):
              StaticFileHandler should only be used in development.
     """
 
+    static_path = None  # Modify this to custom static path for this handler.
     async def handle_static_file(self, file_uri_path: str, *args, **kwargs):
         """
         Get the file from the given file path. Override this function if you
         want to customize the way to get file.
         """
-        file_path = os.path.join(
-            self.app.settings.get("static_path", "static"), file_uri_path)
+        if not self.static_path:
+            self.static_path = self.settings.get("static_path", "static")
+        file_path = os.path.join(self.static_path, file_uri_path)
 
         if not os.path.realpath(file_path).startswith(
-         os.path.realpath(self.app.settings.get("static_path", "static"))):
+         os.path.realpath(self.static_path)):
             raise HTTPError(403)
         if not os.path.exists(file_path):
             raise HTTPError(404)
@@ -729,35 +864,53 @@ class Application:
     stores handler list, finds every request's handler,
     and passes it to server.
 
+    :arg loop: A Custom EventLoop, if you want.
+    :arg template_path: A Custom EventLoop, if you want.
+    :arg aes_security: A Custom EventLoop, if you want.
+    :arg security_secret: A Custom EventLoop, if you want.
+    :arg allow_keep_alive: A Custom EventLoop, if you want.
+    :arg debug: A Custom EventLoop, if you want.
+    :arg csrf_protect: A Custom EventLoop, if you want.
+    :arg static_path: A Custom EventLoop, if you want.
+    :arg static_handler_path: A Custom EventLoop, if you want.
+
     :arg \*\*kwargs: All the keyword arguments will be the application
         settings.
     """
     def __init__(self, **kwargs):
         self.settings = kwargs
-        self._loop = self.settings.get("loop", asyncio.get_event_loop())
+        self._loop = self.settings.get(
+            "loop", asyncio.get_event_loop())  # type: asyncio.BaseEventLoop
 
-        self.handlers = RoutingLocator(default_handler=NotFoundHandler)
+        self.handlers = routing.RoutingLocator(default_handler=NotFoundHandler)
 
         self.template_loader = None
         self.security_object = None
 
         if "template_path" in self.settings.keys():
-            self.template_loader = TemplateLoader(
-                self.settings["template_path"], (not self.settings["debug"]))
+            self.template_loader = template.TemplateLoader(
+                self.settings["template_path"],
+                (not self.settings.get("debug", False)))
 
         if "security_secret" in self.settings.keys():
             if self.settings.get("aes_security", True):
-                self.security_object = AESGCMSecurityObject(
+                self.security_object = security.AESGCMSecurityObject(
                     self.settings["security_secret"])
             else:
-                self.security_object = HMACSecurityObject(
+                self.security_object = security.HMACSecurityObject(
                     self.settings["security_secret"])
+
+        if "static_path" in self.settings.keys():
+            static_handler_path = self.settings.get("static_handler_path",
+                                                    r"/static/(?P<file>.*?)")
+            self.handlers.add(static_handler_path, StaticFileHandler)
 
     def make_server(self) -> asyncio.Protocol:
         """
         Make a asyncio compatible server.
         """
-        return functools.partial(HTTPServer, app=self, loop=self._loop)
+        return functools.partial(ApplicationHTTPServer,
+                                 app=self, loop=self._loop)
 
     def listen(self, port: int,
                address: str="127.0.0.1") -> types.CoroutineType:
@@ -769,7 +922,8 @@ class Application:
         return srv
 
     def add_handler(self, path: str, *args, name: str=None,
-                    handler: RequestHandler=None, **kwargs):
+                    handler: RequestHandler=None,
+                    **kwargs) -> typing.Optional[types.FunctionType]:
         """
         Add a handler to handler list.
         If you specific a handler in parameter, it will return nothing.
@@ -787,9 +941,9 @@ class Application:
           class RootHandler(ReuqestHandler): pass
           app.add_handler("/", handler=RootHandler)
         """
-        def decorator(cls):
-            self.handlers.add(path, cls, *args, name=name, **kwargs)
-            return cls
+        def decorator(handler):
+            self.handlers.add(path, handler, *args, name=name, **kwargs)
+            return handler
         if handler is not None:
             decorator(handler)
         else:

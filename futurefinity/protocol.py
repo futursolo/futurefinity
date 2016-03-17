@@ -15,65 +15,51 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.utils import (MagicDict, TolerantMagicDict,
+                                FutureFinityError, ensure_str, ensure_bytes)
+from futurefinity import security
 
-from futurefinity.utils import (ensure_str, ensure_bytes, format_timestamp,
-                                MagicDict, TolerantMagicDict)
-
+from collections import namedtuple
 from http.cookies import SimpleCookie as HTTPCookies
 from http.client import responses as status_code_text
 
 import futurefinity
 
+import sys
 import json
-import uuid
+import string
 import typing
+import traceback
 import urllib.parse
+
 
 _CRLF_MARK = "\r\n"
 _CRLF_BYTES_MARK = b"\r\n"
 
-_MAX_HEADER_NUMBER = 4096
-
-_MAX_HEADER_LENGTH = 4096
-
+_MAX_INITIAL_LENGTH = 8 * 1024  # 8K
 _MAX_BODY_LENGTH = 52428800  # 50M
 
-_SUPPORTED_METHODS = ("GET", "HEAD", "POST", "DELETE", "PATCH", "PUT",
-                      "OPTIONS", "CONNECT")
-_BODY_EXPECTED_METHODS = ("POST", "PATCH", "PUT")
+_CONN_INIT = object()
+
+_CONN_INITIAL_WAITING = object()
+_CONN_INITIAL_PARSED = object()
+
+_CONN_STREAMED = object()
+
+_CONN_BODY_WAITING = object()
+_CONN_MESSAGE_PARSED = object()
+
+_CONN_INITIAL_WRITTEN = object()
+_CONN_BODY_WRITTEN = object()
+
+_CONN_CLOSED = object()
 
 
-def _split_initial_lines(content: typing.Union[str, bytes],
-                         reply_times: int=1,
-                         max_split: int=-1) -> typing.Union[str, bytes]:
-    """
-    Split HTTP Initial Lines to a list.
-    """
-    if isinstance(content, str):
-        return content.split(_CRLF_MARK * reply_times, max_split)
-    if isinstance(content, bytes):
-        return content.split(_CRLF_BYTES_MARK * reply_times, max_split)
+class ProtocolError(FutureFinityError):
+    pass
 
 
-class HTTPError(Exception):
-    """
-    Common HTTPError class, this Error should be raised when a non-200 status
-    need to be responded.
-
-    Any additional message can be added to the response by message attribute.
-
-    .. code-block:: python3
-
-      async def get(self, *args, **kwargs):
-          raise HTTPError(500, message='Please contact system administrator.')
-    """
-    def __init__(self, status_code: int=200, message: str=None,
-                 *args, **kwargs):
-        self.status_code = status_code
-        self.message = message
-
-
-class CapitalizedHTTPv1Header(dict):
+class CapitalizedHTTPv1Headers(dict):
     """
     Convert a string to HTTPHeader style capiltalize.
 
@@ -135,14 +121,13 @@ class CapitalizedHTTPv1Header(dict):
         })
 
     def __getitem__(self, key: str) -> str:
-        if key in self:
-            return dict.__getitem__(self, key)
+        if key not in self:
+            self[key] = key.title()
 
-        self[key] = key.title()
-        return self[key]
+        return dict.__getitem__(self, key)
 
 
-capitalize_header = CapitalizedHTTPv1Header()
+_capitalize_header = CapitalizedHTTPv1Headers()
 
 
 class HTTPHeaders(TolerantMagicDict):
@@ -152,41 +137,61 @@ class HTTPHeaders(TolerantMagicDict):
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Headers.
     """
-    def __str__(self):
-        content_list = []
-        for key, value in self.items():
-            content_list.append((key, value))
+    def __str__(self) -> str:
+        content_list = [(key, value) for (key, value) in self.items()]
 
         return "HTTPHeaders(%s)" % str(content_list)
 
-    def copy(self):
+    def copy(self) -> "HTTPHeaders":
         return HTTPHeaders(self)
 
-    def parse_http_v1_header(self, data: typing.Union[str, bytes, list]):
+    @staticmethod
+    def parse(data: typing.Union[str, bytes, list,
+                                 TolerantMagicDict]) -> "HTTPHeaders":
+        headers = HTTPHeaders()
+        headers.load_headers(data)
+        return headers
+
+    def assemble(self) -> bytes:
+        headers_str = ""
+        for (name, value) in self.items():
+            headers_str += "%s: %s" % (_capitalize_header[name], value)
+            headers_str += _CRLF_MARK
+
+        return ensure_bytes(headers_str)
+
+    def load_headers(self, data: typing.Union[str, bytes, list,
+                                              TolerantMagicDict]):
         """
-        Parse HTTP/1.x HTTP Header.
+        Load HTTP Headers from another object.
 
-        It will return True if it is finished successfully, or raise an Error.
+        It will raise an Error if the header is invalid.
         """
-        if isinstance(data, list):
-            splitted_data = data
-        else:
-            splitted_data = _split_initial_lines(ensure_str(data))
 
-        for i in range(0, _MAX_HEADER_NUMBER + 1):
-            if len(splitted_data) == 0:
-                break
+        # For dict-like object.
+        if hasattr(data, "items"):
+            for (key, value) in data.items():
+                self.add(key.strip(), value.strip())
+            return
 
-            header = splitted_data.pop(0)
-            if not header:
-                continue
-            (key, value) = header.split(":", 1)
-            self.add(key.strip(), value.strip())
+        if isinstance(data, (str, bytes)):
+            # For string-like object.
+            splitted_data = ensure_str(data).split(_CRLF_MARK)
 
-        else:
-            raise HTTPError(413)  # Too many Headers.
+            for header in splitted_data:
+                if not header:
+                    continue
+                (key, value) = header.split(":", 1)
+                self.add(key.strip(), value.strip())
+            return
 
-        return True
+        # For list-like object.
+        if hasattr(data, "__iter__"):
+            for (key, value) in data:
+                self.add(key.strip(), value.strip())
+            return
+
+        raise ValueError("Unknown Type of input data.")
 
     def accept_cookies_for_request(self, cookies: HTTPCookies):
         """
@@ -210,28 +215,16 @@ class HTTPHeaders(TolerantMagicDict):
         for cookie_morsel in cookies.values():
             self.add("set-cookie", cookie_morsel.OutputString())
 
-    def make_http_v1_header(self) -> bytes:
-        """
-        Convert all the headers to bytes.
-        """
-        header_bytes = b""
-        for (header_name, header_value) in self.items():
-            header_bytes += ensure_bytes("%s: %s" % (
-                capitalize_header[header_name],
-                header_value)) + _CRLF_BYTES_MARK
-
-        return header_bytes
-
     __copy__ = copy
     __repr__ = __str__
 
 
-class HTTPFile:
+class HTTPMultipartFileField:
     """
     Containing a file as a http form field.
     """
     def __init__(self, fieldname: str, filename: str,
-                 content: typing.Union[str, bytes],
+                 content: bytes,
                  content_type: str="application/octet-stream",
                  headers: typing.Optional[HTTPHeaders]=None,
                  encoding: str="binary"):
@@ -242,8 +235,8 @@ class HTTPFile:
         self.headers = headers or HTTPHeaders()
         self.encoding = encoding
 
-    def __str__(self):
-        return ("HTTPFile(filename=%(filename)s, "
+    def __str__(self) -> str:
+        return ("HTTPMultipartFileField(filename=%(filename)s, "
                 "content_type=%(content_type)s, "
                 "headers=%(headers)s, "
                 "encoding=%(encoding)s)") % {
@@ -253,142 +246,100 @@ class HTTPFile:
                     "encoding": repr(self.encoding)
                 }
 
-    def make_http_v1_form_field(self) -> bytes:
+    def assemble(self) -> bytes:
         """
         Convert this form field to bytes.
         """
-        field = b""
-        headers = self.headers.copy()
 
-        headers["content-type"] = self.content_type
-        headers["content-transfer-encoding"] = self.encoding
+        self.headers["content-type"] = self.content_type
+        self.headers["content-transfer-encoding"] = self.encoding
 
         content_disposition = "form-data; "
         content_disposition += "name=\"%s\"; " % self.fieldname
         content_disposition += "filename=\"%s\"" % self.filename
-        headers["content-disposition"] = content_disposition
+        self.headers["content-disposition"] = content_disposition
 
-        field += headers.make_http_v1_header()
+        field = self.headers.assemble()
         field += _CRLF_BYTES_MARK
         field += ensure_bytes(self.content)
         field += _CRLF_BYTES_MARK
 
         return field
 
+    def copy(self) -> "HTTPMultipartFileField":
+        raise ProtocolError("HTTPMultipartFileField is not copyable.")
 
-class HTTPBody(TolerantMagicDict):
+    __copy__ = copy
+
+
+class HTTPMultipartBody(TolerantMagicDict):
     """
     HTTPBody class, based on TolerantMagicDict.
 
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Body.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, files: typing.List=[HTTPMultipartFileField],
+                 *args, **kwargs):
+        self.files = TolerantMagicDict()
         TolerantMagicDict.__init__(self, *args, **kwargs)
-        self._content_length = 0
-        self._content_type = kwargs.get(
-            "content_type", "application/x-www-form-urlencoded")
-        self._pending_bytes = b""
 
-    def set_content_length(self, content_length: int):
+    @staticmethod
+    def parse(self, content_type: str, data: bytes) -> "HTTPMultipartBody":
         """
-        Set the Content Length of the body.
-        """
-        self._content_length = content_length
+        Parse HTTP v1 Multipart Body.
 
-    def get_content_length(self):
+        It will raise an Error during the parse period if parse failed.
         """
-        Get the Content Length of the body.
-        """
-        return self._content_length
+        body_args = HTTPMultipartBody()
+        if not content_type.lower().startswith("multipart/form-data"):
+            raise ProtocolError("Unknown content-type.")
 
-    def set_content_type(self, content_type: str):
-        """
-        Set the Content Type of the body.
-        """
-        self._content_type = content_type
+        for field in content_type.split(";"):  # Search Boundary
+            if field.find("boundary=") == -1:
+                continue
+            boundary = ensure_bytes(field.split("=")[1])
+            if boundary.startswith(b'"') and boundary.endswith(b'"'):
+                boundary = boundary[1:-1]
+            break
+        else:
+            raise ProtocolError("Cannot Find Boundary.")
+        full_boundary = b"--" + boundary
+        body_content = data.split(full_boundary + b"--")[0]
 
-    def get_content_type(self):
-        """
-        Get the Content Type of the body.
-        """
-        return self._content_type
+        full_boundary += _CRLF_BYTES_MARK
+        splitted_body_content = body_content.split(full_boundary)
 
-    def __str__(self):
-        content_list = []
-        for key, value in self.items():
-            content_list.append((key, value))
+        for part in splitted_body_content:
+            if not part:
+                continue
 
-        return "HTTPBody(%s)" % str(content_list)
+            initial, content = part.split(_CRLF_BYTES_MARK * 2)
+            headers = HTTPHeaders.parse(initial)
 
-    def copy(self):
-        return HTTPBody(self)
+            disposition = headers.get_first("content-disposition")
+            disposition_list = []
+            disposition_dict = TolerantMagicDict()
 
-    def parse_http_v1_body(self, data: typing.Union[str, bytes]) -> bool:
-        """
-        Parse HTTP v1 Body.
-
-        It will return ``True`` is it is finished successfully, or ``False``
-        when it is still missing some content.
-        """
-        self._pending_bytes += ensure_bytes(data)
-        if len(self._pending_bytes) < self._content_length:
-            return False  # Request Not Completed, wait.
-        if self._content_type.lower().strip() in (
-         "application/x-www-form-urlencoded", "application/x-url-encoded"):
-            for (key, value) in urllib.parse.parse_qsl(
-             self._pending_bytes[:self._content_length],
-             keep_blank_values=True,
-             strict_parsing=True):
-                self.add(ensure_str(key), ensure_str(value))
-
-        elif self._content_type.lower().startswith("multipart/form-data"):
-            for field in self._content_type.split(";"):  # Search Boundary
-                if field.find("boundary=") == -1:
+            for field in disposition.split(";"):  # Split Disposition
+                field = field.strip()  # Remove Useless Spaces.
+                if field.find("=") == -1:  # This is not a key-value pair.
+                    disposition_list.append(field)
                     continue
-                boundary = ensure_bytes(field.split("=")[1])
-                if boundary.startswith(b'"') and boundary.endswith(b'"'):
-                    boundary = boundary[1:-1]
-                break
-            else:
-                raise HTTPError(400)  # Cannot Find Boundary
-            full_boundary = b"--" + boundary
-            body_content = self._pending_bytes[:self._content_length].split(
-                full_boundary + b"--")[0]
+                key, value = field.split("=")
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+                disposition_dict.add(key.strip().lower(), value.strip())
 
-            full_boundary += _CRLF_BYTES_MARK
-            splitted_body_content = body_content.split(full_boundary)
+            if disposition_list[0] != "form-data":
+                raise ProtocolError("Cannot Parse Body.")
+                # Mixed form-data will be supported later.
+            content = content[:-2]  # Drop CRLF Mark
 
-            for part in splitted_body_content:
-                if not part:
-                    continue
-
-                initial, content = part.split(_CRLF_BYTES_MARK * 2)
-                headers = HTTPHeaders()
-                if not headers.parse_http_v1_header(initial):
-                    raise HTTPError(400)  # 400 Bad Request.
-
-                disposition = headers.get_first("content-disposition")
-                disposition_list = []
-                disposition_dict = TolerantMagicDict()
-
-                for field in disposition.split(";"):  # Split Disposition
-                    field = field.strip()  # Remove Useless Spaces.
-                    if field.find("=") == -1:  # This is not a key-value pair.
-                        disposition_list.append(field)
-                        continue
-                    key, value = field.split("=")
-                    if value.startswith('"') and value.endswith('"'):
-                        value = value[1:-1]
-                    disposition_dict.add(key.strip().lower(), value.strip())
-
-                if disposition_list[0] != "form-data":
-                    raise HTTPError(400)
-                    # Mixed form-data will be supported later.
-                content = content[:-2]  # Drop CRLF Mark
-
-                if "filename" in disposition_dict.keys():
-                    self.add(disposition_dict.get_first("name", ""), HTTPFile(
+            if "filename" in disposition_dict.keys():
+                body_args.files.add(
+                    disposition_dict.get_first("name", ""),
+                    HTTPMultipartFileField(
                         fieldname=disposition_dict.get_first("name", ""),
                         filename=disposition_dict.get_first("filename", ""),
                         content=content,
@@ -396,238 +347,209 @@ class HTTPBody(TolerantMagicDict):
                             "content-type", "application/octet-stream"),
                         headers=headers,
                         encoding=headers.get_first("content-transfer-encoding",
-                                                   "binary")
-                    ))
-                else:
-                    try:
-                        content = content.decode()
-                    except UnicodeDecodeError:
-                        pass
-                    self.add(disposition_dict.get_first("name", ""), content)
-        elif self._content_type.lower().strip() == "application/json":
-            self.update(**json.loads(
-                ensure_str(self._pending_bytes[:self._content_length])))
-        else:
-            raise HTTPError(400)  # Unknown content-type.
+                                                   "binary")))
+            else:
+                try:
+                    content = content.decode()
+                except UnicodeDecodeError:
+                    pass
+                body_args.add(disposition_dict.get_first("name", ""), content)
 
-        return True
+        return body_args
 
-    def make_http_v1_body(self):
+    def assemble(self) -> typing.Tuple[bytes, str]:
         """
         Generate HTTP v1 Body to bytes.
         """
         body = b""
-        if self._content_type.lower() == "application/x-www-form-urlencoded":
-            body += ensure_bytes(urllib.parse.urlencode(self))
+        boundary = "----------FutureFinityFormBoundary"
+        boundary += ensure_str(security.get_random_str(8)).lower()
+        content_type = "multipart/form-data; boundary=" + boundary
 
-        elif self._content_type.lower().startswith("multipart/form-data"):
-            boundary = "----------FutureFinityFormBoundary" + str(
-                uuid.uuid4()).upper()
-            self.set_content_type(
-                "multipart/form-data; boundary=" + boundary)
+        full_boundary = b"--" + ensure_bytes(boundary)
 
-            full_boundary = b"--" + boundary.encode()
+        for field_name, field_value in self.items():
+            body += full_boundary + _CRLF_BYTES_MARK
 
-            for field_name, field_value in self.items():
-                body += full_boundary + _CRLF_BYTES_MARK
+            if isinstance(field_value, str):
+                body += b"Content-Disposition: form-data; "
+                body += ensure_bytes("name=\"%s\"\r\n" % field_name)
+                body += _CRLF_BYTES_MARK
 
-                if isinstance(field_value, str):
-                    body += b"Content-Disposition: form-data; "
-                    body += ensure_bytes("name=\"%s\"\r\n" % field_name)
-                    body += _CRLF_BYTES_MARK
+                body += ensure_bytes(field_value)
+                body += _CRLF_BYTES_MARK
+            else:
+                raise ProtocolError("Unknown Field Type")
 
-                    body += ensure_bytes(field_value)
-                    body += _CRLF_BYTES_MARK
+        for file_field in self.files.values():
+            body += full_boundary + _CRLF_BYTES_MARK
+            body += file_field.assemble()
 
-                elif isinstance(field_value, HTTPFile):
-                    body += field_value.make_http_v1_form_field()
+        body += full_boundary + b"--" + _CRLF_BYTES_MARK
+        return body, content_type
 
-                else:
-                    raise HTTPError(400)  # Unknown Field Type.
+    def __str__(self) -> str:
+        # Multipart Body is not printable.
+        return object.__str__(self)
 
-            body += full_boundary + b"--" + _CRLF_BYTES_MARK
+    def __repr__(self) -> str:
+        # Multipart Body is not printable.
+        return object.__repr__(self)
 
-        elif self._content_type.lower() == "application/json":
-            body += ensure_bytes(json.dumps(self))
-        else:
-            raise HTTPError(400)  # Unknown POST Content Type.
-
-        self.set_content_length(len(body))
-        return body
+    def copy(self) -> "HTTPMultipartBody":
+        raise ProtocolError("HTTPMultipartBody is not copyable.")
 
     __copy__ = copy
-    __repr__ = __str__
 
 
-class HTTPRequest:
-    """
-    HTTP Request Implmentation.
+class HTTPIncomingMessage:
+    @property
+    def _is_chunked_body(self) -> bool:
+        if not hasattr(self, "__is_chunked_body"):
+            if self.http_version == 10:
+                self.__is_chunked_body = False
 
-    This class contains a HTTP Request.
-    """
-    def __init__(self, path: typing.Optional[str]=None,
-                 scheme: typing.Optional[str]="http",
-                 host: typing.Optional[str]="",
-                 port: typing.Optional[str]=0,
-                 method: typing.Optional[str]="GET",
-                 http_version: typing.Optional[int]=None,
-                 headers: typing.Optional[HTTPHeaders]=None,
-                 cookies: typing.Optional[HTTPCookies]=None,
-                 body: typing.Optional[HTTPBody]=None):
-        self.http_version = http_version or 10
-        self.scheme = scheme
-        self.port = port
-        self._pending_bytes = b""
-        self._splitted_bytes_length = 0
-        self.path = path
-        self.origin_path = None
+            else:
+                transfer_encoding = self.headers.get_first("transfer-encoding")
+
+                if not transfer_encoding:
+                    self.__is_chunked_body = False
+                elif transfer_encoding.lower() == "chunked":
+                    self.__is_chunked_body = True
+                else:
+                    self.__is_chunked_body = False
+
+        return self.__is_chunked_body
+
+    @property
+    def scheme(self) -> str:
+        if not hasattr(self, "_scheme"):
+            if self.connection.use_tls:
+                self._scheme = "https"
+            else:
+                self._scheme = "http"
+        return self._scheme
+
+    @property
+    def _expected_content_length(self) -> int:
+        if not hasattr(self, "__expected_content_length"):
+            content_length = self.headers.get_first("content-length")
+            if not content_length:
+                # No content length header found.
+                self.__expected_content_length = -1
+            elif not content_length.isdecimal():
+                # Cannot convert content length to integer.
+                self.__expected_content_length = -1
+
+            else:
+                self.__expected_content_length = int(content_length)
+
+        return self.__expected_content_length
+
+    @property
+    def _body_expected(self) -> bool:
+        if hasattr(self, "method"):
+            if self.method.lower() == "head":
+                return False
+        if self._is_chunked_body:
+            return True
+        if self._expected_content_length != -1:
+            return True
+        return False
+
+
+class HTTPIncomingRequest(HTTPIncomingMessage):
+    def __init__(self, method: str,
+                 origin_path: str,
+                 http_version: int=10,
+                 headers: HTTPHeaders=None,
+                 body: typing.Optional[bytes]=None,
+                 connection: "HTTPv1Connection"=None):
+        self.http_version = http_version
         self.method = method
-        self.host = host
-        self.queries = MagicDict()
-        self.cookies = cookies or HTTPCookies()
-        self.headers = headers or HTTPHeaders()
-        self.body = body or HTTPBody()
-        self.body_expected = False
+        self.origin_path = origin_path
+        self.headers = headers
+        self.body = body
+        self.connection = connection
 
-    def parse_http_v1_request(self, request_bytes: bytes) -> (bool, bytes):
-        """
-        Parse a HTTP v1 Request.
-
-        If the request header is successfully parsed,  It will return true
-        and tuple contains the rest part of request.
-        """
-        self._pending_bytes += request_bytes
-
-        if self._pending_bytes.find(_CRLF_BYTES_MARK * 2) == -1:
-            if len(self._pending_bytes) > _MAX_HEADER_LENGTH:
-                raise HTTPError(413)  # 413 Request Entity Too Large
-            return (False, b"")  # Request Not Completed, wait.
-
-        request_initial, request_body = _split_initial_lines(
-            self._pending_bytes, reply_times=2, max_split=1)
-
-        origin_headers = _split_initial_lines(ensure_str(request_initial))
-
-        basic_info = ensure_str(origin_headers.pop(0)).split(" ")
-
-        if len(basic_info) != 3:
-            raise HTTPError(400)  # 400 Bad Request
-
-        self.method, self.origin_path, http_version = basic_info
-
-        if http_version.lower() == "http/1.1":
-            self.http_version = 11
-        elif http_version.lower() == "http/1.0":
-            self.http_version = 10
-        else:
-            raise HTTPError(400)  # 400 Bad Request
-
+    def _parse_origin_path(self):
         parsed_url = urllib.parse.urlparse(self.origin_path)
-        self.path = parsed_url.path
 
-        for query_name, query_value in urllib.parse.parse_qsl(
+        self._path = parsed_url.path
+
+        link_args = TolerantMagicDict()
+        for (query_name, query_value) in urllib.parse.parse_qsl(
          parsed_url.query):
-            self.queries.add(query_name, query_value)
+            link_args.add(query_name, query_value)
 
-        try:
-            self.headers.parse_http_v1_header(origin_headers)
-        except HTTPError as e:
-            raise e
-        except:
-            raise HTTPError(400)  # 400 Bad Request
+        self._link_args = link_args
 
-        if "host" in self.headers.keys():
-            self.host = self.headers.pop("host")
+    @property
+    def cookies(self) -> HTTPCookies:
+        if not hasattr(self, "_cookies"):
+            cookies = HTTPCookies()
+            if "cookie" in self.headers:
+                for cookie_header in self.headers.get_list("cookie"):
+                    cookies.load(cookie_header)
+            self._cookies = cookies
+        return self._cookies
 
-        if "cookie" in self.headers:
-            for cookie_header in self.headers.get_list("cookie"):
-                self.cookies.load(cookie_header)
+    @property
+    def path(self) -> str:
+        if not hasattr(self, "_path"):
+            self._parse_origin_path()
+        return self._path
 
-        if self.method not in _SUPPORTED_METHODS:
-            raise HTTPError(400)  # Bad Request
+    @property
+    def host(self) -> str:
+        if not hasattr(self, "_host"):
+            self._host = self.headers.get_first("host")
+        return self._host
 
-        if self.method in _BODY_EXPECTED_METHODS:
-            self.body_expected = True
-            content_length = int(self.headers.get_first("content-length"))
-            if content_length > _MAX_BODY_LENGTH:
-                raise HTTPError(413)  # 413 Request Entity Too Large
+    @property
+    def link_args(self) -> TolerantMagicDict:
+        if not hasattr(self, "_link_args"):
+            self._parse_origin_path()
+        return self._link_args
 
-            self.body.set_content_type(
-                self.headers.get_first("content-type"))
-            self.body.set_content_length(content_length)
+    @property
+    def body_args(self) -> typing.Union[TolerantMagicDict, HTTPMultipartBody,
+                                        typing.Dict[typing.Any, typing.Any],
+                                        typing.List[typing.Any]]:
+        if not hasattr(self, "_body_args"):
+            content_type = self.headers.get_first("content-type")
 
-        self._pending_bytes = b""
-        return (True, request_body)
+            if content_type.lower().strip() in (
+             "application/x-www-form-urlencoded", "application/x-url-encoded"):
+                self._body_args = TolerantMagicDict(
+                    urllib.parse.parse_qsl(
+                        ensure_str(self.body),
+                        keep_blank_values=True,
+                        strict_parsing=True))
 
-    def make_http_v1_request(self):
-        """
-        Make a HTTP v1 Request to bytes.
-        """
-        request = b""
+            elif self._expected_content_type.lower().startswith(
+             "multipart/form-data"):
+                self._body_args = HTTPMultipartBody.parse(
+                    content_type=content_type,
+                    data=self.body)
 
-        if self.method not in _SUPPORTED_METHODS:
-            raise HTTPError(400)  # Unknown HTTP method
+            elif self._content_type.lower().strip() == "application/json":
+                self._body_args = json.loads(ensure_str(self.body))
 
-        request += ensure_bytes(self.method) + b" "
-        parse_result = urllib.parse.urlparse(self.path)
-        if parse_result.netloc and not self.host:
-            self.host = parse_result.netloc
+            else:  # Unknown Content Type.
+                raise ProtocolError("Unknown Body Type.")
 
-        encoded_queries = urllib.parse.urlencode(self.queries)
-        if parse_result.query:
-            if encoded_queries:
-                encoded_queries += "&"
-            encoded_queries += parse_result.query
+        return self._body_args
 
-        url = urllib.parse.urlunparse(urllib.parse.ParseResult(
-            scheme="", netloc="", path=parse_result.path,
-            params="", query=encoded_queries, fragment=""))
-
-        request += ensure_bytes(url) + b" "
-
-        if self.http_version == 11:
-            request += b"HTTP/1.1"
-        elif self.http_version == 10:
-            request += b"HTTP/1.0"
-        else:
-            raise HTTPError(400)  # Unknown HTTP Version
-
-        request += _CRLF_BYTES_MARK
-
-        headers = self.headers.copy()
-
-        headers.accept_cookies_for_request(self.cookies)
-        headers.add("host", self.host)
-        body = b""
-        if self.method in _BODY_EXPECTED_METHODS:
-            self.body_expected = True
-            if isinstance(self.body, HTTPBody):
-                body += self.body.make_http_v1_body()
-
-                headers["content-length"] = self.body.get_content_length()
-
-                headers["content-type"] = self.body.get_content_type()
-
-            elif isinstance(self.body, bytes):
-                body = self.body
-
-        request += headers.make_http_v1_header()
-
-        request += _CRLF_BYTES_MARK
-
-        request += body
-
-        return request
-
-    def __str__(self):
-        return ("HTTPRequest("
+    def __str__(self) -> str:
+        return ("HTTPIncomingRequest("
                 "method=%(method)s, "
                 "path=%(path)s, "
                 "http_version=%(http_version)s, "
                 "host=%(host)s, "
                 "headers=%(headers)s, "
                 "cookies=%(cookies)s, "
-                "queries=%(queries)s, "
+                "link_args=%(link_args)s, "
                 ")") % {
                     "method": repr(self.method),
                     "path": repr(self.path),
@@ -635,154 +557,475 @@ class HTTPRequest:
                     "host": repr(self.host),
                     "headers": repr(self.headers),
                     "cookies": repr(self.cookies),
-                    "queries": repr(self.queries)
+                    "link_args": repr(self.link_args)
                 }
 
     __repr__ = __str__
 
 
-class HTTPResponse:
-    """
-    HTTP Response Implmentation.
+class HTTPIncomingResponse(HTTPIncomingMessage):
+    def __init__(self, status_code: int, http_version: int=10,
+                 headers: HTTPHeaders=None,
+                 body: typing.Optional[bytes]=None,
+                 connection: "HTTPv1Connection"=None):
+        self.http_version = http_version
+        self.status_code = status_code
+        self.headers = headers
+        self.body = body
+        self.connection = connection
 
-    This class contains a HTTP Response.
-    """
-    def __init__(self,
-                 http_version: typing.Optional[int]=None,
-                 status_code: typing.Optional[int]=None,
-                 headers: typing.Optional[HTTPHeaders]=None,
-                 cookies: typing.Optional[HTTPCookies]=None,
-                 body: typing.Optional[bytes]=None):
-        self.http_version = http_version or 10
-        self.status_code = status_code or 200
+    @property
+    def cookies(self) -> HTTPCookies:
+        if not hasattr(self, "_cookies"):
+            cookies = HTTPCookies()
+            if "set-cookie" in self.headers:
+                for cookie_header in self.headers.get_list("set-cookie"):
+                    cookies.load(cookie_header)
+            self._cookies = cookies
+        return self._cookies
 
-        self.headers = headers or HTTPHeaders()
-        self.cookies = cookies or HTTPCookies()
-        self.body = body or b""
+    def __str__(self) -> str:
+        return ("HTTPIncomingResponse("
+                "status_code=%(status_code)s, "
+                "http_version=%(http_version)s, "
+                "headers=%(headers)s, "
+                "cookies=%(cookies)s, "
+                ")") % {
+                    "status_code": repr(self.status_code),
+                    "http_version": repr(self.http_version),
+                    "headers": repr(self.headers),
+                    "cookies": repr(self.cookies)
+                }
 
-        self._pending_bytes = b""
+    __repr__ = __str__
 
-    def parse_http_v1_response(self, response_bytes) -> (bool, bytes):
-        """
-        Parse a HTTP v1 Response.
 
-        If the response header is successfully parsed, It will return true
-        and tuple contains the rest part of response.
-        """
-        self._pending_bytes += response_bytes
+class HTTPConnectionController:
+    def __init__(self, *args, **kwargs):
+        self.transport = None
+        self.use_stream = False
 
-        if self._pending_bytes.find(_CRLF_BYTES_MARK * 2) == -1:
-            if len(self._pending_bytes) > _MAX_HEADER_LENGTH:
-                raise HTTPError(500)  # Server Response Header Too Large.
+    def initial_received(self, incoming: HTTPIncomingMessage):
+        pass
 
-            return (False, b"")  # Response Not Completed, Wait.
+    def stream_received(self, incoming: HTTPIncomingMessage, data: bytes):
+        raise NotImplementedError("You should override stream_received.")
 
-        response_initial, response_body = _split_initial_lines(
-            self._pending_bytes, reply_times=2, max_split=1)
+    def error_received(self, incoming, exc: tuple):
+        raise NotImplementedError("You should override error_received.")
 
-        origin_headers = _split_initial_lines(ensure_str(response_initial))
+    def message_received(self, incoming: HTTPIncomingMessage):
+        raise NotImplementedError("You should override message_received.")
 
-        basic_info = origin_headers.pop(0).split(" ")
+    def set_timeout_handler(self, suggested_time=None):
+        pass
 
-        http_version = basic_info[0]
+    def cancel_timeout_handler(self, suggested_time=None):
+        pass
+
+
+class ConnectionParseError(ProtocolError, ConnectionError):
+    pass
+
+
+class ConnectionBadMessage(ConnectionParseError):
+    pass
+
+
+class ConnectionEntityTooLarge(ConnectionParseError):
+    pass
+
+
+class HTTPv1Connection:
+    def __init__(self, controller: HTTPConnectionController,
+                 is_client: bool, http_version: int=10,
+                 use_tls: bool=False, sockname: tuple=None,
+                 peername: tuple=None, allow_keep_alive: bool=True):
+        self.http_version = http_version
+        self.is_client = is_client
+        self.use_tls = use_tls
+        self.sockname = sockname
+        self.peername = peername
+
+        self.controller = controller
+
+        self.allow_keep_alive = allow_keep_alive
+
+        self.max_initial_length = _MAX_INITIAL_LENGTH
+        self.max_body_length = _MAX_BODY_LENGTH
+
+        self._pending_bytes = bytearray()
+
+        self._reset_connection()
+
+    def _reset_connection(self):  # Reset Connection For Keep-Alive.
+        self.controller.set_timeout_handler()
+
+        self._use_keep_alive = None
+
+        self._body_length = None
+        self._next_chunk_length = None
+
+        self._pending_body = b""
+
+        self._parsed_incoming_info = {}
+        self.incoming = None
+
+        self._outgoing_chunked_body = False
+
+        self.stage = _CONN_INIT
+
+    @property
+    def _can_keep_alive(self):
+        if self.allow_keep_alive is False:
+            return False
+        if self.http_version == 10:
+            return False
+
+        if self._use_keep_alive is not None:
+            return self._use_keep_alive
+        return True
+
+    def _parse_initial(self):
+        initial_end = self._pending_bytes.find(_CRLF_BYTES_MARK * 2)
+
+        if initial_end == -1:
+            if len(self._pending_bytes) > self.max_initial_length:
+                raise ConnectionEntityTooLarge(
+                    "Initial Exceed its Maximum Length.")
+            return
+
+        initial_end += 2
+        if initial_end > self.max_initial_length:
+            raise ConnectionEntityTooLarge(
+                "Initial Exceed its Maximum Length.")
+            return
+
+        pending_initial = ensure_bytes(self._pending_bytes[:initial_end])
+        del self._pending_bytes[:initial_end + 2]
+
+        basic_info, origin_headers = ensure_str(pending_initial).split(
+            _CRLF_MARK, 1)
+
+        basic_info = basic_info.split(" ")
+
+        if self.is_client:
+            http_version = basic_info[0]
+
+            if not basic_info[1].isdecimal():
+                raise ConnectionBadMessage("Bad Initial Received.")
+
+            self._parsed_incoming_info["status_code"] = int(basic_info[1])
+
+        else:
+            if len(basic_info) != 3:
+                raise ConnectionBadMessage("Bad Initial Received.")
+
+            method, origin_path, http_version = basic_info
+
+            self._parsed_incoming_info["method"] = basic_info[0]
+            self._parsed_incoming_info["origin_path"] = basic_info[1]
+
         if http_version.lower() == "http/1.1":
             self.http_version = 11
         elif http_version.lower() == "http/1.0":
             self.http_version = 10
         else:
-            raise HTTPError(500)  # 500 Initial Server Error
+            raise ConnectionBadMessage("Unknown HTTP Version.")
+
+        self._parsed_incoming_info["http_version"] = self.http_version
 
         try:
-            self.status_code = int(basic_info[1])
+            headers = HTTPHeaders.parse(origin_headers)
         except:
-            raise HTTPError(500)  # 500 Initial Server Error
+            raise ConnectionBadMessage("Bad Headers Received.")
 
-        try:
-            self.headers.parse_http_v1_header(origin_headers)
-        except HTTPError as e:
-            raise e
-        except:
-            raise HTTPError(500)  # 500 Initial Server Error
+        if self._can_keep_alive and "connection" in headers:
+            self._use_keep_alive = headers.get_first(
+                "connection").lower() == "keep-alive"
 
-        if "set-cookie" in self.headers:
-            for cookie_header in self.headers.get_list("set-cookie"):
-                cookie_attrs = cookie_header.split(";")
+        self._parsed_incoming_info["headers"] = headers
 
-                cookie_name, cookie_value = cookie_attrs.pop(
-                    0).strip().split("=")
-                cookie_name = cookie_name.strip()
-                cookie_value = cookie_value.strip()
+        if self.is_client:
+            try:
+                self.incoming = HTTPIncomingResponse(
+                    **self._parsed_incoming_info)
+            except:
+                raise ConnectionBadMessage("Bad Initial Received.")
 
-                if cookie_value.startswith(
-                 "\"") and cookie_value.endswith("\""):
-                    cookie_value = value[1:-1]
-
-                self.cookies[cookie_name] = cookie_value
-
-                for attr in cookie_attrs:
-                    if attr.strip().lower() == "httponly":
-                        self.cookies[cookie_name]["httponly"] = True
-                        continue
-
-                    if attr.strip().lower() == "secure":
-                        self.cookies[cookie_name]["secure"] = True
-                        continue
-
-                    if attr.strip().lower().startswith("path"):
-                        self.cookies[cookie_name]["path"] = attr.split(
-                            "=")[1].strip()
-                        continue
-
-                    if attr.strip().lower().startswith("expires"):
-                        self.cookies[cookie_name]["expires"] = attr.split(
-                            "=")[1].strip()
-                        continue
-
-                    if attr.strip().lower().startswith("max-age"):
-                        self.cookies[cookie_name]["max-age"] = int(attr.split(
-                            "=")[1].strip())
-                        continue
-
-                    if attr.strip().lower().startswith("domain"):
-                        self.cookies[cookie_name]["domain"] = attr.split(
-                            "=")[1].strip()
-
-        self._pending_bytes = b""
-        return (True, response_body)
-
-    def make_http_v1_response(self):
-        """
-        Make a HTTP v1 Response to bytes.
-        """
-        response = b""
-        if self.http_version == 11:
-            response += b"HTTP/1.1 "
-        elif self.http_version == 10:
-            response += b"HTTP/1.0 "
         else:
-            raise HTTPError(500)  # Unknown HTTP Version
+            try:
+                self.incoming = HTTPIncomingRequest(
+                    **self._parsed_incoming_info)
+            except:
+                raise ConnectionBadMessage("Bad Initial Received.")
 
-        response += ensure_bytes(str(self.status_code)) + b" "
-        response += ensure_bytes(status_code_text[self.status_code])
-        response += _CRLF_BYTES_MARK
+        self.stage = _CONN_INITIAL_PARSED
 
-        headers = self.headers.copy()
+    def _parse_next_chunk(self):
+        if self._body_length is None:
+            self._body_length = 0
+        while True:
+            if self._next_chunk_length is None:
+                length_end = self._pending_bytes.find(_CRLF_BYTES_MARK)
+                if length_end == -1:
+                    if len(self._pending_bytes) > 10:
+                        # FFFFFFFF\r\n is about 4GB, FutureFinity can only
+                        # handle files less than 50MB by default.
+                        raise ConnectionEntityTooLarge(
+                            "The body is too large.")
+                    return
 
-        if "content-type" not in headers.keys():
-            headers.add("content-type", "text/html; charset=utf-8;")
+                length_bytes = self._pending_bytes[:length_end]
+                del self._pending_bytes[:length_end + 2]
 
-        if "content-length" not in headers.keys():
-            headers.add("content-length",
-                        str(len(self.body)))
+                try:
+                    self._next_chunk_length = int(length_bytes, 16)
+                except ValueError:  # Not Valid Hexadecimal bytes
+                    raise ConnectionBadMessage(
+                        "Bad Chunk Length Received.")
 
-        if "date" not in headers.keys():
-            headers.add("date", format_timestamp())
+                if self._next_chunk_length > self.max_body_length:
+                    raise ConnectionEntityTooLarge(
+                        "The body is too large.")
 
-        headers.accept_cookies_for_response(self.cookies)
+            if len(self._pending_bytes) < self._next_chunk_length + 2:
+                return  # Data not enough.
 
-        response += headers.make_http_v1_header()
-        response += _CRLF_BYTES_MARK
+            if self._next_chunk_length == 0:
+                del self._pending_bytes[:2]
+                self.incoming.body = self._pending_body
+                self.stage = _CONN_MESSAGE_PARSED
+                return  # Parse Finished.
 
-        response += self.body
+            self._pending_body += self._pending_bytes[:self._next_chunk_length]
+            del self._pending_bytes[:self._next_chunk_length + 2]
+            self._body_length += self._next_chunk_length
+            self._next_chunk_length = None
 
-        return response
+            if self._body_length > self.max_body_length:
+                raise ConnectionEntityTooLarge(
+                    "The body is too large.")
+
+    def _parse_body(self):
+        if self.incoming._is_chunked_body:
+            self._parse_next_chunk()
+            return
+
+        if self._body_length is None:
+            self._body_length = self.incoming._expected_content_length
+
+        if self._body_length > self.max_body_length:
+            raise ConnectionEntityTooLarge("The body is too large.")
+
+        if len(self._pending_bytes) < self._body_length:
+            return  # Data not enough, waiting.
+
+        self._pending_body = ensure_bytes(
+            self._pending_bytes[:self._body_length])
+
+        del self._pending_bytes[:self._body_length]
+
+        self.incoming.body = self._pending_body
+        self.stage = _CONN_MESSAGE_PARSED
+
+    def data_received(self, data: bytes):
+        if not data:
+            return  # Nothing received, nothing is going to happen.
+
+        self._pending_bytes += data
+
+        try:
+            self._parse_incoming_message()
+        except:
+            if self.is_client:
+                self._close_connection()
+            else:
+                self.stage = _CONN_MESSAGE_PARSED
+            self.controller.error_received(self.incoming, sys.exc_info())
+
+    def _parse_incoming_message(self):
+        self.controller.cancel_timeout_handler()
+
+        if self.is_client is False:
+            if self.stage is _CONN_INIT:
+                self.stage = _CONN_INITIAL_WAITING
+
+        if self.stage is _CONN_INITIAL_WAITING:
+            self._parse_initial()
+
+        if self.stage is _CONN_INITIAL_PARSED:
+            self.controller.initial_received(self.incoming)
+
+            if self.controller.use_stream:
+                self.stage = _CONN_STREAMED
+
+            elif not self.incoming._body_expected:
+                self.stage = _CONN_MESSAGE_PARSED
+
+            else:
+                self.stage = _CONN_BODY_WAITING
+                if not self.incoming._is_chunked_body:
+                    if self.incoming._expected_content_length == -1:
+                        raise ConnectionBadMessage(
+                            "Method Request a body, "
+                            "but we cannot find a way to detect body length.")
+
+        if self.stage is _CONN_STREAMED:
+            self.controller.stream_received(self.incoming,
+                                         ensure_bytes(self._pending_bytes))
+            self._pending_bytes.clear()
+            return
+
+        if self.stage is _CONN_BODY_WAITING:
+            self._parse_body()
+
+        if self.stage is _CONN_MESSAGE_PARSED:
+            self.controller.message_received(self.incoming)
+            if self.is_client:
+                if self._can_keep_alive:
+                    self._reset_connection()
+                else:
+                    self._close_connection()
+            return
+
+    def write_initial(self, http_version=None, method="GET", path="/",
+                      status_code=200, headers=None):
+        initial = b""
+
+        if http_version is not None:
+            self.http_version = http_version
+
+        if self.http_version == 11:
+            http_version_text = "HTTP/1.1"
+        elif self.http_version == 10:
+            http_version_text = "HTTP/1.0"
+        else:
+            raise ProtocolError("Unknown HTTP Version.")
+
+        basic_info_template = b"%s %s %s" + _CRLF_BYTES_MARK
+        if self.is_client:
+            if self.stage is not _CONN_INIT:
+                raise ProtocolError("Unacceptable Function Access.")
+
+            basic_info = basic_info_template % (
+                ensure_bytes(method), ensure_bytes(path),
+                ensure_bytes(http_version_text))
+
+        else:
+            if self.stage is not _CONN_MESSAGE_PARSED:
+                raise ProtocolError("Unacceptable Function Access.")
+
+            basic_info = basic_info_template % (
+                ensure_bytes(http_version_text), ensure_bytes(status_code),
+                ensure_bytes(status_code_text[status_code]))
+
+        initial += basic_info
+
+        if self._can_keep_alive and "connection" in headers:
+            self._use_keep_alive = headers.get_first(
+                "connection").lower() == "keep-alive"
+
+        transfer_encoding = headers.get_first("transfer-encoding")
+        if transfer_encoding is not None:
+            if transfer_encoding.lower() == "chunked":
+                self._outgoing_chunked_body = True
+            else:
+                self._outgoing_chunked_body = False
+        else:
+            self._outgoing_chunked_body = False
+
+        if "connection" not in headers.keys():
+            if self._can_keep_alive:
+                headers["connection"] = "Keep-Alive"
+            else:
+                headers["connection"] = "Close"
+        else:
+            self._use_keep_alive = headers[
+                "connection"].lower() == "keep-alive"
+
+        if self.is_client:
+            if "accept" not in headers.keys():
+                headers["accept"] = "*/*"
+            if "user-agent" not in headers.keys():
+                headers["user-agent"] = "FutureFinity/" + futurefinity.version
+        else:
+            if "server" not in headers.keys():
+                headers["server"] = "FutureFinity/" + futurefinity.version
+            if method.lower() == "head":
+                # For Head Request, there will not be a body.
+                self._outgoing_chunked_body = False
+
+        initial += headers.assemble()
+
+        initial += _CRLF_BYTES_MARK
+
+        self.controller.transport.write(initial)
+
+        self.stage = _CONN_INITIAL_WRITTEN
+
+    def write_body(self, body: bytes):
+        self.stage = _CONN_BODY_WRITTEN
+        if self._outgoing_chunked_body:
+            self._write_body_chunk(body)
+            return
+        self.controller.transport.write(body)
+
+    def _write_body_chunk(self, body_chunk: bytes):
+        if not self._outgoing_chunked_body:
+            raise ProtocolError("Invalid Function Access.")
+
+        if not body_chunk:
+            return
+            # Prevent Body being finished accidentally.
+            # Finish Body Writing by HTTPv1Connection.finish_writing
+
+        chunk_bytes = b""
+
+        body_chunk_length = len(body_chunk)
+        chunk_bytes += ensure_bytes(hex(body_chunk_length)[2:].upper())
+        chunk_bytes += _CRLF_BYTES_MARK
+
+        chunk_bytes += body_chunk
+        chunk_bytes += _CRLF_BYTES_MARK
+        self.controller.transport.write(chunk_bytes)
+
+    def finish_writing(self):
+        if self._outgoing_chunked_body:
+            self.controller.transport.write(b"0" + _CRLF_BYTES_MARK * 2)
+
+        if self.is_client:
+            self.stage = _CONN_INITIAL_WAITING
+
+        else:
+            if self._can_keep_alive:
+                self._reset_connection()
+            else:
+                self._close_connection()
+
+    def connection_lost(self, exc: typing.Optional[tuple]=None):
+        if self.stage is _CONN_CLOSED:
+            return  # This connection has been closed.
+
+        if self.is_client:
+            if self.stage is _CONN_BODY_WAITING:
+                self._pending_body = ensure_bytes(self._pending_bytes)
+
+                self._pending_bytes.clear()
+
+                self.incoming.body = self._pending_body
+                self.stage = _CONN_MESSAGE_PARSED
+                self._parse_incoming_message()  # Trigger Message Received.
+
+        if self.stage is _CONN_INIT:
+            self.stage = _CONN_CLOSED
+            return  # This connection has nothing, so nothing to cleanup.
+
+        self._close_connection()
+
+    def _close_connection(self):  # Close Connection.
+        self.controller.cancel_timeout_handler()
+        if self.controller.transport:
+            self.controller.transport.close()
+
+        self.stage = _CONN_CLOSED

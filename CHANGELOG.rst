@@ -1,12 +1,15 @@
 dev
 ---
-- Abstract HTTP Protocol by HTTPRequest and HTTPResponse
+- Abstract HTTPv1 Protocol by HTTPv1Connection,
+- Initialize HTTPIncomingRequest and HTTPIncomingResponse
 - Fixed Cookie Default Value Bug
-- Fixed SessionInterface Bug
 - Introduce Streamed RequestHandler
 - Removed Interface
-- Introduce Security Lib
+- Introduce Security Module
 - Introduce TemplateLoader
+- Introduce HTTPClient
+- Support Chunked Request and Chunked Response
+- Introduce Standardized Error Handling
 
 v0.1.1
 ------

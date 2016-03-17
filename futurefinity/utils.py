@@ -32,12 +32,23 @@ import collections.abc
 default_mark = object()
 
 
+class FutureFinityError(Exception):
+    """
+    Basic FutureFinity Error Class.
+
+    All Errors from FutureFinity are based on this class.
+    """
+    pass
+
+
 def ensure_bytes(var: typing.Any) -> bytes:
     """
     Try to convert passed variable to a bytes object.
     """
     if isinstance(var, bytes):
         return var
+    if isinstance(var, bytearray):
+        return bytes(var)
     if var is None:
         return b""
     if not isinstance(var, str):
@@ -55,7 +66,7 @@ def ensure_str(var: typing.Any) -> str:
         return var
     if var is None:
         return ""
-    if isinstance(var, bytes):
+    if isinstance(var, (bytes, bytearray)):
         strvar = var.decode("utf-8")
     else:
         strvar = var
@@ -131,9 +142,7 @@ class MagicDict(collections.abc.MutableMapping):
         return iter(self._dict)
 
     def __str__(self):
-        content_list = []
-        for key, value in self.items():
-            content_list.append((key, value))
+        content_list = [(key, value) for (key, value) in self.items()]
 
         return "MagicDict(%s)" % str(content_list)
 
@@ -179,9 +188,7 @@ class TolerantMagicDict(MagicDict):
         return MagicDict.__delitem__(self, lower_name)
 
     def __str__(self):
-        content_list = []
-        for key, value in self.items():
-            content_list.append((key, value))
+        content_list = [(key, value) for (key, value) in self.items()]
 
         return "TolerantMagicDict(%s)" % str(content_list)
 

@@ -15,8 +15,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.protocol import HTTPError
-
 import futurefinity.web
 
 import asyncio
@@ -57,7 +55,7 @@ class HTTPErrorTestCollector(unittest.TestCase):
         @self.app.add_handler("/http_error_test")
         class TestHandler(futurefinity.web.RequestHandler):
             async def get(self, *args, **kwargs):
-                raise HTTPError(403)
+                raise futurefinity.web.HTTPError(403)
 
         @self.app.add_handler("/custom_error_test")
         class TestHandler(futurefinity.web.RequestHandler):
