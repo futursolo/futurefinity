@@ -954,10 +954,10 @@ class Application:
 
         if "security_secret" in self.settings.keys():
             if self.settings.get("aes_security", True):
-                self.security_object = security.AESGCMSecurityObject(
+                self.security_object = security.AESGCMSecurityContext(
                     self.settings["security_secret"])
             else:
-                self.security_object = security.HMACSecurityObject(
+                self.security_object = security.HMACSecurityContext(
                     self.settings["security_secret"])
 
         if "static_path" in self.settings.keys():
