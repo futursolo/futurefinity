@@ -147,7 +147,7 @@ class HTTPHeaders(TolerantMagicDict):
 
     @staticmethod
     def parse(data: Union[str, bytes, list,
-                                 TolerantMagicDict]) -> "HTTPHeaders":
+                          TolerantMagicDict]) -> "HTTPHeaders":
         headers = HTTPHeaders()
         headers.load_headers(data)
         return headers
@@ -599,7 +599,7 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
     __repr__ = __str__
 
 
-class HTTPConnectionController:
+class BaseHTTPConnectionController:
     def __init__(self, *args, **kwargs):
         self.transport = None
         self.use_stream = False
@@ -616,10 +616,17 @@ class HTTPConnectionController:
     def message_received(self, incoming: HTTPIncomingMessage):
         raise NotImplementedError("You should override message_received.")
 
-    def set_timeout_handler(self, suggested_time=None):
+    def set_timeout_handler(self, suggested_time: Optional[int]=None):
+        """
+        Set a EventLoop.call_later instance, close transport after timeout.
+        """
         pass
 
-    def cancel_timeout_handler(self, suggested_time=None):
+    def cancel_timeout_handler(self, suggested_time: Optional[int]=None):
+        """
+        Cancel the EventLoop.call_later instance, prevent transport be closed
+        accidently.
+        """
         pass
 
 
@@ -636,7 +643,7 @@ class ConnectionEntityTooLarge(ConnectionParseError):
 
 
 class HTTPv1Connection:
-    def __init__(self, controller: HTTPConnectionController,
+    def __init__(self, controller: BaseHTTPConnectionController,
                  is_client: bool, http_version: int=10,
                  use_tls: bool=False, sockname: tuple=None,
                  peername: tuple=None, allow_keep_alive: bool=True):

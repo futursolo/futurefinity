@@ -70,7 +70,14 @@ class ResponseEntityTooLarge(ClientError):
     pass
 
 
-class HTTPClientConnectionController(protocol.HTTPConnectionController):
+class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
+    """
+    HTTP Client Connection Controller Class.
+
+    THis is a subclass of `protocol.BaseHTTPConnectionController`.
+
+    This is used to control a HTTP Connection.
+    """
     def __init__(self, host: str, port: int, *args,
                  allow_keep_alive: bool=True,
                  http_version: int=11,
@@ -80,7 +87,7 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
         self.http_version = http_version
         self.allow_keep_alive = allow_keep_alive
 
-        protocol.HTTPConnectionController.__init__(self)
+        protocol.BaseHTTPConnectionController.__init__(self)
 
         self.port = port
         self.host = host
@@ -108,6 +115,9 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
         self.incoming = incoming
 
     async def get_stream_and_connection_ready(self):
+        """
+        Prepare the Stream and the Connection for new request.
+        """
         self.cancel_timeout_handler()
         async def _create_new_stream_and_connection():
             self.reader, self.writer = await asyncio.open_connection(
@@ -134,6 +144,9 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
             await _create_new_stream_and_connection()
 
     def close_stream_and_connection(self):
+        """
+        Close the Stream and the Connection.
+        """
         self.cancel_timeout_handler()
         if self.connection:
             self.connection.connection_lost()
@@ -145,23 +158,20 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
             self.transport = None
 
     def set_timeout_handler(self):
-        """
-        Set a EventLoop.call_later instance, close transport after timeout.
-        """
         self.cancel_timeout_handler()
         self._timeout_handler = self._loop.call_later(
             self.default_timeout_length, self.close_stream_and_connection)
 
     def cancel_timeout_handler(self):
-        """
-        Cancel the EventLoop.call_later instance, prevent transport be closed
-        accidently.
-        """
         if self._timeout_handler is not None:
             self._timeout_handler.cancel()
         self._timeout_handler = None
 
-    async def fetch(self, method, path, headers, body):
+    async def fetch(self, method: str, path: str,
+                    headers: protocol.HTTPHeaders, body: bytes):
+        """
+        Fetch the request.
+        """
         await self.get_stream_and_connection_ready()
         headers["host"] = self.host
         self.connection.write_initial(
@@ -201,6 +211,11 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
 
 
 class HTTPClient:
+    """
+    FutureFinity HTTPClient Class.
+
+    This is the HTTPClient Implementation of FutureFinity.
+    """
     def __init__(self, *args, http_version=11,
                  allow_keep_alive: bool=True,
                  loop: Optional[asyncio.BaseEventLoop]=None,
@@ -266,6 +281,9 @@ class HTTPClient:
 
     async def fetch(self, method, url, headers=None,
                     cookies=None, link_args=None, body=None):
+        """
+        Fetch the request.
+        """
         if link_args is not None and not isinstance(link_args,
                                                     TolerantMagicDict):
             link_args = TolerantMagicDict(link_args)
@@ -302,12 +320,20 @@ class HTTPClient:
         return response
 
     async def get(self, url, headers=None, cookies=None, link_args=None):
+        """
+        This is a friendly wrapper of `client.HTTPClient.fetch` for
+        `GET` request.
+        """
         response = await self.fetch(method="GET", url=url, headers=headers,
                                     cookies=cookies, link_args=link_args)
         return response
 
     async def post(self, url, headers=None, cookies=None, link_args=None,
                    body_args=None, files=None):
+        """
+        This is a friendly wrapper of `client.HTTPClient.fetch` for
+        `POST` request.
+        """
         if "content-type" not in headers.keys():
             if not files:  # Automatic Content-Type Decision.
                 content_type = "application/x-www-form-urlencoded"

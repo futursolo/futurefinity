@@ -1,6 +1,6 @@
 dev
 ---
-- Abstract HTTPv1 Protocol by HTTPv1Connection,
+- Abstract HTTPv1 Protocol by HTTPv1Connection
 - Initialize HTTPIncomingRequest and HTTPIncomingResponse
 - Fixed Cookie Default Value Bug
 - Introduce Streamed RequestHandler

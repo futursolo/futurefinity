@@ -43,7 +43,7 @@ class ServerError(FutureFinityError):
     pass
 
 
-class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
+class HTTPServer(asyncio.Protocol, protocol.BaseHTTPConnectionController):
     """
     FutureFinity HTTPServer Class.
 
@@ -52,7 +52,7 @@ class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
     """
     def __init__(self, *args, allow_keep_alive: bool=True, **kwargs):
         asyncio.Protocol.__init__(self)
-        protocol.HTTPConnectionController.__init__(self)
+        protocol.BaseHTTPConnectionController.__init__(self)
         self.transport = None
         self.use_tls = False
         self.connection = None
@@ -94,18 +94,11 @@ class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
         self.set_timeout_handler()
 
     def set_timeout_handler(self):
-        """
-        Set a EventLoop.call_later instance, close transport after timeout.
-        """
         self.cancel_timeout_handler()
         self._timeout_handler = self._loop.call_later(
             self.default_timeout_length, self.transport.close)
 
     def cancel_timeout_handler(self):
-        """
-        Cancel the EventLoop.call_later instance, prevent transport be closed
-        accidently.
-        """
         if self._timeout_handler is not None:
             self._timeout_handler.cancel()
         self._timeout_handler = None
