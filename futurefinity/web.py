@@ -58,6 +58,7 @@ import asyncio
 
 import os
 import re
+import ssl
 import sys
 import hmac
 import html
@@ -913,11 +914,25 @@ class Application:
                                  app=self, loop=self._loop)
 
     def listen(self, port: int,
-               address: str="127.0.0.1") -> types.CoroutineType:
+               address: str="127.0.0.1",
+               context: typing.Union[
+                    bool, ssl.SSLContext,
+                    None]=None) -> types.CoroutineType:
         """
         Make the server to listen to the specified port and address.
+
+        :arg port: The port number that futurefinity is going to bind.
+        :arg address: the address that futurefinity is going to bind.
+        :arg context: A Custom EventLoop, if you want.
+        :arg aes_security: Default: `True`.
         """
-        f = self._loop.create_server(self.make_server(), address, port)
+        if context:
+            if isinstance(context, bool):
+                context = ssl.create_default_context()
+        else:
+            context = None
+        f = self._loop.create_server(self.make_server(), address, port,
+                                     ssl=context)
         srv = self._loop.run_until_complete(f)
         return srv
 
