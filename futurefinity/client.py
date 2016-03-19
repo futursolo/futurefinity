@@ -203,7 +203,7 @@ class HTTPClient:
     def __init__(self, *args, http_version=11,
                  allow_keep_alive: bool=True,
                  loop: typing.Optional[asyncio.BaseEventLoop]=None,
-                 context: ssl.SSLContext=None, **kwargs):
+                 context: typing.Optional[ssl.SSLContext]=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self.allow_keep_alive = allow_keep_alive
         self.http_version = http_version

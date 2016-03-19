@@ -873,7 +873,7 @@ class HTTPv1Connection:
 
         if self.stage is _CONN_STREAMED:
             self.controller.stream_received(self.incoming,
-                                         ensure_bytes(self._pending_bytes))
+                                            ensure_bytes(self._pending_bytes))
             self._pending_bytes.clear()
             return
 

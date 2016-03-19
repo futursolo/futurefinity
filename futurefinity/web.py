@@ -206,7 +206,7 @@ class RequestHandler:
         self._finished = False
 
     def get_link_arg(self, name: str,
-                     default: typing.Optional[str]=default_mark) -> str:
+                     default: typing.Union[str, object]=default_mark) -> str:
         """
         Return first argument in the link with the name.
 
@@ -229,7 +229,7 @@ class RequestHandler:
         return self.request.queries.get_list(name, [])
 
     def get_body_arg(self, name: str,
-                     default: typing.Optional[str]=default_mark) -> str:
+                     default: typing.Union[str, object]=default_mark) -> str:
         """
         Return first argument in the body with the name.
 
@@ -252,7 +252,7 @@ class RequestHandler:
         return self.request.body_args.get_list(name, [])
 
     def get_header(self, name: str,
-                   default: typing.Optional[str]=default_mark) -> str:
+                   default: typing.Union[str, object]=default_mark) -> str:
         """
         Return First Header with the name.
 
@@ -279,6 +279,9 @@ class RequestHandler:
         Set a response header with the name and value, this will override any
         former value(s) with the same name.
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot set a new header after the "
+                                 "initial is written.")
         self._headers[name] = ensure_str(value)
 
     def add_header(self, name: str, value: str):
@@ -286,12 +289,18 @@ class RequestHandler:
         Add a response header with the name and value, this will not override
         any former value(s) with the same name.
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot add a new header after the "
+                                 "initial is written.")
         self._headers.add(name, ensure_str(value))
 
     def clear_header(self, name: str):
         """
         Clear response header(s) with the name.
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot clear headers after the "
+                                 "initial is written.")
         if name in self._headers.keys():
             del self._headers[name]
 
@@ -299,6 +308,9 @@ class RequestHandler:
         """
         Clear all response header(s).
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot clear headers after the "
+                                 "initial is written.")
         self._headers = HTTPHeaders()
 
     def get_cookie(self, name: str, default: typing.Optional[str]=None) -> str:
@@ -331,6 +343,9 @@ class RequestHandler:
         :arg httponly: is the property if the cookie can only be passed by
             http.
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot set a new cookie after the "
+                                 "initial is written.")
         self._cookies[name] = value
         if domain:
             self._cookies[name]["domain"] = domain
@@ -345,12 +360,18 @@ class RequestHandler:
         """
         Clear a cookie with the name.
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot clear a cookie after the "
+                                 "initial is written.")
         self.set_cookie(name=name, value="", expires=format_timestamp(0))
 
     def clear_all_cookies(self):
         """
         Clear response cookie(s).
         """
+        if self._initial_written:
+            raise HTTPError(500, "You cannot clear cookies after the "
+                                 "initial is written.")
         for cookie_name in self.request.cookies.keys():
             self.clear_cookie(cookie_name)
 
@@ -426,6 +447,8 @@ class RequestHandler:
 
         FutureFinity uses a secure cookie _csrf and a body argument _csrf
         to prevent CSRF attack.
+
+        To stop checking CSRF value, override this function and return `None`.
         """
         cookie_value = self.get_secure_cookie("_csrf")
         form_value = self.get_body_arg("_csrf")
@@ -436,12 +459,17 @@ class RequestHandler:
         if not hmac.compare_digest(cookie_value, form_value):
             raise HTTPError(403)  # CSRF Value does not match.
 
-    @property
-    def _csrf_value(self):
+    def set_csrf_value(self):
+        """
+        Set the csrf value.
+        """
         if not hasattr(self, "__csrf_value"):
             self.__csrf_value = security.get_random_str(32)
             self.set_secure_cookie("_csrf", self.__csrf_value, expires_days=1)
 
+    @property
+    def _csrf_value(self):
+        self.set_csrf_value()
         return self.__csrf_value
 
     def csrf_form_html(self) -> str:
@@ -467,7 +495,7 @@ class RequestHandler:
             self._response_body.clear()
         self._response_body += ensure_bytes(text)
 
-    async def render_string(
+    def render_string(
      self, template_name: str,
      template_dict: typing.Optional[typing.Mapping[str, str]]=None) -> str:
         """
@@ -476,8 +504,6 @@ class RequestHandler:
         Currently, FutureFinity uses Jinja2 as the Default Template Rendering
         Engine. However, You can Specify Template Engine by override this
         function.
-
-        **This is a Coroutine.**
         """
 
         template_args = {
@@ -490,11 +516,10 @@ class RequestHandler:
                 "Cannot found template_path. "
                 "Please provide template_path through Application Settings.")
 
-        parsed_tpl = await self.app.template_loader.async_load_template(
-            template_name)
+        parsed_tpl = self.app.template_loader.load_template(template_name)
         return parsed_tpl.render(**template_dict)
 
-    async def render(
+    def render(
      self, template_name: str,
      template_dict: typing.Optional[typing.Mapping[str, str]]=None):
         """
@@ -503,8 +528,8 @@ class RequestHandler:
 
         **This is a Coroutine.**
         """
-        self.finish((await self.render_string(template_name,
-                                              template_dict=template_dict)))
+        self.finish(self.render_string(template_name,
+                                       template_dict=template_dict))
 
     def redirect(self, url: str, permanent: bool=False,
                  status: typing.Optional[int]=None):
@@ -540,18 +565,24 @@ class RequestHandler:
                         "url": ensure_str(url)
                      })
 
-    @property
-    def _body_etag(self) -> str:
+    def set_body_etag(self):
+        """
+        Set etag header of response_body.
+        """
         if not hasattr(self, "__body_etag"):
             sha1_hash_object = hashlib.sha1()
             sha1_hash_object.update(self._response_body)
 
             self.__body_etag = '"%s"' % sha1_hash_object.hexdigest()
-            if self.__body_etag is not None:
+            if self.__body_etag is not '""':
                 self.set_header("etag", self.__body_etag)
+
+    @property
+    def _body_etag(self) -> str:
+        self.set_body_etag()
         return self.__body_etag
 
-    def check_etag_header(self) -> bool:
+    def check_body_etag(self) -> bool:
         """
         Check etag header of response_body.
         """
@@ -578,6 +609,18 @@ class RequestHandler:
         return match
 
     def write_initial(self):
+        """
+        Send the Initial Part(e.g.: Headers) of a Response to the remote.
+
+        This function should be only called once.
+
+        Usually this function is called by `RequestHandler.flush`
+        automatically.
+
+        After this function is called, you cannot add any new headers, cookies,
+        or change the status_code. If an error is raised after this function
+        is called, FutureFinity is going to close the connection directly.
+        """
         if self._initial_written:
             raise HTTPError(500, "Cannot write initial twice.")
         if "content-type" not in self._headers.keys():
@@ -600,19 +643,7 @@ class RequestHandler:
         self._headers.accept_cookies_for_response(self._cookies)
 
         if self.settings.get("csrf_protect", False):
-            self._csrf_value
-
-        if "etag" not in self._headers and self._status_code == 200:
-            self._body_etag
-
-        if self.check_etag_header():
-            self._status_code = 304
-            self._response_body.clear()
-            for header_name in ("allow", "content-encoding",
-                                "content-language", "content-length",
-                                "content-md5", "content-range", "content-type",
-                                "last-modified"):
-                self.clear_header(header_name)
+            self.set_csrf_value()
 
         self.connection.write_initial(
             http_version=self.http_version,
@@ -642,11 +673,25 @@ class RequestHandler:
         """
         if self._finished:
             raise HTTPError(
-                500,
-                "Cannot Finish the request when it has already finished.")
+                500, "Cannot Finish the request when it has already finished.")
 
         if text is not None:
             self.write(text)
+
+        if self._initial_written is False:
+            if ("etag" not in self._headers and
+                self._status_code == 200 and
+                    self.request.method in ("GET", "HEAD")):
+                self.set_body_etag()
+
+            if self.check_body_etag():
+                self._status_code = 304
+                self._response_body.clear()
+                for header_name in ("allow", "content-encoding",
+                                    "content-language", "content-length",
+                                    "content-md5", "content-range",
+                                    "content-type", "last-modified"):
+                    self.clear_header(header_name)
 
         self.flush()
         self._finished = True
@@ -865,18 +910,32 @@ class Application:
     stores handler list, finds every request's handler,
     and passes it to server.
 
-    :arg loop: A Custom EventLoop, if you want.
-    :arg template_path: A Custom EventLoop, if you want.
-    :arg aes_security: A Custom EventLoop, if you want.
-    :arg security_secret: A Custom EventLoop, if you want.
-    :arg allow_keep_alive: A Custom EventLoop, if you want.
-    :arg debug: A Custom EventLoop, if you want.
-    :arg csrf_protect: A Custom EventLoop, if you want.
-    :arg static_path: A Custom EventLoop, if you want.
-    :arg static_handler_path: A Custom EventLoop, if you want.
+    :arg loop: A Custom EventLoop, or FutureFinity will use the result of
+      `asyncio.get_event_loop()`.
+    :arg template_path: The default template_path.
+      This will also initialize the default template loader if it is set.
+    :arg security_secret: The secret for security purpose.
+      Treat it like a password. If the secret is changed, all secure cookies
+      will become invalid. This will also initialize the default
+      security object if it is set.
+    :arg aes_security: Default: `True`.
+      Use `security.AESGCMSecurityObject` to secure the data
+      (such as: cookies). Turn it to false to use
+      `security.HMACSecurityObject`. This attribute will not work unless the
+      `security_secret` attribute is set.
+    :arg allow_keep_alive: Default: `True`.
+      Allow Keep Alive or not. This attribute will be passed to
+      `server.HTTPServer` as an attribute.
+    :arg debug: Enable Debug Feature.
+    :arg csrf_protect: Enable Cross Site Request Forgeries(CSRF) protection.
+    :arg static_path: Add a default static file handler with the static path.
+    :arg static_handler_path: Default: `r"/static/(?P<file>.*?)"`.
+      This is an regualr expression that indicates routing path will be used
+      for the default static file handler. The attribute `file` in the
+      regualr expression will be passed to the default static file handler.
 
-    :arg \*\*kwargs: All the keyword arguments will be the application
-        settings.
+    :arg \*\*kwargs: All the other keyword arguments will be in the application
+      settings too.
     """
     def __init__(self, **kwargs):
         self.settings = kwargs
@@ -910,8 +969,9 @@ class Application:
         """
         Make a asyncio compatible server.
         """
-        return functools.partial(ApplicationHTTPServer,
-                                 app=self, loop=self._loop)
+        return functools.partial(
+            ApplicationHTTPServer, app=self, loop=self._loop,
+            allow_keep_alive=self.settings.get("allow_keep_alive", True))
 
     def listen(self, port: int,
                address: str="127.0.0.1",

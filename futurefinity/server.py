@@ -45,14 +45,19 @@ class ServerError(FutureFinityError):
 class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
     """
     FutureFinity HTTPServer Class.
+
+    :arg allow_keep_alive: Default: `True`. Turn it to `False` if you want to
+      disable keep alive connection for `HTTP/1.1`.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, allow_keep_alive: bool=True, **kwargs):
         asyncio.Protocol.__init__(self)
         protocol.HTTPConnectionController.__init__(self)
         self.transport = None
         self.use_tls = False
         self.connection = None
         self.use_h2 = False
+
+        self.allow_keep_alive = allow_keep_alive
 
         self.sockname = None
         self.peername = None
@@ -81,11 +86,10 @@ class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
             self.transport.close()
             raise ServerError("Unsupported Protocol")
         else:
-            self.connection = protocol.HTTPv1Connection(is_client=False,
-                                                        use_tls=self.use_tls,
-                                                        sockname=self.sockname,
-                                                        peername=self.peername,
-                                                        controller=self)
+            self.connection = protocol.HTTPv1Connection(
+                controller=self, is_client=False, use_tls=self.use_tls,
+                sockname=self.sockname, peername=self.peername,
+                allow_keep_alive=self.allow_keep_alive)
         self.set_timeout_handler()
 
     def set_timeout_handler(self):
