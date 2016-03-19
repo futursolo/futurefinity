@@ -19,9 +19,10 @@
 ``futurefinity.utils`` contains a series of utilities for common use.
 """
 
+from typing import Any, Optional, Union
+
 import time
 import struct
-import typing
 import numbers
 import calendar
 import datetime
@@ -41,7 +42,7 @@ class FutureFinityError(Exception):
     pass
 
 
-def ensure_bytes(var: typing.Any) -> bytes:
+def ensure_bytes(var: Any) -> bytes:
     """
     Try to convert passed variable to a bytes object.
     """
@@ -58,7 +59,7 @@ def ensure_bytes(var: typing.Any) -> bytes:
     return strvar.encode()
 
 
-def ensure_str(var: typing.Any) -> str:
+def ensure_str(var: Any) -> str:
     """
     Try to convert passed variable to a str object.
     """
@@ -167,11 +168,11 @@ class TolerantMagicDict(MagicDict):
         lower_name = name.lower()
         return MagicDict.add(self, lower_name, value)
 
-    def get_list(self, name: str, default: typing.Optional[str]=None):
+    def get_list(self, name: str, default: Optional[str]=None):
         lower_name = name.lower()
         return MagicDict.get_list(self, lower_name, default=default)
 
-    def get_first(self, name: str, default: typing.Optional[str]=None):
+    def get_first(self, name: str, default: Optional[str]=None):
         lower_name = name.lower()
         return MagicDict.get_first(self, lower_name, default=default)
 
@@ -199,9 +200,8 @@ class TolerantMagicDict(MagicDict):
     __repr__ = __str__
 
 
-def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,
-                                      time.struct_time,
-                                      datetime.datetime]=None) -> str:
+def format_timestamp(ts: Union[int, numbers.Real, tuple, time.struct_time,
+                               datetime.datetime, None]=None) -> str:
     """
     Make a HTTP Protocol timestamp.
     """

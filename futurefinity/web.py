@@ -52,6 +52,9 @@ from futurefinity import protocol
 from futurefinity import template
 from futurefinity import security
 
+from types import FunctionType, CoroutineType
+from typing import Optional, Union, Mapping, List
+
 import futurefinity
 
 import asyncio
@@ -62,8 +65,6 @@ import ssl
 import sys
 import hmac
 import html
-import types
-import typing
 import hashlib
 import functools
 import mimetypes
@@ -90,7 +91,7 @@ class HTTPError(server.ServerError):
 
 class ApplicationHTTPServer(server.HTTPServer):
     def __init__(self, app: "Application",
-                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+                 loop: Optional[asyncio.BaseEventLoop]=None,
                  *args, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self.app = app
@@ -105,7 +106,7 @@ class ApplicationHTTPServer(server.HTTPServer):
         self._request_handlers[incoming].data_received(data)
 
     def error_received(self,
-                       incoming: typing.Optional[protocol.HTTPIncomingRequest],
+                       incoming: Optional[protocol.HTTPIncomingRequest],
                        exc: tuple):
         if not incoming:  # Message unable to parse, create an placeholder.
             incoming = protocol.HTTPIncomingRequest(
@@ -180,8 +181,8 @@ class RequestHandler:
     def __init__(self, app: "Application",
                  server: ApplicationHTTPServer,
                  request: protocol.HTTPIncomingRequest,
-                 path_args: typing.Mapping[str, str]=None,
-                 path_kwargs: typing.Mapping[str, str]=None):
+                 path_args: Mapping[str, str]=None,
+                 path_kwargs: Mapping[str, str]=None):
         self.app = app
         self.server = server
         self.settings = self.app.settings
@@ -206,7 +207,7 @@ class RequestHandler:
         self._finished = False
 
     def get_link_arg(self, name: str,
-                     default: typing.Union[str, object]=default_mark) -> str:
+                     default: Union[str, object]=default_mark) -> str:
         """
         Return first argument in the link with the name.
 
@@ -220,7 +221,7 @@ class RequestHandler:
             raise KeyError("The name %s cannot be found in link args." % name)
         return arg_content
 
-    def get_all_link_args(self, name: str) -> typing.List[str]:
+    def get_all_link_args(self, name: str) -> List[str]:
         """
         Return all link args with the name by list.
 
@@ -229,7 +230,7 @@ class RequestHandler:
         return self.request.queries.get_list(name, [])
 
     def get_body_arg(self, name: str,
-                     default: typing.Union[str, object]=default_mark) -> str:
+                     default: Union[str, object]=default_mark) -> str:
         """
         Return first argument in the body with the name.
 
@@ -243,7 +244,7 @@ class RequestHandler:
             raise KeyError("The name %s cannot be found in body args." % name)
         return arg_content
 
-    def get_all_body_args(self, name: str) -> typing.List[str]:
+    def get_all_body_args(self, name: str) -> List[str]:
         """
         Return all body args with the name by list.
 
@@ -252,7 +253,7 @@ class RequestHandler:
         return self.request.body_args.get_list(name, [])
 
     def get_header(self, name: str,
-                   default: typing.Union[str, object]=default_mark) -> str:
+                   default: Union[str, object]=default_mark) -> str:
         """
         Return First Header with the name.
 
@@ -266,7 +267,7 @@ class RequestHandler:
             raise KeyError("The name %s cannot be found in headers." % name)
         return header_content
 
-    def get_all_headers(self, name: str) -> typing.List[str]:
+    def get_all_headers(self, name: str) -> List[str]:
         """
         Return all headers with the name by list.
 
@@ -313,7 +314,7 @@ class RequestHandler:
                                  "initial is written.")
         self._headers = HTTPHeaders()
 
-    def get_cookie(self, name: str, default: typing.Optional[str]=None) -> str:
+    def get_cookie(self, name: str, default: Optional[str]=None) -> str:
         """
         Return first Cookie in the request header(s) with the name.
 
@@ -326,9 +327,9 @@ class RequestHandler:
         return cookie.value
 
     def set_cookie(self, name: str, value: str,
-                   domain: typing.Optional[str]=None,
-                   expires: typing.Optional[str]=None,
-                   path: str="/", expires_days: typing.Optional[int]=None,
+                   domain: Optional[str]=None,
+                   expires: Optional[str]=None,
+                   path: str="/", expires_days: Optional[int]=None,
                    secure: bool=False, httponly: bool=False):
         """
         Set a cookie with attribute(s).
@@ -479,7 +480,7 @@ class RequestHandler:
         value = self._csrf_value
         return "<input type=\"hidden\" name=\"_csrf\" value=\"%s\">" % value
 
-    def write(self, text: typing.Union[str, bytes], clear_text: bool=False):
+    def write(self, text: Union[str, bytes], clear_text: bool=False):
         """
         Write response body.
 
@@ -497,7 +498,7 @@ class RequestHandler:
 
     def render_string(
      self, template_name: str,
-     template_dict: typing.Optional[typing.Mapping[str, str]]=None) -> str:
+     template_dict: Optional[Mapping[str, str]]=None) -> str:
         """
         Render Template in template folder into string.
 
@@ -521,7 +522,7 @@ class RequestHandler:
 
     def render(
      self, template_name: str,
-     template_dict: typing.Optional[typing.Mapping[str, str]]=None):
+     template_dict: Optional[Mapping[str, str]]=None):
         """
         Render the template with render_string, and write them into response
         body directly.
@@ -532,7 +533,7 @@ class RequestHandler:
                                        template_dict=template_dict))
 
     def redirect(self, url: str, permanent: bool=False,
-                 status: typing.Optional[int]=None):
+                 status: Optional[int]=None):
         """
         Rediect request to other location.
 
@@ -664,7 +665,7 @@ class RequestHandler:
         self.connection.write_body(self._response_body)
         self._response_body.clear()
 
-    def finish(self, text: typing.Optional[typing.Union[str, bytes]]=None):
+    def finish(self, text: Optional[Union[str, bytes]]=None):
         """
         Finish the request, send the response. If a text is passed, it will be
         write first, after that, the request will be finished.
@@ -699,8 +700,8 @@ class RequestHandler:
         self.connection.finish_writing()
 
     def write_error(self, error_code: int,
-                    message: typing.Optional[typing.Union[str, bytes]]=None,
-                    exc_info: typing.Optional[tuple]=None):
+                    message: Optional[Union[str, bytes]]=None,
+                    exc_info: Optional[tuple]=None):
         """
         Respond an error to client.
 
@@ -975,9 +976,8 @@ class Application:
 
     def listen(self, port: int,
                address: str="127.0.0.1",
-               context: typing.Union[
-                    bool, ssl.SSLContext,
-                    None]=None) -> types.CoroutineType:
+               context: Union[bool, ssl.SSLContext,
+                              None]=None) -> CoroutineType:
         """
         Make the server to listen to the specified port and address.
 
@@ -998,7 +998,7 @@ class Application:
 
     def add_handler(self, path: str, *args, name: str=None,
                     handler: RequestHandler=None,
-                    **kwargs) -> typing.Optional[types.FunctionType]:
+                    **kwargs) -> Optional[FunctionType]:
         """
         Add a handler to handler list.
         If you specific a handler in parameter, it will return nothing.

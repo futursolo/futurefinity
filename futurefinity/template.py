@@ -15,11 +15,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from typing import Union
 
 import asyncio
 
 import os
-import typing
 import functools
 
 try:  # Try to load template.
@@ -66,14 +66,12 @@ class TemplateLoader:
 
     The Default template loader of FutureFinity.
     """
-    def __init__(self, template_path: typing.Union[list, str],
-                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+    def __init__(self, template_path: Union[list, str],
                  cache_template: bool=True):
         if jinja2 is None:
             raise NotImplementedError(
                 ("Currently, `futurefinity.template` needs Jinja2 to work. "
                  "Please install it before using template rendering."))
-        self._loop = loop or asyncio.get_event_loop()
         if isinstance(template_path, str):
             self.template_path = [template_path]
         elif isinstance(template_path, list):

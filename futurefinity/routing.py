@@ -15,8 +15,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from typing import Optional
+
 import re
-import typing
 import collections
 
 
@@ -44,7 +45,7 @@ class RoutingLocator:
         path matching.
     """
 
-    def __init__(self, default_handler: typing.Optional[object]=None):
+    def __init__(self, default_handler: Optional[object]=None):
         self.handlers_dict = collections.OrderedDict()
         self.links_dict = collections.OrderedDict()
         self.default_handler = default_handler

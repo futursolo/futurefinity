@@ -18,6 +18,8 @@
 from futurefinity.utils import TolerantMagicDict, FutureFinityError
 from futurefinity import protocol
 
+from typing import Optional, Mapping
+
 import futurefinity
 
 import asyncio
@@ -25,7 +27,6 @@ import asyncio
 import ssl
 import sys
 import json
-import typing
 import functools
 import traceback
 import urllib.parse
@@ -73,7 +74,7 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
     def __init__(self, host: str, port: int, *args,
                  allow_keep_alive: bool=True,
                  http_version: int=11,
-                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+                 loop: Optional[asyncio.BaseEventLoop]=None,
                  context: ssl.SSLContext=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self.http_version = http_version
@@ -95,7 +96,7 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
         self._timeout_handler = None
 
     def error_received(
-     self, incoming: typing.Optional[protocol.HTTPIncomingResponse],
+     self, incoming: Optional[protocol.HTTPIncomingResponse],
      exc: tuple):
         if isinstance(tuple[1], protocol.ConnectionEntityTooLarge):
             self._exc = ResponseEntityTooLarge(tuple[1].message)
@@ -202,8 +203,8 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
 class HTTPClient:
     def __init__(self, *args, http_version=11,
                  allow_keep_alive: bool=True,
-                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
-                 context: typing.Optional[ssl.SSLContext]=None, **kwargs):
+                 loop: Optional[asyncio.BaseEventLoop]=None,
+                 context: Optional[ssl.SSLContext]=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self.allow_keep_alive = allow_keep_alive
         self.http_version = http_version
@@ -214,7 +215,7 @@ class HTTPClient:
         self._connection_controllers = {}
 
     def _makeup_url(self, url: str,
-                    link_args: typing.Optional[typing.Mapping[str, str]]):
+                    link_args: Optional[Mapping[str, str]]):
         parsed_url = urllib.parse.urlsplit(url)
 
         if parsed_url.query:

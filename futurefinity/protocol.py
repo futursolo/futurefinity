@@ -22,13 +22,13 @@ from futurefinity import security
 from collections import namedtuple
 from http.cookies import SimpleCookie as HTTPCookies
 from http.client import responses as status_code_text
+from typing import Union, Optional, Any, List, Mapping, Tuple
 
 import futurefinity
 
 import sys
 import json
 import string
-import typing
 import traceback
 import urllib.parse
 
@@ -146,7 +146,7 @@ class HTTPHeaders(TolerantMagicDict):
         return HTTPHeaders(self)
 
     @staticmethod
-    def parse(data: typing.Union[str, bytes, list,
+    def parse(data: Union[str, bytes, list,
                                  TolerantMagicDict]) -> "HTTPHeaders":
         headers = HTTPHeaders()
         headers.load_headers(data)
@@ -160,8 +160,7 @@ class HTTPHeaders(TolerantMagicDict):
 
         return ensure_bytes(headers_str)
 
-    def load_headers(self, data: typing.Union[str, bytes, list,
-                                              TolerantMagicDict]):
+    def load_headers(self, data: Union[str, bytes, list, TolerantMagicDict]):
         """
         Load HTTP Headers from another object.
 
@@ -226,7 +225,7 @@ class HTTPMultipartFileField:
     def __init__(self, fieldname: str, filename: str,
                  content: bytes,
                  content_type: str="application/octet-stream",
-                 headers: typing.Optional[HTTPHeaders]=None,
+                 headers: Optional[HTTPHeaders]=None,
                  encoding: str="binary"):
         self.fieldname = fieldname
         self.filename = filename
@@ -279,7 +278,7 @@ class HTTPMultipartBody(TolerantMagicDict):
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Body.
     """
-    def __init__(self, files: typing.List=[HTTPMultipartFileField],
+    def __init__(self, files: List=[HTTPMultipartFileField],
                  *args, **kwargs):
         self.files = TolerantMagicDict()
         TolerantMagicDict.__init__(self, *args, **kwargs)
@@ -357,7 +356,7 @@ class HTTPMultipartBody(TolerantMagicDict):
 
         return body_args
 
-    def assemble(self) -> typing.Tuple[bytes, str]:
+    def assemble(self) -> Tuple[bytes, str]:
         """
         Generate HTTP v1 Body to bytes.
         """
@@ -463,7 +462,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
                  origin_path: str,
                  http_version: int=10,
                  headers: HTTPHeaders=None,
-                 body: typing.Optional[bytes]=None,
+                 body: Optional[bytes]=None,
                  connection: "HTTPv1Connection"=None):
         self.http_version = http_version
         self.method = method
@@ -513,9 +512,9 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._link_args
 
     @property
-    def body_args(self) -> typing.Union[TolerantMagicDict, HTTPMultipartBody,
-                                        typing.Dict[typing.Any, typing.Any],
-                                        typing.List[typing.Any]]:
+    def body_args(self) -> Union[TolerantMagicDict, HTTPMultipartBody,
+                                 Mapping[Any, Any],
+                                 List[Any]]:
         if not hasattr(self, "_body_args"):
             content_type = self.headers.get_first("content-type")
 
@@ -566,7 +565,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 class HTTPIncomingResponse(HTTPIncomingMessage):
     def __init__(self, status_code: int, http_version: int=10,
                  headers: HTTPHeaders=None,
-                 body: typing.Optional[bytes]=None,
+                 body: Optional[bytes]=None,
                  connection: "HTTPv1Connection"=None):
         self.http_version = http_version
         self.status_code = status_code
@@ -1003,7 +1002,7 @@ class HTTPv1Connection:
             else:
                 self._close_connection()
 
-    def connection_lost(self, exc: typing.Optional[tuple]=None):
+    def connection_lost(self, exc: Optional[tuple]=None):
         if self.stage is _CONN_CLOSED:
             return  # This connection has been closed.
 

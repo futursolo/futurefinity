@@ -23,6 +23,8 @@ right RequestHandler and make response to client.
 
 from futurefinity.utils import ensure_str, ensure_bytes, FutureFinityError
 
+from typing import Optional
+
 import futurefinity
 
 from futurefinity import protocol
@@ -30,7 +32,6 @@ from futurefinity import protocol
 import asyncio
 
 import ssl
-import typing
 
 
 class ServerError(FutureFinityError):
@@ -112,6 +113,6 @@ class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
     def data_received(self, data: bytes):
         self.connection.data_received(data)
 
-    def connection_lost(self, exc: typing.Optional[tuple]):
+    def connection_lost(self, exc: Optional[tuple]):
         self.connection.connection_lost(exc)
         self.cancel_timeout_handler()
