@@ -71,6 +71,7 @@ Also see:
    tutorial
    web
    server
+   client
    protocol
    routing
    security

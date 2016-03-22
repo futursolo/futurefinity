@@ -526,8 +526,6 @@ class RequestHandler:
         """
         Render the template with render_string, and write them into response
         body directly.
-
-        **This is a Coroutine.**
         """
         self.finish(self.render_string(template_name,
                                        template_dict=template_dict))
