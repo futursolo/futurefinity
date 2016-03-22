@@ -56,6 +56,11 @@ _CONN_CLOSED = object()
 
 
 class ProtocolError(FutureFinityError):
+    """
+    FutureFinity Protocol Error.
+
+    All Errors from the Protocol are based on this class.
+    """
     pass
 
 
@@ -139,7 +144,6 @@ class HTTPHeaders(TolerantMagicDict):
     """
     def __str__(self) -> str:
         content_list = [(key, value) for (key, value) in self.items()]
-
         return "HTTPHeaders(%s)" % str(content_list)
 
     def copy(self) -> "HTTPHeaders":
@@ -153,6 +157,9 @@ class HTTPHeaders(TolerantMagicDict):
         return headers
 
     def assemble(self) -> bytes:
+        """
+        Assemble a HTTPHeaders Class to HTTP/1.x Form.
+        """
         headers_str = ""
         for (name, value) in self.items():
             headers_str += "%s: %s" % (_capitalize_header[name], value)
@@ -249,7 +256,6 @@ class HTTPMultipartFileField:
         """
         Convert this form field to bytes.
         """
-
         self.headers["content-type"] = self.content_type
         self.headers["content-transfer-encoding"] = self.encoding
 
@@ -359,6 +365,8 @@ class HTTPMultipartBody(TolerantMagicDict):
     def assemble(self) -> Tuple[bytes, str]:
         """
         Generate HTTP v1 Body to bytes.
+
+        It will return the body in bytes and the content-type in str.
         """
         body = b""
         boundary = "----------FutureFinityFormBoundary"
@@ -402,8 +410,16 @@ class HTTPMultipartBody(TolerantMagicDict):
 
 
 class HTTPIncomingMessage:
+    """
+    FutureFinity HTTP Incoming Message Class.
+
+    This is the base class of `HTTPIncomingRequest` and `HTTPIncomingResponse`.
+    """
     @property
     def _is_chunked_body(self) -> bool:
+        """
+        Return `True` if there is a chunked body in the message.
+        """
         if not hasattr(self, "__is_chunked_body"):
             if self.http_version == 10:
                 self.__is_chunked_body = False
@@ -422,6 +438,9 @@ class HTTPIncomingMessage:
 
     @property
     def scheme(self) -> str:
+        """
+        Return the scheme that the connection used.
+        """
         if not hasattr(self, "_scheme"):
             if self.connection.use_tls:
                 self._scheme = "https"
@@ -431,6 +450,9 @@ class HTTPIncomingMessage:
 
     @property
     def _expected_content_length(self) -> int:
+        """
+        Return the expected content length of the message.
+        """
         if not hasattr(self, "__expected_content_length"):
             content_length = self.headers.get_first("content-length")
             if not content_length:
@@ -447,6 +469,9 @@ class HTTPIncomingMessage:
 
     @property
     def _body_expected(self) -> bool:
+        """
+        Return True if the body is expected.
+        """
         if hasattr(self, "method"):
             if self.method.lower() == "head":
                 return False
@@ -458,6 +483,13 @@ class HTTPIncomingMessage:
 
 
 class HTTPIncomingRequest(HTTPIncomingMessage):
+    """
+    FutureFinity HTTP Incoming Request Class.
+
+    This is a subclass of the `HTTPIncomingMessage`.
+
+    This class represents a Incoming HTTP Request.
+    """
     def __init__(self, method: str,
                  origin_path: str,
                  http_version: int=10,
@@ -485,6 +517,9 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     @property
     def cookies(self) -> HTTPCookies:
+        """
+        Parse cookies and return cookies in a `HTTPCookies` instance.
+        """
         if not hasattr(self, "_cookies"):
             cookies = HTTPCookies()
             if "cookie" in self.headers:
@@ -495,18 +530,28 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     @property
     def path(self) -> str:
+        """
+        Parse path and return the path in `str`.
+        """
         if not hasattr(self, "_path"):
             self._parse_origin_path()
         return self._path
 
     @property
     def host(self) -> str:
+        """
+        Parse host and return the host in `str`.
+        """
         if not hasattr(self, "_host"):
             self._host = self.headers.get_first("host")
         return self._host
 
     @property
     def link_args(self) -> TolerantMagicDict:
+        """
+        Parse link arguments and return link arguments in a
+        `TolerantMagicDict` instance.
+        """
         if not hasattr(self, "_link_args"):
             self._parse_origin_path()
         return self._link_args
@@ -515,6 +560,10 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
     def body_args(self) -> Union[TolerantMagicDict, HTTPMultipartBody,
                                  Mapping[Any, Any],
                                  List[Any]]:
+        """
+        Parse body arguments and return body arguments in a
+        proper instance.
+        """
         if not hasattr(self, "_body_args"):
             content_type = self.headers.get_first("content-type")
 
@@ -563,6 +612,13 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
 
 class HTTPIncomingResponse(HTTPIncomingMessage):
+    """
+    FutureFinity HTTP Incoming Response Class.
+
+    This is a subclass of the `HTTPIncomingMessage`.
+
+    This class represents a Incoming HTTP Response.
+    """
     def __init__(self, status_code: int, http_version: int=10,
                  headers: HTTPHeaders=None,
                  body: Optional[bytes]=None,
@@ -575,6 +631,9 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
 
     @property
     def cookies(self) -> HTTPCookies:
+        """
+        Parse cookies and return cookies in a `HTTPCookies` instance.
+        """
         if not hasattr(self, "_cookies"):
             cookies = HTTPCookies()
             if "set-cookie" in self.headers:
@@ -600,20 +659,46 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
 
 
 class BaseHTTPConnectionController:
+    """
+    FutureFinity Base HTTP Connection Controller Class.
+
+    This is the model controller to the HTTP Connections.
+
+    Any Connection Controllers should based on this class.
+    """
     def __init__(self, *args, **kwargs):
         self.transport = None
         self.use_stream = False
 
     def initial_received(self, incoming: HTTPIncomingMessage):
+        """
+        Triggered when the initial of a message is received.
+        """
         pass
 
     def stream_received(self, incoming: HTTPIncomingMessage, data: bytes):
+        """
+        Triggered when the stream of a message is received.
+
+        This will only be triggered when the message is detected as
+        a stream message.
+        """
         raise NotImplementedError("You should override stream_received.")
 
     def error_received(self, incoming, exc: tuple):
+        """
+        Triggered when errors received when errors occurred during parsing
+        the message.
+        """
         raise NotImplementedError("You should override error_received.")
 
     def message_received(self, incoming: HTTPIncomingMessage):
+        """
+        Triggered when a message is completely received.
+
+        This will not be triggered when the message is detected as
+        a stream message.
+        """
         raise NotImplementedError("You should override message_received.")
 
     def set_timeout_handler(self, suggested_time: Optional[int]=None):
@@ -631,18 +716,39 @@ class BaseHTTPConnectionController:
 
 
 class ConnectionParseError(ProtocolError, ConnectionError):
+    """
+    FutureFinity Connection Parse Error.
+
+    Any Connection Parse Errors is based on this class.
+    """
     pass
 
 
 class ConnectionBadMessage(ConnectionParseError):
+    """
+    FutureFinity Connection Bad Message Error.
+
+    This Error is raised when the message is not a valid message.
+    """
     pass
 
 
 class ConnectionEntityTooLarge(ConnectionParseError):
+    """
+    FutureFinity Connection Entity Too Large Error.
+
+    This Error is raised when the message too large that FutureFinity cannot
+    handle.
+    """
     pass
 
 
 class HTTPv1Connection:
+    """
+    FutureFinity HTTP v1 Connection Class.
+
+    This class will control and parse the http v1 connection.
+    """
     def __init__(self, controller: BaseHTTPConnectionController,
                  is_client: bool, http_version: int=10,
                  use_tls: bool=False, sockname: tuple=None,
@@ -836,6 +942,9 @@ class HTTPv1Connection:
         self.stage = _CONN_MESSAGE_PARSED
 
     def data_received(self, data: bytes):
+        """
+        Trigger this function when data is received from the remote.
+        """
         if not data:
             return  # Nothing received, nothing is going to happen.
 
@@ -895,8 +1004,13 @@ class HTTPv1Connection:
                     self._close_connection()
             return
 
-    def write_initial(self, http_version=None, method="GET", path="/",
-                      status_code=200, headers=None):
+    def write_initial(
+        self, http_version: Optional[int]=None, method: str="GET",
+            path: str="/", status_code: int=200,
+            headers: Optional[HTTPHeaders]=None):
+        """
+        Write the initial to remote.
+        """
         initial = b""
 
         if http_version is not None:
@@ -971,6 +1085,14 @@ class HTTPv1Connection:
         self.stage = _CONN_INITIAL_WRITTEN
 
     def write_body(self, body: bytes):
+        """
+        Write the body to remote.
+
+        This can be triggered for many times. until `finish_writing`
+        is triggered.
+        """
+        if self.stage not in (_CONN_INITIAL_WRITTEN, _CONN_BODY_WRITTEN):
+            raise ProtocolError("Invalid Function Access.")
         self.stage = _CONN_BODY_WRITTEN
         if self._outgoing_chunked_body:
             self._write_body_chunk(body)
@@ -997,6 +1119,11 @@ class HTTPv1Connection:
         self.controller.transport.write(chunk_bytes)
 
     def finish_writing(self):
+        """
+        Trigger this function when everything is written.
+
+        It will reset the connection or close it.
+        """
         if self._outgoing_chunked_body:
             self.controller.transport.write(b"0" + _CRLF_BYTES_MARK * 2)
 
@@ -1010,6 +1137,9 @@ class HTTPv1Connection:
                 self._close_connection()
 
     def connection_lost(self, exc: Optional[tuple]=None):
+        """
+        Triggered when remote is closed.
+        """
         if self.stage is _CONN_CLOSED:
             return  # This connection has been closed.
 
