@@ -18,7 +18,7 @@
 from futurefinity.utils import TolerantMagicDict, FutureFinityError
 from futurefinity import protocol
 
-from typing import Optional, Mapping
+from typing import Union, Optional, Mapping
 
 import futurefinity
 
@@ -254,7 +254,7 @@ class HTTPClient:
             "path": path
         }
 
-    def _get_connection_controller(self, host, port, scheme):
+    def _get_connection_controller(self, host: str, port: str, scheme: str):
         controller_identifier = (host, port, scheme)
         if controller_identifier in self._connection_controllers.keys():
             return self._connection_controllers.pop(controller_identifier)
@@ -269,7 +269,8 @@ class HTTPClient:
             http_version=self.http_version,
             host=host, port=port, context=context)
 
-    def _put_connection_controller(self, controller):
+    def _put_connection_controller(self,
+                                   controller: HTTPClientConnectionController):
         if controller.context:
             scheme = "https"
         else:
@@ -279,8 +280,12 @@ class HTTPClient:
             return  # Only cache one controller for each identifier.
         self._connection_controllers[controller_identifier] = controller
 
-    async def fetch(self, method, url, headers=None,
-                    cookies=None, link_args=None, body=None):
+    async def fetch(
+        self, method: str, url: str,
+            headers: Union[protocol.HTTPHeaders, Mapping[str, str], None]=None,
+            cookies: Union[protocol.HTTPCookies, Mapping[str, str], None]=None,
+            link_args: Union[TolerantMagicDict, Mapping[str, str], None]=None,
+            body: Optional[bytes]=None):
         """
         Fetch the request.
         """
@@ -319,7 +324,11 @@ class HTTPClient:
         self._put_connection_controller(controller)
         return response
 
-    async def get(self, url, headers=None, cookies=None, link_args=None):
+    async def get(
+        self, url: str,
+            headers: Union[protocol.HTTPHeaders, Mapping[str, str], None]=None,
+            cookies: Union[protocol.HTTPCookies, Mapping[str, str], None]=None,
+            link_args: Union[TolerantMagicDict, Mapping[str, str], None]=None):
         """
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `GET` request.
@@ -328,8 +337,13 @@ class HTTPClient:
                                     cookies=cookies, link_args=link_args)
         return response
 
-    async def post(self, url, headers=None, cookies=None, link_args=None,
-                   body_args=None, files=None):
+    async def post(
+        self, url: str,
+            headers: Union[protocol.HTTPHeaders, Mapping[str, str], None]=None,
+            cookies: Union[protocol.HTTPCookies, Mapping[str, str], None]=None,
+            link_args: Union[TolerantMagicDict, Mapping[str, str], None]=None,
+            body_args: Union[TolerantMagicDict, Mapping[str, str], None]=None,
+            files: Union[TolerantMagicDict, Mapping[str, str], None]=None):
         """
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `POST` request.
