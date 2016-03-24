@@ -451,7 +451,7 @@ class RequestHandler:
 
         To stop checking CSRF value, override this function and return `None`.
         """
-        cookie_value = self.get_secure_cookie("_csrf")
+        cookie_value = self.get_cookie("_csrf")
         form_value = self.get_body_arg("_csrf")
 
         if not (cookie_value and form_value):
@@ -465,14 +465,20 @@ class RequestHandler:
         Set the csrf value.
         """
         if not hasattr(self, "__csrf_value"):
-            self.__csrf_value = security.get_random_str(32)
-            self.set_secure_cookie("_csrf", self.__csrf_value, expires_days=1)
+            self.__csrf_value = self.get_cookie("_csrf", None)
+            if not self.__csrf_value:
+                self.__csrf_value = security.get_random_str(32)
+            self.set_cookie("_csrf", self.__csrf_value, expires_days=1)
 
     @property
     def _csrf_value(self):
+        """
+        Get the csrf value.
+        """
         self.set_csrf_value()
         return self.__csrf_value
 
+    @property
     def csrf_form_html(self) -> str:
         """
         Return a HTML form field contains _csrf value.
@@ -981,8 +987,7 @@ class Application:
 
         :arg port: The port number that futurefinity is going to bind.
         :arg address: the address that futurefinity is going to bind.
-        :arg context: A Custom EventLoop, if you want.
-        :arg aes_security: Default: `True`.
+        :arg context: The TLS Context used to the server.
         """
         if context:
             if isinstance(context, bool):
