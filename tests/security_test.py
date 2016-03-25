@@ -95,7 +95,7 @@ class SecuirtyTestCollector(unittest.TestCase):
         origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
         failed_secure_text = bytearray(base64.b64decode(secure_text))
-        del failed_secure_text[:-10]
+        del failed_secure_text[-10:]
         failed_secure_text += os.urandom(10)
         failed_secure_text = base64.b64encode(ensure_bytes(failed_secure_text))
         self.assertEqual(None, context.lookup_origin_text(failed_secure_text))
@@ -105,7 +105,7 @@ class SecuirtyTestCollector(unittest.TestCase):
         origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
         failed_secure_text = bytearray(base64.b64decode(secure_text))
-        del failed_secure_text[:-10]
+        del failed_secure_text[-10:]
         failed_secure_text += os.urandom(10)
         failed_secure_text = base64.b64encode(ensure_bytes(failed_secure_text))
         self.assertEqual(None, context.lookup_origin_text(failed_secure_text))
