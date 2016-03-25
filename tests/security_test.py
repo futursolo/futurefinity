@@ -30,7 +30,7 @@ class SecuirtyTestCollector(unittest.TestCase):
     def test_get_random_str(self):
         random_str_length = random.SystemRandom().choice(range(1, 1000))
         random_str = futurefinity.security.get_random_str(random_str_length)
-        self.assertTrue(isinstance(random_str, str))
+        self.assertIsInstance(random_str, str)
         self.assertEqual(len(random_str), random_str_length)
 
     def get_security_secret(self):
