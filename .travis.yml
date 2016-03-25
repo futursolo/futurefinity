@@ -3,11 +3,9 @@ python:
   - "3.5"
   - "nightly"
 install:
+  - pip install pip --upgrade
   - pip install .
   - pip install coveralls
-
-services:
-  - redis-server
 
 # command to run tests
 script: coverage run --source=futurefinity setup.py test
