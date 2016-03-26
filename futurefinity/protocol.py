@@ -66,7 +66,7 @@ class ProtocolError(FutureFinityError):
 
 class CapitalizedHTTPv1Headers(dict):
     """
-    Convert a string to HTTPHeader style capiltalize.
+    Convert a string to HTTPHeader style capitalize.
 
     .. code-block:: python3
 
@@ -284,13 +284,12 @@ class HTTPMultipartBody(TolerantMagicDict):
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Body.
     """
-    def __init__(self, files: List=[HTTPMultipartFileField],
-                 *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.files = TolerantMagicDict()
         TolerantMagicDict.__init__(self, *args, **kwargs)
 
     @staticmethod
-    def parse(self, content_type: str, data: bytes) -> "HTTPMultipartBody":
+    def parse(content_type: str, data: bytes) -> "HTTPMultipartBody":
         """
         Parse HTTP v1 Multipart Body.
 
@@ -492,10 +491,10 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
     """
     def __init__(self, method: str,
                  origin_path: str,
+                 headers: HTTPHeaders,
+                 connection: "HTTPv1Connection",
                  http_version: int=10,
-                 headers: HTTPHeaders=None,
-                 body: Optional[bytes]=None,
-                 connection: "HTTPv1Connection"=None):
+                 body: Optional[bytes]=None):
         self.http_version = http_version
         self.method = method
         self.origin_path = origin_path
@@ -575,13 +574,13 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
                         keep_blank_values=True,
                         strict_parsing=True))
 
-            elif self._expected_content_type.lower().startswith(
+            elif content_type.lower().startswith(
              "multipart/form-data"):
                 self._body_args = HTTPMultipartBody.parse(
                     content_type=content_type,
                     data=self.body)
 
-            elif self._content_type.lower().strip() == "application/json":
+            elif content_type.lower().strip() == "application/json":
                 self._body_args = json.loads(ensure_str(self.body))
 
             else:  # Unknown Content Type.
@@ -868,7 +867,7 @@ class HTTPv1Connection:
         else:
             try:
                 self.incoming = HTTPIncomingRequest(
-                    **self._parsed_incoming_info)
+                    **self._parsed_incoming_info, connection=self)
             except:
                 raise ConnectionBadMessage("Bad Initial Received.")
 
