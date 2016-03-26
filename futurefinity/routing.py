@@ -50,7 +50,7 @@ class RoutingLocator:
         self.links_dict = collections.OrderedDict()
         self.default_handler = default_handler
 
-    def add(self, path: str, handler: object, *args, name=None, **kwargs):
+    def add(self, path: str, handler: object, *args, name: str=None, **kwargs):
         """
         Add a routing rule to the locator.
 
@@ -75,7 +75,7 @@ class RoutingLocator:
             self.links_dict[name] = path
 
         self.handlers_dict[path] = RoutingRule(handler=handler,
-                                               path_args=args,
+                                               path_args=list(args),
                                                path_kwargs=kwargs)
 
     def find(self, path: str) -> RoutingRule:
@@ -114,5 +114,5 @@ class RoutingLocator:
                                path_kwargs=path_kwargs)
         else:
             return RoutingRule(handler=self.default_handler,
-                               path_args=(),
+                               path_args=[],
                                path_kwargs={})
