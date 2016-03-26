@@ -23,14 +23,8 @@ import os
 import functools
 
 try:  # Try to load template.
-    import jinja2
-except ImportError:  # Point jinja2 to None if it is not found.
-    jinja2 = None
-
-
-if jinja2 is not None:
-    Template = jinja2.Template
-else:
+    from jinja2 import Template
+except ImportError:  # Point Template to None if it is not found.
     Template = None
 
 
@@ -68,7 +62,7 @@ class TemplateLoader:
     """
     def __init__(self, template_path: Union[list, str],
                  cache_template: bool=True):
-        if jinja2 is None:
+        if Template is None:
             raise NotImplementedError(
                 ("Currently, `futurefinity.template` needs Jinja2 to work. "
                  "Please install it before using template rendering."))
