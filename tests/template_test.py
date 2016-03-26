@@ -15,62 +15,74 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str
-from futurefinity.template import render_template
-
-import futurefinity.web
+from futurefinity.template import render_template, TemplateLoader
 
 import asyncio
 
-import nose2
+import os
 import jinja2
-import requests
 import unittest
-import functools
 
 
-class TemplateInterfaceTestCollector(unittest.TestCase):
-    def setUp(self):
-        self.loop = asyncio.get_event_loop()
-        self.app = futurefinity.web.Application(
-            allow_keep_alive=False, debug=True,
-            template_path="examples/template"
-        )
+class TemplateTestCollector(unittest.TestCase):
+    def test_render_template_decorator(self):
+        result_placer = []
 
-    def test_jinja2_template_request(self):
-        @self.app.add_handler("/template_test")
-        class TestHandler(futurefinity.web.RequestHandler):
-            @render_template("main.htm")
-            async def get(self, *args, **kwargs):
-                return {"name": "John Smith"}
+        class RequestHandlerMock:
+            _body_written = False
 
-        server = self.app.listen(8888)
+            @render_template("test.htm")
+            async def tester(self, *args, **kwargs):
+                return {"a": "b"}
 
-        async def get_requests_result(self):
-            try:
-                self.requests_result = await self.loop.run_in_executor(
-                    None, functools.partial(
-                        requests.get, "http://127.0.0.1:8888/template_test"
-                    )
-                )
-            except:
-                traceback.print_exc()
-            finally:
-                server.close()
-                await server.wait_closed()
-                self.loop.stop()
+            def render(self, template_name: str, template_dict: dict):
+                self._body_written = True
+                result_placer.append((template_name, template_dict))
 
-        asyncio.ensure_future(get_requests_result(self))
-        self.loop.run_forever()
+        loop = asyncio.get_event_loop()  # type: asyncio.BaseEventLoop
+        handler = RequestHandlerMock()
 
-        jinja2_envir = jinja2.Environment(loader=jinja2.FileSystemLoader(
-            "examples/template",
-            encoding="utf-8"
-        ))
+        loop.run_until_complete(handler.tester())
+        loop.run_until_complete(handler.tester())
 
-        template = jinja2_envir.get_template("main.htm")
+        self.assertEqual(len(result_placer), 1)
+        self.assertEqual(result_placer[0][0], "test.htm")
+        self.assertEqual(result_placer[0][1], {"a": "b"})
 
-        self.assertEqual(self.requests_result.status_code, 200,
-                         "Wrong Status Code")
-        self.assertEqual(ensure_str(self.requests_result.text),
-                         ensure_str(template.render(name="John Smith")))
+    def test_template_loader_init_with_signle_path(self):
+        loader_single = TemplateLoader(template_path="/tmp")
+        loader_multi = TemplateLoader(template_path=["/tmp", "."])
+        self.assertRaises(ValueError, TemplateLoader, {})
+
+        self.assertListEqual(loader_single.template_path, ["/tmp"])
+        self.assertListEqual(loader_multi.template_path, ["/tmp", "."])
+
+    def test_template_loader_find_abs_path(self):
+        loader = TemplateLoader(template_path="examples/template/")
+        file_path = loader.find_abs_path("login.htm")
+        self.assertEqual(file_path,
+                         os.path.realpath("examples/template/login.htm"))
+        self.assertRaises(FileNotFoundError, loader.find_abs_path,
+                          "login.html")
+
+    def test_template_loader_load_template_file_content(self):
+        loader = TemplateLoader(template_path="examples/template/")
+        file_path = loader.find_abs_path("login.htm")
+        with open("examples/template/login.htm") as f:
+            self.assertEqual(f.read(),
+                             loader.load_template_file_content(file_path))
+
+    def test_template_loader_load_template(self):
+        loader = TemplateLoader(template_path="examples/template/")
+        loader_loaded_template = loader.load_template("login.htm")
+        with open("examples/template/login.htm") as f:
+            test_loaded_template = jinja2.Template(f.read())
+
+        self.assertEqual(loader_loaded_template.render(),
+                         test_loaded_template.render())
+
+    def test_template_loader_load_template_cache(self):
+        loader = TemplateLoader(template_path="examples/template/")
+        first_loaded_template = loader.load_template("login.htm")
+        second_loaded_template = loader.load_template("login.htm")
+        self.assertIs(first_loaded_template, second_loaded_template)
