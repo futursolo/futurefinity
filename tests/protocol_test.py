@@ -555,9 +555,9 @@ class HTTPConnectionControllerTestCollector(unittest.TestCase):
         self.assertIsNone(controller.set_timeout_handler(0), None)
         self.assertIsNone(controller.set_timeout_handler(0), None)
         self.assertRaises(NotImplementedError, controller.stream_received,
-                          object())
+                          object(), object())
         self.assertRaises(NotImplementedError, controller.error_received,
-                          object())
+                          object(), object())
         self.assertRaises(NotImplementedError, controller.message_received,
                           object())
 
