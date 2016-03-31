@@ -93,7 +93,7 @@ class HTTPHeadersTestCollector(unittest.TestCase):
         self.assertEqual(headers.get_list("header-a"), ["value-a", "value-c"])
         self.assertEqual(headers["header-b"], "value-b")
 
-    def test_http_headers_load_headers_with_dict(self):
+    def test_http_headers_load_headers_with_list(self):
         headers = futurefinity.protocol.HTTPHeaders()
         headers["header-a"] = "value-a"
         headers.load_headers([("header-a", "value-c"),
@@ -223,7 +223,7 @@ filename=\"test.txt\"\r\n"
                           "multipart/form-data", body_bytes)
 
         body = futurefinity.protocol.HTTPMultipartBody.parse(
-            "multipart/form-data; boundary=-----as7B98bFk",
+            "multipart/form-data; boundary=\"-----as7B98bFk\"",
             body_bytes)
 
         self.assertIn("normal-field", body)
@@ -544,3 +544,23 @@ filename=\"test.txt\"\r\n"
              "headers=HTTPHeaders([]), "
              "cookies=<SimpleCookie: >, "
              ")"))
+
+
+class HTTPConnectionControllerTestCollector(unittest.TestCase):
+    def test_connection_controller(self):
+        controller = futurefinity.protocol.BaseHTTPConnectionController()
+        self.assertIsNone(controller.transport, None)
+        self.assertFalse(controller.use_stream, None)
+        self.assertIsNone(controller.initial_received(object()), None)
+        self.assertIsNone(controller.set_timeout_handler(0), None)
+        self.assertIsNone(controller.set_timeout_handler(0), None)
+        self.assertRaises(NotImplementedError, controller.stream_received,
+                          object())
+        self.assertRaises(NotImplementedError, controller.error_received,
+                          object())
+        self.assertRaises(NotImplementedError, controller.message_received,
+                          object())
+
+
+class HTTPv1ConnectionTestCollector(unittest.TestCase):
+    pass
