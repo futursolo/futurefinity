@@ -26,6 +26,7 @@ import os
 import cgi
 import sys
 import json
+import email
 import unittest
 import http.cookies
 import unittest.mock
@@ -553,7 +554,7 @@ class HTTPConnectionControllerTestCollector(unittest.TestCase):
         self.assertFalse(controller.use_stream, None)
         self.assertIsNone(controller.initial_received(object()), None)
         self.assertIsNone(controller.set_timeout_handler(0), None)
-        self.assertIsNone(controller.set_timeout_handler(0), None)
+        self.assertIsNone(controller.cancel_timeout_handler(0), None)
         self.assertRaises(NotImplementedError, controller.stream_received,
                           object(), object())
         self.assertRaises(NotImplementedError, controller.error_received,
@@ -563,4 +564,76 @@ class HTTPConnectionControllerTestCollector(unittest.TestCase):
 
 
 class HTTPv1ConnectionTestCollector(unittest.TestCase):
-    pass
+    def create_controller(self):
+        class ControllerMock(
+         futurefinity.protocol.BaseHTTPConnectionController):
+            def __init__(mock, *args, **kwargs):
+                mock.stored_bytes = b""
+                mock.transport = unittest.mock.Mock()
+                mock.transport.write = mock._write
+                mock.transport.close = mock._close
+
+                mock.initial_received_message = None
+                mock.stream_received_message = None
+                mock.error_received_message = None
+                mock.message_received_message = None
+                mock.set_timeout_triggered = False
+                mock.cancel_timeout_triggered = False
+                mock.transport_close_triggered = False
+
+            def _write(mock, data):
+                mock.stored_bytes += data
+
+            def _close(mock, *args, **kwargs):
+                mock.transport_close_triggered = True
+
+            def message_received(mock, message):
+                mock.message_received_message = message
+
+            @property
+            def use_stream(self):
+                return False
+
+        return ControllerMock()
+
+    def random_bytes_writing(self):
+        pass
+
+    def test_http_v10_client_get_no_keep_alive(self):
+        controller = self.create_controller()
+        connection = futurefinity.protocol.HTTPv1Connection(
+            controller=controller, is_client=True, http_version=10,
+            use_tls=False, sockname=("127.0.0.1", 23333),
+            peername=("127.0.0.1", 9741), allow_keep_alive=False)
+
+        connection.write_initial(
+            http_version=10, method="GET", path="/",
+            headers=futurefinity.protocol.HTTPHeaders())
+        connection.finish_writing()
+
+        initial, headers = controller.stored_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(initial, b"GET / HTTP/1.0")
+
+        message = email.message_from_bytes(headers)
+
+        self.assertEqual(message.get("Connection"), "Close")
+
+        connection.data_received(b"HTTP/1.0 200 OK\r\n")
+        connection.data_received(b"Connection: Close\r\n")
+        connection.data_received(b"Content-Length: 13\r\n\r\nHello, World!")
+
+        self.assertTrue(controller.transport_close_triggered)
+
+        message = controller.message_received_message
+
+        self.assertIsNotNone(message)
+
+        self.assertEqual(message.http_version, 10)
+
+        self.assertEqual(message.status_code, 200)
+
+        self.assertEqual(message.headers.get_first("Connection"), "Close")
+        self.assertEqual(message.headers.get_first("Content-Length"), "13")
+
+        self.assertEqual(message.body, b"Hello, World!")

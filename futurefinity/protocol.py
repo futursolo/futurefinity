@@ -750,8 +750,9 @@ class HTTPv1Connection:
     """
     def __init__(self, controller: BaseHTTPConnectionController,
                  is_client: bool, http_version: int=10,
-                 use_tls: bool=False, sockname: tuple=None,
-                 peername: tuple=None, allow_keep_alive: bool=True):
+                 use_tls: bool=False, sockname: Optional[Tuple[str, int]]=None,
+                 peername: Optional[Tuple[str, int]]=None,
+                 allow_keep_alive: bool=True):
         self.http_version = http_version
         self.is_client = is_client
         self.use_tls = use_tls
@@ -1025,7 +1026,8 @@ class HTTPv1Connection:
         basic_info_template = b"%s %s %s" + _CRLF_BYTES_MARK
         if self.is_client:
             if self.stage is not _CONN_INIT:
-                raise ProtocolError("Unacceptable Function Access.")
+                raise ProtocolError(
+                    "Cannot write when connection stage is not _CONN_INIT.")
 
             basic_info = basic_info_template % (
                 ensure_bytes(method), ensure_bytes(path),
@@ -1067,10 +1069,10 @@ class HTTPv1Connection:
             if "accept" not in headers.keys():
                 headers["accept"] = "*/*"
             if "user-agent" not in headers.keys():
-                headers["user-agent"] = "FutureFinity/" + futurefinity.version
+                headers["user-agent"] = "futurefinity/" + futurefinity.version
         else:
             if "server" not in headers.keys():
-                headers["server"] = "FutureFinity/" + futurefinity.version
+                headers["server"] = "futurefinity/" + futurefinity.version
             if method.lower() == "head":
                 # For Head Request, there will not be a body.
                 self._outgoing_chunked_body = False
