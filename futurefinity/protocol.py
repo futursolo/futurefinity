@@ -706,7 +706,7 @@ class BaseHTTPConnectionController:
         """
         pass
 
-    def cancel_timeout_handler(self, suggested_time: Optional[int]=None):
+    def cancel_timeout_handler(self):
         """
         Cancel the EventLoop.call_later instance, prevent transport be closed
         accidently.

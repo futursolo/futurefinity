@@ -29,6 +29,7 @@ import json
 import email
 import unittest
 import http.cookies
+import urllib.parse
 import unittest.mock
 
 
@@ -554,7 +555,7 @@ class HTTPConnectionControllerTestCollector(unittest.TestCase):
         self.assertFalse(controller.use_stream, None)
         self.assertIsNone(controller.initial_received(object()), None)
         self.assertIsNone(controller.set_timeout_handler(0), None)
-        self.assertIsNone(controller.cancel_timeout_handler(0), None)
+        self.assertIsNone(controller.cancel_timeout_handler(), None)
         self.assertRaises(NotImplementedError, controller.stream_received,
                           object(), object())
         self.assertRaises(NotImplementedError, controller.error_received,
@@ -576,6 +577,7 @@ class HTTPv1ConnectionTestCollector(unittest.TestCase):
                 mock.initial_received_message = None
                 mock.stream_received_message = None
                 mock.error_received_message = None
+                mock.error_received_exc = None
                 mock.message_received_message = None
                 mock.set_timeout_triggered = False
                 mock.cancel_timeout_triggered = False
@@ -587,8 +589,21 @@ class HTTPv1ConnectionTestCollector(unittest.TestCase):
             def _close(mock, *args, **kwargs):
                 mock.transport_close_triggered = True
 
+            def initial_received(mock, message):
+                mock.initial_received_message = message
+
+            def error_received(mock, message=None, exc=None):
+                mock.error_received_message = message
+                mock.error_received_exc = exc
+
             def message_received(mock, message):
                 mock.message_received_message = message
+
+            def set_timeout_handler(mock, suggested_time=None):
+                mock.set_timeout_triggered = True
+
+            def cancel_timeout_handler(mock):
+                mock.cancel_timeout_triggered = True
 
             @property
             def use_stream(self):
@@ -599,12 +614,12 @@ class HTTPv1ConnectionTestCollector(unittest.TestCase):
     def random_bytes_writing(self):
         pass
 
-    def test_http_v10_client_get_no_keep_alive(self):
+    def test_http_v10_client_get(self):
         controller = self.create_controller()
         connection = futurefinity.protocol.HTTPv1Connection(
             controller=controller, is_client=True, http_version=10,
             use_tls=False, sockname=("127.0.0.1", 23333),
-            peername=("127.0.0.1", 9741), allow_keep_alive=False)
+            peername=("127.0.0.1", 9741), allow_keep_alive=True)
 
         connection.write_initial(
             http_version=10, method="GET", path="/",
@@ -635,5 +650,97 @@ class HTTPv1ConnectionTestCollector(unittest.TestCase):
 
         self.assertEqual(message.headers.get_first("Connection"), "Close")
         self.assertEqual(message.headers.get_first("Content-Length"), "13")
+
+        self.assertEqual(message.body, b"Hello, World!")
+
+    def test_http_v10_client_post(self):
+        controller = self.create_controller()
+        connection = futurefinity.protocol.HTTPv1Connection(
+            controller=controller, is_client=True, http_version=10,
+            use_tls=False, sockname=("127.0.0.1", 23333),
+            peername=("127.0.0.1", 9741), allow_keep_alive=True)
+
+        post_body = urllib.parse.urlencode({"a": "b", "c": "d"})
+
+        connection.write_initial(
+            http_version=10, method="POST", path="/",
+            headers=futurefinity.protocol.HTTPHeaders())
+        connection.write_body(post_body.encode())
+        connection.finish_writing()
+
+        initial, headers = controller.stored_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(initial, b"POST / HTTP/1.0")
+
+        message = email.message_from_bytes(headers)
+
+        self.assertEqual(message.get("Connection"), "Close")
+
+        self.assertEqual(message.get_payload(), post_body)
+
+        connection.data_received(b"HTTP/1.0 200 OK\r\n")
+        connection.data_received(b"Connection: Close\r\n")
+        connection.data_received(b"Content-Length: 13\r\n\r\nHello, World!")
+
+        self.assertTrue(controller.transport_close_triggered)
+
+        message = controller.message_received_message
+
+        self.assertIsNotNone(message)
+
+        self.assertEqual(message.http_version, 10)
+
+        self.assertEqual(message.status_code, 200)
+
+        self.assertEqual(message.headers.get_first("Connection"), "Close")
+        self.assertEqual(message.headers.get_first("Content-Length"), "13")
+
+        self.assertEqual(message.body, b"Hello, World!")
+
+    def test_http_v11_client_get_keep_alive(self):
+        controller = self.create_controller()
+        connection = futurefinity.protocol.HTTPv1Connection(
+            controller=controller, is_client=True, http_version=11,
+            use_tls=False, sockname=("127.0.0.1", 23333),
+            peername=("127.0.0.1", 9741), allow_keep_alive=True)
+
+        connection.write_initial(
+            http_version=11, method="GET", path="/",
+            headers=futurefinity.protocol.HTTPHeaders())
+        connection.finish_writing()
+
+        initial, headers = controller.stored_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(initial, b"GET / HTTP/1.1")
+
+        message = email.message_from_bytes(headers)
+
+        self.assertEqual(message.get("Connection"), "Keep-Alive")
+
+        connection.data_received(b"HTTP/1.1 200 OK\r\n")
+        connection.data_received(b"Connection: Keep-Alive\r\n")
+        connection.data_received(b"Transfer-Encoding: Chunked\r\n\r\n")
+
+        self.assertIsNotNone(controller.initial_received_message)
+
+        connection.data_received(b"5\r\n")
+        connection.data_received(b"Hello\r\n")
+        connection.data_received(b"8\r\n")
+        connection.data_received(b", World!\r\n")
+        connection.data_received(b"0\r\n\r\n")
+
+        self.assertTrue(controller.set_timeout_triggered)
+
+        message = controller.message_received_message
+
+        self.assertIsNotNone(message)
+
+        self.assertEqual(message.http_version, 11)
+
+        self.assertEqual(message.status_code, 200)
+
+        self.assertEqual(message.headers.get_first("Connection"), "Keep-Alive")
+        self.assertEqual(message.headers.get_first("Transfer-Encoding"),
+                         "Chunked")
 
         self.assertEqual(message.body, b"Hello, World!")
