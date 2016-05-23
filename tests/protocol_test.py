@@ -697,6 +697,44 @@ class HTTPv1ConnectionTestCollector(unittest.TestCase):
 
         self.assertEqual(message.body, b"Hello, World!")
 
+    def test_http_v10_client_get_no_server_content_length(self):
+        controller = self.create_controller()
+        connection = futurefinity.protocol.HTTPv1Connection(
+            controller=controller, is_client=True, http_version=10,
+            use_tls=False, sockname=("127.0.0.1", 23333),
+            peername=("127.0.0.1", 9741), allow_keep_alive=True)
+
+        connection.write_initial(
+            http_version=10, method="GET", path="/",
+            headers=futurefinity.protocol.HTTPHeaders())
+        connection.finish_writing()
+
+        initial, headers = controller.stored_bytes.split(b"\r\n", 1)
+
+        self.assertEqual(initial, b"GET / HTTP/1.0")
+
+        message = email.message_from_bytes(headers)
+
+        self.assertEqual(message.get("Connection"), "Close")
+
+        connection.data_received(b"HTTP/1.0 200 OK\r\n")
+        connection.data_received(b"Connection: Close\r\n\r\n")
+        connection.data_received(b"Hello, World!")
+
+        connection.connection_lost()
+
+        message = controller.message_received_message
+
+        self.assertIsNotNone(message)
+
+        self.assertEqual(message.http_version, 10)
+
+        self.assertEqual(message.status_code, 200)
+
+        self.assertEqual(message.headers.get_first("Connection"), "Close")
+
+        self.assertEqual(message.body, b"Hello, World!")
+
     def test_http_v11_client_get_keep_alive(self):
         controller = self.create_controller()
         connection = futurefinity.protocol.HTTPv1Connection(

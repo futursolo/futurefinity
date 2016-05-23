@@ -476,6 +476,11 @@ class HTTPIncomingMessage:
                 return False
         if self._is_chunked_body:
             return True
+
+        if isinstance(self, HTTPIncomingResponse):
+            if self.headers.get_first("connection", None).lower() == "close":
+                return True
+
         if self._expected_content_length != -1:
             return True
         return False
@@ -927,6 +932,10 @@ class HTTPv1Connection:
         if self._body_length is None:
             self._body_length = self.incoming._expected_content_length
 
+        if self.is_client is True:
+            if self._body_length == -1:
+                return  # Waiting For Connection Close.
+
         if self._body_length > self.max_body_length:
             raise ConnectionEntityTooLarge("The body is too large.")
 
@@ -981,7 +990,8 @@ class HTTPv1Connection:
             else:
                 self.stage = _CONN_BODY_WAITING
                 if not self.incoming._is_chunked_body:
-                    if self.incoming._expected_content_length == -1:
+                    if (self.incoming._expected_content_length == -1 and
+                       not self.is_client):
                         raise ConnectionBadMessage(
                             "Method Request a body, "
                             "but we cannot find a way to detect body length.")
