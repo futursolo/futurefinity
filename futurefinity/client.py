@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import TolerantMagicDict, FutureFinityError
+from futurefinity.utils import (TolerantMagicDict, FutureFinityError,
+                                ensure_bytes)
 from futurefinity import protocol
 
 from typing import Union, Optional, Mapping
@@ -348,17 +349,22 @@ class HTTPClient:
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `POST` request.
         """
-        if "content-type" not in headers.keys():
-            if not files:  # Automatic Content-Type Decision.
-                content_type = "application/x-www-form-urlencoded"
-            else:
-                content_type = "multipart/form-data"
+        if headers is None:
+            headers = protocol.HTTPHeaders()
         else:
+            headers = protocol.HTTPHeaders(headers)
+
+        if "content-type" in headers.keys():
             content_type = headers["content-type"]
             if files:
                 if not content_type.lower().startswith("multipart/form-data"):
                     raise ClientError(
                         "Files can only be sent by multipart/form-data")
+        else:
+            if not files:  # Automatic Content-Type Decision.
+                content_type = "application/x-www-form-urlencoded"
+            else:
+                content_type = "multipart/form-data"
 
         if content_type.lower() == "application/x-www-form-urlencoded":
             body = ensure_bytes(urllib.parse.urlencode(body_args))
@@ -369,7 +375,8 @@ class HTTPClient:
         elif content_type.lower().startswith("multipart/form-data"):
             multipart_body = protocol.HTTPMultipartBody()
             multipart_body.update(body_args)
-            multipart_body.files.update(files)
+            if files:
+                multipart_body.files.update(files)
             body, content_type = multipart_body.assemble()
         else:
             raise ClientError("Unsupported Content-Type.")

@@ -116,8 +116,7 @@ class SecuirtyTestCollector(unittest.TestCase):
         origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
 
-        time.sleep(2)
-        self.assertEqual(None, context.lookup_origin_text(secure_text, 1))
+        self.assertEqual(None, context.lookup_origin_text(secure_text, -1))
 
     def test_hmac_data_expire(self):
         context = self.get_hmac_context()
@@ -125,5 +124,4 @@ class SecuirtyTestCollector(unittest.TestCase):
         origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
 
-        time.sleep(2)
-        self.assertEqual(None, context.lookup_origin_text(secure_text, 1))
+        self.assertEqual(None, context.lookup_origin_text(secure_text, -1))
