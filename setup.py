@@ -24,8 +24,8 @@ import futurefinity
 
 import sys
 
-if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
-    raise RuntimeError("FutureFinity Requires Python 3.5.0 or higher.")
+if not sys.version_info >= (3, 5, 1):
+    raise RuntimeError("FutureFinity Requires Python 3.5.1 or higher.")
 
 install_requires = []
 
