@@ -22,7 +22,6 @@ import futurefinity.web
 import asyncio
 
 import json
-import nose2
 import requests
 import unittest
 import functools

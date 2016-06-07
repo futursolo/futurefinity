@@ -478,7 +478,7 @@ class HTTPIncomingMessage:
             return True
 
         if isinstance(self, HTTPIncomingResponse):
-            if self.headers.get_first("connection", None).lower() == "close":
+            if self.headers.get_first("connection", "").lower() == "close":
                 return True
 
         if self._expected_content_length != -1:
