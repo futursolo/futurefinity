@@ -45,7 +45,7 @@ If any tests failed, please report an issue.
 
 System Dependencies
 -------------------
-FutureFinity |version| will only work on Python 3.5 or higher.
+FutureFinity |version| will only work on Python 3.5.1 or higher.
 
 **Optional Dependencies**:
 
