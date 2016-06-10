@@ -5,17 +5,11 @@ FutureFinity is an asynchronous Python web framework designed for asyncio and na
 .. image:: https://travis-ci.org/futursolo/futurefinity.svg?branch=master
     :target: https://travis-ci.org/futursolo/futurefinity
 
-.. image:: https://coveralls.io/repos/futursolo/futurefinity/badge.svg?branch=master&service=github
+.. image:: https://coveralls.io/repos/github/futursolo/futurefinity/badge.svg?branch=master
     :target: https://coveralls.io/github/futursolo/futurefinity?branch=master
 
 .. image:: https://img.shields.io/pypi/v/futurefinity.svg?style=flat
     :target: https://pypi.python.org/pypi/futurefinity
-
-.. image:: https://img.shields.io/github/license/futursolo/futurefinity.svg
-    :target: https://github.com/futursolo/FutureFinity/blob/master/LICENSE
-
-.. image:: https://img.shields.io/pypi/pyversions/futurefinity.svg
-    :target: https://www.python.org/downloads/release/python-350/
 
 
 Documentation
