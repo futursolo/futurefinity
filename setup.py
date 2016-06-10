@@ -67,7 +67,6 @@ if __name__ == "__main__":
             "Operating System :: POSIX :: Linux",
             "Operating System :: Unix",
             "Programming Language :: Python",
-            "Programming Language :: Python :: 3.5.1",
             "Programming Language :: Python :: 3 :: Only",
             "Programming Language :: Python :: Implementation :: CPython"
         ]
