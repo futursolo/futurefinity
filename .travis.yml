@@ -1,13 +1,12 @@
 language: python
+sudo: false
 python:
-  - "3.5"
+  - "3.5.1"
   - "nightly"
 install:
-  - pip install .
+  - pip install pip --upgrade
+  - pip install .[test]
   - pip install coveralls
-
-services:
-  - redis-server
 
 # command to run tests
 script: coverage run --source=futurefinity setup.py test

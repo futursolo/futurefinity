@@ -15,17 +15,18 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from typing import Optional
+
 import re
-import typing
 import collections
 
 
-class RoutingObject(collections.namedtuple(
- "RoutingObject", ("handler", "path_args", "path_kwargs"))):
+class RoutingRule(collections.namedtuple(
+ "RoutingRule", ("handler", "path_args", "path_kwargs"))):
     """
-    Basic Routing Object for Routing, which contains a handler, path_args,
-    and a path_kwargs. It can be either a stored object in a routing locator,
-    or a matched object that will be returned to the application.
+    Basic Routing Rule for Routing, which contains a handler, path_args,
+    and a path_kwargs. It can be either a stored rule in a routing locator,
+    or a matched rule that will be returned to the application.
 
     :arg handler: should be a ``futurefinity.web.RequestHandler`` object.
     :arg path_args: is a tuple or list that contains the positional arguments.
@@ -44,26 +45,26 @@ class RoutingLocator:
         path matching.
     """
 
-    def __init__(self, default_handler: object=None):
+    def __init__(self, default_handler: Optional[object]=None):
         self.handlers_dict = collections.OrderedDict()
         self.links_dict = collections.OrderedDict()
         self.default_handler = default_handler
 
-    def add(self, path: str, handler: object, *args, name=None, **kwargs):
+    def add(self, path: str, handler: object, *args, name: str=None, **kwargs):
         """
         Add a routing rule to the locator.
 
         :arg path: is a regular expression of the path that will be matched.
         :arg handler: should be a ``futurefinity.web.RequestHandler``.
         :arg \*args: all the other positional arguments will be come the
-            path_args of the routing object. The arguments passed here always
-            have a higher priority in the matched routing object, which means
+            path_args of the routing rule. The arguments passed here always
+            have a higher priority in the matched routing rule, which means
             that all the positional arguments passed here will be the first
             part of the matched object.
         :arg name: the name of the routing rule.
         :arg \*\*kwargs: all the other keyword arguments will be come the
-            path_kwargs of the routing object. The arguments passed here always
-            have a higher priority in the matched routing object, which means
+            path_kwargs of the routing rule. The arguments passed here always
+            have a higher priority in the matched routing rule, which means
             that if the same key also exsits in the regular expression,
             this one will override the one in the path.
         """
@@ -73,18 +74,18 @@ class RoutingLocator:
         if name is not None:
             self.links_dict[name] = path
 
-        self.handlers_dict[path] = RoutingObject(handler=handler,
-                                                 path_args=args,
-                                                 path_kwargs=kwargs)
+        self.handlers_dict[path] = RoutingRule(handler=handler,
+                                               path_args=list(args),
+                                               path_kwargs=kwargs)
 
-    def find(self, path: str) -> RoutingObject:
+    def find(self, path: str) -> RoutingRule:
         """
         Find a handler that matches the path.
 
         If a handler that matches the path cannot be found, the handler will be
         the default_handler.
 
-        It returns a ``RoutingObject``.
+        It returns a ``RoutingRule``.
 
         For the path_args and path_kwargs, the one passes though add method
         will have a higher priority.
@@ -108,10 +109,10 @@ class RoutingLocator:
 
             path_kwargs.update(value.path_kwargs)
 
-            return RoutingObject(handler=value.handler,
-                                 path_args=path_args,
-                                 path_kwargs=path_kwargs)
+            return RoutingRule(handler=value.handler,
+                               path_args=path_args,
+                               path_kwargs=path_kwargs)
         else:
-            return RoutingObject(handler=self.default_handler,
-                                 path_args=(),
-                                 path_kwargs={})
+            return RoutingRule(handler=self.default_handler,
+                               path_args=[],
+                               path_kwargs={})

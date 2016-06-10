@@ -23,6 +23,8 @@ right RequestHandler and make response to client.
 
 from futurefinity.utils import ensure_str, ensure_bytes, FutureFinityError
 
+from typing import Optional
+
 import futurefinity
 
 from futurefinity import protocol
@@ -30,7 +32,6 @@ from futurefinity import protocol
 import asyncio
 
 import ssl
-import typing
 
 
 class ServerError(FutureFinityError):
@@ -42,17 +43,22 @@ class ServerError(FutureFinityError):
     pass
 
 
-class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
+class HTTPServer(asyncio.Protocol, protocol.BaseHTTPConnectionController):
     """
     FutureFinity HTTPServer Class.
+
+    :arg allow_keep_alive: Default: `True`. Turn it to `False` if you want to
+      disable keep alive connection for `HTTP/1.1`.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, allow_keep_alive: bool=True, **kwargs):
         asyncio.Protocol.__init__(self)
-        protocol.HTTPConnectionController.__init__(self)
+        protocol.BaseHTTPConnectionController.__init__(self)
         self.transport = None
         self.use_tls = False
         self.connection = None
         self.use_h2 = False
+
+        self.allow_keep_alive = allow_keep_alive
 
         self.sockname = None
         self.peername = None
@@ -81,26 +87,18 @@ class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
             self.transport.close()
             raise ServerError("Unsupported Protocol")
         else:
-            self.connection = protocol.HTTPv1Connection(is_client=False,
-                                                        use_tls=self.use_tls,
-                                                        sockname=self.sockname,
-                                                        peername=self.peername,
-                                                        controller=self)
+            self.connection = protocol.HTTPv1Connection(
+                controller=self, is_client=False, use_tls=self.use_tls,
+                sockname=self.sockname, peername=self.peername,
+                allow_keep_alive=self.allow_keep_alive)
         self.set_timeout_handler()
 
     def set_timeout_handler(self):
-        """
-        Set a EventLoop.call_later instance, close transport after timeout.
-        """
         self.cancel_timeout_handler()
         self._timeout_handler = self._loop.call_later(
             self.default_timeout_length, self.transport.close)
 
     def cancel_timeout_handler(self):
-        """
-        Cancel the EventLoop.call_later instance, prevent transport be closed
-        accidently.
-        """
         if self._timeout_handler is not None:
             self._timeout_handler.cancel()
         self._timeout_handler = None
@@ -108,6 +106,6 @@ class HTTPServer(asyncio.Protocol, protocol.HTTPConnectionController):
     def data_received(self, data: bytes):
         self.connection.data_received(data)
 
-    def connection_lost(self, exc: typing.Optional[tuple]):
+    def connection_lost(self, exc: Optional[tuple]):
         self.connection.connection_lost(exc)
         self.cancel_timeout_handler()

@@ -22,13 +22,13 @@ from futurefinity import security
 from collections import namedtuple
 from http.cookies import SimpleCookie as HTTPCookies
 from http.client import responses as status_code_text
+from typing import Union, Optional, Any, List, Mapping, Tuple
 
 import futurefinity
 
 import sys
 import json
 import string
-import typing
 import traceback
 import urllib.parse
 
@@ -56,12 +56,17 @@ _CONN_CLOSED = object()
 
 
 class ProtocolError(FutureFinityError):
+    """
+    FutureFinity Protocol Error.
+
+    All Errors from the Protocol are based on this class.
+    """
     pass
 
 
 class CapitalizedHTTPv1Headers(dict):
     """
-    Convert a string to HTTPHeader style capiltalize.
+    Convert a string to HTTPHeader style capitalize.
 
     .. code-block:: python3
 
@@ -139,20 +144,22 @@ class HTTPHeaders(TolerantMagicDict):
     """
     def __str__(self) -> str:
         content_list = [(key, value) for (key, value) in self.items()]
-
         return "HTTPHeaders(%s)" % str(content_list)
 
     def copy(self) -> "HTTPHeaders":
         return HTTPHeaders(self)
 
     @staticmethod
-    def parse(data: typing.Union[str, bytes, list,
-                                 TolerantMagicDict]) -> "HTTPHeaders":
+    def parse(data: Union[str, bytes, list,
+                          TolerantMagicDict]) -> "HTTPHeaders":
         headers = HTTPHeaders()
         headers.load_headers(data)
         return headers
 
     def assemble(self) -> bytes:
+        """
+        Assemble a HTTPHeaders Class to HTTP/1.x Form.
+        """
         headers_str = ""
         for (name, value) in self.items():
             headers_str += "%s: %s" % (_capitalize_header[name], value)
@@ -160,8 +167,7 @@ class HTTPHeaders(TolerantMagicDict):
 
         return ensure_bytes(headers_str)
 
-    def load_headers(self, data: typing.Union[str, bytes, list,
-                                              TolerantMagicDict]):
+    def load_headers(self, data: Union[str, bytes, list, TolerantMagicDict]):
         """
         Load HTTP Headers from another object.
 
@@ -226,7 +232,7 @@ class HTTPMultipartFileField:
     def __init__(self, fieldname: str, filename: str,
                  content: bytes,
                  content_type: str="application/octet-stream",
-                 headers: typing.Optional[HTTPHeaders]=None,
+                 headers: Optional[HTTPHeaders]=None,
                  encoding: str="binary"):
         self.fieldname = fieldname
         self.filename = filename
@@ -250,7 +256,6 @@ class HTTPMultipartFileField:
         """
         Convert this form field to bytes.
         """
-
         self.headers["content-type"] = self.content_type
         self.headers["content-transfer-encoding"] = self.encoding
 
@@ -279,13 +284,12 @@ class HTTPMultipartBody(TolerantMagicDict):
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Body.
     """
-    def __init__(self, files: typing.List=[HTTPMultipartFileField],
-                 *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.files = TolerantMagicDict()
         TolerantMagicDict.__init__(self, *args, **kwargs)
 
     @staticmethod
-    def parse(self, content_type: str, data: bytes) -> "HTTPMultipartBody":
+    def parse(content_type: str, data: bytes) -> "HTTPMultipartBody":
         """
         Parse HTTP v1 Multipart Body.
 
@@ -357,9 +361,11 @@ class HTTPMultipartBody(TolerantMagicDict):
 
         return body_args
 
-    def assemble(self) -> typing.Tuple[bytes, str]:
+    def assemble(self) -> Tuple[bytes, str]:
         """
         Generate HTTP v1 Body to bytes.
+
+        It will return the body in bytes and the content-type in str.
         """
         body = b""
         boundary = "----------FutureFinityFormBoundary"
@@ -403,8 +409,16 @@ class HTTPMultipartBody(TolerantMagicDict):
 
 
 class HTTPIncomingMessage:
+    """
+    FutureFinity HTTP Incoming Message Class.
+
+    This is the base class of `HTTPIncomingRequest` and `HTTPIncomingResponse`.
+    """
     @property
     def _is_chunked_body(self) -> bool:
+        """
+        Return `True` if there is a chunked body in the message.
+        """
         if not hasattr(self, "__is_chunked_body"):
             if self.http_version == 10:
                 self.__is_chunked_body = False
@@ -423,6 +437,9 @@ class HTTPIncomingMessage:
 
     @property
     def scheme(self) -> str:
+        """
+        Return the scheme that the connection used.
+        """
         if not hasattr(self, "_scheme"):
             if self.connection.use_tls:
                 self._scheme = "https"
@@ -432,6 +449,9 @@ class HTTPIncomingMessage:
 
     @property
     def _expected_content_length(self) -> int:
+        """
+        Return the expected content length of the message.
+        """
         if not hasattr(self, "__expected_content_length"):
             content_length = self.headers.get_first("content-length")
             if not content_length:
@@ -448,23 +468,38 @@ class HTTPIncomingMessage:
 
     @property
     def _body_expected(self) -> bool:
+        """
+        Return True if the body is expected.
+        """
         if hasattr(self, "method"):
             if self.method.lower() == "head":
                 return False
         if self._is_chunked_body:
             return True
+
+        if isinstance(self, HTTPIncomingResponse):
+            if self.headers.get_first("connection", "").lower() == "close":
+                return True
+
         if self._expected_content_length != -1:
             return True
         return False
 
 
 class HTTPIncomingRequest(HTTPIncomingMessage):
+    """
+    FutureFinity HTTP Incoming Request Class.
+
+    This is a subclass of the `HTTPIncomingMessage`.
+
+    This class represents a Incoming HTTP Request.
+    """
     def __init__(self, method: str,
                  origin_path: str,
+                 headers: HTTPHeaders,
+                 connection: "HTTPv1Connection",
                  http_version: int=10,
-                 headers: HTTPHeaders=None,
-                 body: typing.Optional[bytes]=None,
-                 connection: "HTTPv1Connection"=None):
+                 body: Optional[bytes]=None):
         self.http_version = http_version
         self.method = method
         self.origin_path = origin_path
@@ -486,6 +521,9 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     @property
     def cookies(self) -> HTTPCookies:
+        """
+        Parse cookies and return cookies in a `HTTPCookies` instance.
+        """
         if not hasattr(self, "_cookies"):
             cookies = HTTPCookies()
             if "cookie" in self.headers:
@@ -496,26 +534,40 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     @property
     def path(self) -> str:
+        """
+        Parse path and return the path in `str`.
+        """
         if not hasattr(self, "_path"):
             self._parse_origin_path()
         return self._path
 
     @property
     def host(self) -> str:
+        """
+        Parse host and return the host in `str`.
+        """
         if not hasattr(self, "_host"):
             self._host = self.headers.get_first("host")
         return self._host
 
     @property
     def link_args(self) -> TolerantMagicDict:
+        """
+        Parse link arguments and return link arguments in a
+        `TolerantMagicDict` instance.
+        """
         if not hasattr(self, "_link_args"):
             self._parse_origin_path()
         return self._link_args
 
     @property
-    def body_args(self) -> typing.Union[TolerantMagicDict, HTTPMultipartBody,
-                                        typing.Dict[typing.Any, typing.Any],
-                                        typing.List[typing.Any]]:
+    def body_args(self) -> Union[TolerantMagicDict, HTTPMultipartBody,
+                                 Mapping[Any, Any],
+                                 List[Any]]:
+        """
+        Parse body arguments and return body arguments in a
+        proper instance.
+        """
         if not hasattr(self, "_body_args"):
             content_type = self.headers.get_first("content-type")
 
@@ -527,13 +579,13 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
                         keep_blank_values=True,
                         strict_parsing=True))
 
-            elif self._expected_content_type.lower().startswith(
+            elif content_type.lower().startswith(
              "multipart/form-data"):
                 self._body_args = HTTPMultipartBody.parse(
                     content_type=content_type,
                     data=self.body)
 
-            elif self._content_type.lower().strip() == "application/json":
+            elif content_type.lower().strip() == "application/json":
                 self._body_args = json.loads(ensure_str(self.body))
 
             else:  # Unknown Content Type.
@@ -564,9 +616,16 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
 
 class HTTPIncomingResponse(HTTPIncomingMessage):
+    """
+    FutureFinity HTTP Incoming Response Class.
+
+    This is a subclass of the `HTTPIncomingMessage`.
+
+    This class represents a Incoming HTTP Response.
+    """
     def __init__(self, status_code: int, http_version: int=10,
                  headers: HTTPHeaders=None,
-                 body: typing.Optional[bytes]=None,
+                 body: Optional[bytes]=None,
                  connection: "HTTPv1Connection"=None):
         self.http_version = http_version
         self.status_code = status_code
@@ -576,6 +635,9 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
 
     @property
     def cookies(self) -> HTTPCookies:
+        """
+        Parse cookies and return cookies in a `HTTPCookies` instance.
+        """
         if not hasattr(self, "_cookies"):
             cookies = HTTPCookies()
             if "set-cookie" in self.headers:
@@ -600,47 +662,102 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
     __repr__ = __str__
 
 
-class HTTPConnectionController:
+class BaseHTTPConnectionController:
+    """
+    FutureFinity Base HTTP Connection Controller Class.
+
+    This is the model controller to the HTTP Connections.
+
+    Any Connection Controllers should based on this class.
+    """
     def __init__(self, *args, **kwargs):
         self.transport = None
         self.use_stream = False
 
     def initial_received(self, incoming: HTTPIncomingMessage):
+        """
+        Triggered when the initial of a message is received.
+        """
         pass
 
     def stream_received(self, incoming: HTTPIncomingMessage, data: bytes):
+        """
+        Triggered when the stream of a message is received.
+
+        This will only be triggered when the message is detected as
+        a stream message.
+        """
         raise NotImplementedError("You should override stream_received.")
 
     def error_received(self, incoming, exc: tuple):
+        """
+        Triggered when errors received when errors occurred during parsing
+        the message.
+        """
         raise NotImplementedError("You should override error_received.")
 
     def message_received(self, incoming: HTTPIncomingMessage):
+        """
+        Triggered when a message is completely received.
+
+        This will not be triggered when the message is detected as
+        a stream message.
+        """
         raise NotImplementedError("You should override message_received.")
 
-    def set_timeout_handler(self, suggested_time=None):
+    def set_timeout_handler(self, suggested_time: Optional[int]=None):
+        """
+        Set a EventLoop.call_later instance, close transport after timeout.
+        """
         pass
 
-    def cancel_timeout_handler(self, suggested_time=None):
+    def cancel_timeout_handler(self):
+        """
+        Cancel the EventLoop.call_later instance, prevent transport be closed
+        accidently.
+        """
         pass
 
 
 class ConnectionParseError(ProtocolError, ConnectionError):
+    """
+    FutureFinity Connection Parse Error.
+
+    Any Connection Parse Errors is based on this class.
+    """
     pass
 
 
 class ConnectionBadMessage(ConnectionParseError):
+    """
+    FutureFinity Connection Bad Message Error.
+
+    This Error is raised when the message is not a valid message.
+    """
     pass
 
 
 class ConnectionEntityTooLarge(ConnectionParseError):
+    """
+    FutureFinity Connection Entity Too Large Error.
+
+    This Error is raised when the message too large that FutureFinity cannot
+    handle.
+    """
     pass
 
 
 class HTTPv1Connection:
-    def __init__(self, controller: HTTPConnectionController,
+    """
+    FutureFinity HTTP v1 Connection Class.
+
+    This class will control and parse the http v1 connection.
+    """
+    def __init__(self, controller: BaseHTTPConnectionController,
                  is_client: bool, http_version: int=10,
-                 use_tls: bool=False, sockname: tuple=None,
-                 peername: tuple=None, allow_keep_alive: bool=True):
+                 use_tls: bool=False, sockname: Optional[Tuple[str, int]]=None,
+                 peername: Optional[Tuple[str, int]]=None,
+                 allow_keep_alive: bool=True):
         self.http_version = http_version
         self.is_client = is_client
         self.use_tls = use_tls
@@ -756,7 +873,7 @@ class HTTPv1Connection:
         else:
             try:
                 self.incoming = HTTPIncomingRequest(
-                    **self._parsed_incoming_info)
+                    **self._parsed_incoming_info, connection=self)
             except:
                 raise ConnectionBadMessage("Bad Initial Received.")
 
@@ -815,6 +932,10 @@ class HTTPv1Connection:
         if self._body_length is None:
             self._body_length = self.incoming._expected_content_length
 
+        if self.is_client is True:
+            if self._body_length == -1:
+                return  # Waiting For Connection Close.
+
         if self._body_length > self.max_body_length:
             raise ConnectionEntityTooLarge("The body is too large.")
 
@@ -830,6 +951,9 @@ class HTTPv1Connection:
         self.stage = _CONN_MESSAGE_PARSED
 
     def data_received(self, data: bytes):
+        """
+        Trigger this function when data is received from the remote.
+        """
         if not data:
             return  # Nothing received, nothing is going to happen.
 
@@ -866,14 +990,15 @@ class HTTPv1Connection:
             else:
                 self.stage = _CONN_BODY_WAITING
                 if not self.incoming._is_chunked_body:
-                    if self.incoming._expected_content_length == -1:
+                    if (self.incoming._expected_content_length == -1 and
+                       not self.is_client):
                         raise ConnectionBadMessage(
                             "Method Request a body, "
                             "but we cannot find a way to detect body length.")
 
         if self.stage is _CONN_STREAMED:
             self.controller.stream_received(self.incoming,
-                                         ensure_bytes(self._pending_bytes))
+                                            ensure_bytes(self._pending_bytes))
             self._pending_bytes.clear()
             return
 
@@ -889,8 +1014,13 @@ class HTTPv1Connection:
                     self._close_connection()
             return
 
-    def write_initial(self, http_version=None, method="GET", path="/",
-                      status_code=200, headers=None):
+    def write_initial(
+        self, http_version: Optional[int]=None, method: str="GET",
+            path: str="/", status_code: int=200,
+            headers: Optional[HTTPHeaders]=None):
+        """
+        Write the initial to remote.
+        """
         initial = b""
 
         if http_version is not None:
@@ -906,7 +1036,8 @@ class HTTPv1Connection:
         basic_info_template = b"%s %s %s" + _CRLF_BYTES_MARK
         if self.is_client:
             if self.stage is not _CONN_INIT:
-                raise ProtocolError("Unacceptable Function Access.")
+                raise ProtocolError(
+                    "Cannot write when connection stage is not _CONN_INIT.")
 
             basic_info = basic_info_template % (
                 ensure_bytes(method), ensure_bytes(path),
@@ -948,10 +1079,10 @@ class HTTPv1Connection:
             if "accept" not in headers.keys():
                 headers["accept"] = "*/*"
             if "user-agent" not in headers.keys():
-                headers["user-agent"] = "FutureFinity/" + futurefinity.version
+                headers["user-agent"] = "futurefinity/" + futurefinity.version
         else:
             if "server" not in headers.keys():
-                headers["server"] = "FutureFinity/" + futurefinity.version
+                headers["server"] = "futurefinity/" + futurefinity.version
             if method.lower() == "head":
                 # For Head Request, there will not be a body.
                 self._outgoing_chunked_body = False
@@ -965,6 +1096,14 @@ class HTTPv1Connection:
         self.stage = _CONN_INITIAL_WRITTEN
 
     def write_body(self, body: bytes):
+        """
+        Write the body to remote.
+
+        This can be triggered for many times. until `finish_writing`
+        is triggered.
+        """
+        if self.stage not in (_CONN_INITIAL_WRITTEN, _CONN_BODY_WRITTEN):
+            raise ProtocolError("Invalid Function Access.")
         self.stage = _CONN_BODY_WRITTEN
         if self._outgoing_chunked_body:
             self._write_body_chunk(body)
@@ -991,6 +1130,11 @@ class HTTPv1Connection:
         self.controller.transport.write(chunk_bytes)
 
     def finish_writing(self):
+        """
+        Trigger this function when everything is written.
+
+        It will reset the connection or close it.
+        """
         if self._outgoing_chunked_body:
             self.controller.transport.write(b"0" + _CRLF_BYTES_MARK * 2)
 
@@ -1003,7 +1147,10 @@ class HTTPv1Connection:
             else:
                 self._close_connection()
 
-    def connection_lost(self, exc: typing.Optional[tuple]=None):
+    def connection_lost(self, exc: Optional[tuple]=None):
+        """
+        Triggered when remote is closed.
+        """
         if self.stage is _CONN_CLOSED:
             return  # This connection has been closed.
 

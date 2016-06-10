@@ -24,12 +24,15 @@ import futurefinity
 
 import sys
 
-if not (sys.version_info.major >= 3 and sys.version_info.minor >= 5):
-    raise RuntimeError("FutureFinity Requires Python 3.5.0 or higher.")
+if not sys.version_info >= (3, 5, 1):
+    raise RuntimeError("FutureFinity Requires Python 3.5.1 or higher.")
 
 install_requires = []
 
-tests_require = ["requests", "nose2", "jinja2", "cryptography"]
+full_requires = ["jinja2", "cryptography"]
+
+tests_require = ["requests", "nose2"]
+tests_require.extend(full_requires)
 
 if __name__ == "__main__":
     setup(
@@ -50,6 +53,10 @@ if __name__ == "__main__":
         install_requires=install_requires,
         tests_require=tests_require,
         zip_safe=False,
+        extras_require={
+            "full": full_requires,
+            "test": tests_require
+        },
         classifiers=[
             "License :: OSI Approved :: Apache Software License",
             "Operating System :: MacOS",
@@ -60,7 +67,7 @@ if __name__ == "__main__":
             "Operating System :: POSIX :: Linux",
             "Operating System :: Unix",
             "Programming Language :: Python",
-            "Programming Language :: Python :: 3.5",
+            "Programming Language :: Python :: 3.5.1",
             "Programming Language :: Python :: 3 :: Only",
             "Programming Language :: Python :: Implementation :: CPython"
         ]

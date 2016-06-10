@@ -15,8 +15,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import TolerantMagicDict, FutureFinityError
+from futurefinity.utils import (TolerantMagicDict, FutureFinityError,
+                                ensure_bytes)
 from futurefinity import protocol
+
+from typing import Union, Optional, Mapping
 
 import futurefinity
 
@@ -25,7 +28,6 @@ import asyncio
 import ssl
 import sys
 import json
-import typing
 import functools
 import traceback
 import urllib.parse
@@ -69,17 +71,24 @@ class ResponseEntityTooLarge(ClientError):
     pass
 
 
-class HTTPClientConnectionController(protocol.HTTPConnectionController):
+class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
+    """
+    HTTP Client Connection Controller Class.
+
+    THis is a subclass of `protocol.BaseHTTPConnectionController`.
+
+    This is used to control a HTTP Connection.
+    """
     def __init__(self, host: str, port: int, *args,
                  allow_keep_alive: bool=True,
                  http_version: int=11,
-                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
+                 loop: Optional[asyncio.BaseEventLoop]=None,
                  context: ssl.SSLContext=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self.http_version = http_version
         self.allow_keep_alive = allow_keep_alive
 
-        protocol.HTTPConnectionController.__init__(self)
+        protocol.BaseHTTPConnectionController.__init__(self)
 
         self.port = port
         self.host = host
@@ -95,7 +104,7 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
         self._timeout_handler = None
 
     def error_received(
-     self, incoming: typing.Optional[protocol.HTTPIncomingResponse],
+     self, incoming: Optional[protocol.HTTPIncomingResponse],
      exc: tuple):
         if isinstance(tuple[1], protocol.ConnectionEntityTooLarge):
             self._exc = ResponseEntityTooLarge(tuple[1].message)
@@ -107,6 +116,9 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
         self.incoming = incoming
 
     async def get_stream_and_connection_ready(self):
+        """
+        Prepare the Stream and the Connection for new request.
+        """
         self.cancel_timeout_handler()
         async def _create_new_stream_and_connection():
             self.reader, self.writer = await asyncio.open_connection(
@@ -133,6 +145,9 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
             await _create_new_stream_and_connection()
 
     def close_stream_and_connection(self):
+        """
+        Close the Stream and the Connection.
+        """
         self.cancel_timeout_handler()
         if self.connection:
             self.connection.connection_lost()
@@ -144,23 +159,20 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
             self.transport = None
 
     def set_timeout_handler(self):
-        """
-        Set a EventLoop.call_later instance, close transport after timeout.
-        """
         self.cancel_timeout_handler()
         self._timeout_handler = self._loop.call_later(
             self.default_timeout_length, self.close_stream_and_connection)
 
     def cancel_timeout_handler(self):
-        """
-        Cancel the EventLoop.call_later instance, prevent transport be closed
-        accidently.
-        """
         if self._timeout_handler is not None:
             self._timeout_handler.cancel()
         self._timeout_handler = None
 
-    async def fetch(self, method, path, headers, body):
+    async def fetch(self, method: str, path: str,
+                    headers: protocol.HTTPHeaders, body: bytes):
+        """
+        Fetch the request.
+        """
         await self.get_stream_and_connection_ready()
         headers["host"] = self.host
         self.connection.write_initial(
@@ -200,10 +212,15 @@ class HTTPClientConnectionController(protocol.HTTPConnectionController):
 
 
 class HTTPClient:
+    """
+    FutureFinity HTTPClient Class.
+
+    This is the HTTPClient Implementation of FutureFinity.
+    """
     def __init__(self, *args, http_version=11,
                  allow_keep_alive: bool=True,
-                 loop: typing.Optional[asyncio.BaseEventLoop]=None,
-                 context: ssl.SSLContext=None, **kwargs):
+                 loop: Optional[asyncio.BaseEventLoop]=None,
+                 context: Optional[ssl.SSLContext]=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self.allow_keep_alive = allow_keep_alive
         self.http_version = http_version
@@ -214,7 +231,7 @@ class HTTPClient:
         self._connection_controllers = {}
 
     def _makeup_url(self, url: str,
-                    link_args: typing.Optional[typing.Mapping[str, str]]):
+                    link_args: Optional[Mapping[str, str]]):
         parsed_url = urllib.parse.urlsplit(url)
 
         if parsed_url.query:
@@ -238,7 +255,7 @@ class HTTPClient:
             "path": path
         }
 
-    def _get_connection_controller(self, host, port, scheme):
+    def _get_connection_controller(self, host: str, port: str, scheme: str):
         controller_identifier = (host, port, scheme)
         if controller_identifier in self._connection_controllers.keys():
             return self._connection_controllers.pop(controller_identifier)
@@ -253,7 +270,8 @@ class HTTPClient:
             http_version=self.http_version,
             host=host, port=port, context=context)
 
-    def _put_connection_controller(self, controller):
+    def _put_connection_controller(self,
+                                   controller: HTTPClientConnectionController):
         if controller.context:
             scheme = "https"
         else:
@@ -263,8 +281,15 @@ class HTTPClient:
             return  # Only cache one controller for each identifier.
         self._connection_controllers[controller_identifier] = controller
 
-    async def fetch(self, method, url, headers=None,
-                    cookies=None, link_args=None, body=None):
+    async def fetch(
+        self, method: str, url: str,
+            headers: Union[protocol.HTTPHeaders, Mapping[str, str], None]=None,
+            cookies: Union[protocol.HTTPCookies, Mapping[str, str], None]=None,
+            link_args: Union[TolerantMagicDict, Mapping[str, str], None]=None,
+            body: Optional[bytes]=None):
+        """
+        Fetch the request.
+        """
         if link_args is not None and not isinstance(link_args,
                                                     TolerantMagicDict):
             link_args = TolerantMagicDict(link_args)
@@ -300,24 +325,46 @@ class HTTPClient:
         self._put_connection_controller(controller)
         return response
 
-    async def get(self, url, headers=None, cookies=None, link_args=None):
+    async def get(
+        self, url: str,
+            headers: Union[protocol.HTTPHeaders, Mapping[str, str], None]=None,
+            cookies: Union[protocol.HTTPCookies, Mapping[str, str], None]=None,
+            link_args: Union[TolerantMagicDict, Mapping[str, str], None]=None):
+        """
+        This is a friendly wrapper of `client.HTTPClient.fetch` for
+        `GET` request.
+        """
         response = await self.fetch(method="GET", url=url, headers=headers,
                                     cookies=cookies, link_args=link_args)
         return response
 
-    async def post(self, url, headers=None, cookies=None, link_args=None,
-                   body_args=None, files=None):
-        if "content-type" not in headers.keys():
-            if not files:  # Automatic Content-Type Decision.
-                content_type = "application/x-www-form-urlencoded"
-            else:
-                content_type = "multipart/form-data"
+    async def post(
+        self, url: str,
+            headers: Union[protocol.HTTPHeaders, Mapping[str, str], None]=None,
+            cookies: Union[protocol.HTTPCookies, Mapping[str, str], None]=None,
+            link_args: Union[TolerantMagicDict, Mapping[str, str], None]=None,
+            body_args: Union[TolerantMagicDict, Mapping[str, str], None]=None,
+            files: Union[TolerantMagicDict, Mapping[str, str], None]=None):
+        """
+        This is a friendly wrapper of `client.HTTPClient.fetch` for
+        `POST` request.
+        """
+        if headers is None:
+            headers = protocol.HTTPHeaders()
         else:
+            headers = protocol.HTTPHeaders(headers)
+
+        if "content-type" in headers.keys():
             content_type = headers["content-type"]
             if files:
                 if not content_type.lower().startswith("multipart/form-data"):
                     raise ClientError(
                         "Files can only be sent by multipart/form-data")
+        else:
+            if not files:  # Automatic Content-Type Decision.
+                content_type = "application/x-www-form-urlencoded"
+            else:
+                content_type = "multipart/form-data"
 
         if content_type.lower() == "application/x-www-form-urlencoded":
             body = ensure_bytes(urllib.parse.urlencode(body_args))
@@ -328,7 +375,8 @@ class HTTPClient:
         elif content_type.lower().startswith("multipart/form-data"):
             multipart_body = protocol.HTTPMultipartBody()
             multipart_body.update(body_args)
-            multipart_body.files.update(files)
+            if files:
+                multipart_body.files.update(files)
             body, content_type = multipart_body.assemble()
         else:
             raise ClientError("Unsupported Content-Type.")

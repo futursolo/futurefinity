@@ -19,9 +19,10 @@
 ``futurefinity.utils`` contains a series of utilities for common use.
 """
 
+from typing import Any, Optional, Union
+
 import time
 import struct
-import typing
 import numbers
 import calendar
 import datetime
@@ -41,7 +42,7 @@ class FutureFinityError(Exception):
     pass
 
 
-def ensure_bytes(var: typing.Any) -> bytes:
+def ensure_bytes(var: Any) -> bytes:
     """
     Try to convert passed variable to a bytes object.
     """
@@ -58,7 +59,7 @@ def ensure_bytes(var: typing.Any) -> bytes:
     return strvar.encode()
 
 
-def ensure_str(var: typing.Any) -> str:
+def ensure_str(var: Any) -> str:
     """
     Try to convert passed variable to a str object.
     """
@@ -88,7 +89,7 @@ class MagicDict(collections.abc.MutableMapping):
         else:
             self.update(*args, **kwargs)
 
-    def add(self, name, value):
+    def add(self, name: Any, value: Any):
         """
         Add a value to the MagicDict.
         """
@@ -98,13 +99,13 @@ class MagicDict(collections.abc.MutableMapping):
         else:
             self[name] = value
 
-    def get_list(self, name, default=None):
+    def get_list(self, name: Any, default: Optional[Any]=None):
         """
         Return all values with the name in a list.
         """
         return self._as_list.get(name, default)
 
-    def get_first(self, name, default=None):
+    def get_first(self, name: Any, default: Optional[Any]=None):
         """
         Get the first value with the name.
         """
@@ -124,19 +125,22 @@ class MagicDict(collections.abc.MutableMapping):
             for value in values:
                 yield value
 
-    def __setitem__(self, name, value):
+    def __setitem__(self, name: Any, value: Any):
         self._dict[name] = value
         self._as_list[name] = [value]
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: Any):
         return self._dict[name]
 
-    def __delitem__(self, name):
+    def __delitem__(self, name: Any):
         del self._dict[name]
         del self._as_list[name]
 
     def __len__(self):
-        return len(self._dict)
+        length = 0
+        for value in self._as_list.values():
+            length += len(value)
+        return length
 
     def __iter__(self):
         return iter(self._dict)
@@ -167,23 +171,23 @@ class TolerantMagicDict(MagicDict):
         lower_name = name.lower()
         return MagicDict.add(self, lower_name, value)
 
-    def get_list(self, name: str, default: typing.Optional[str]=None):
+    def get_list(self, name: str, default: Optional[str]=None):
         lower_name = name.lower()
         return MagicDict.get_list(self, lower_name, default=default)
 
-    def get_first(self, name: str, default: typing.Optional[str]=None):
+    def get_first(self, name: str, default: Optional[str]=None):
         lower_name = name.lower()
         return MagicDict.get_first(self, lower_name, default=default)
 
-    def __setitem__(self, name, value):
+    def __setitem__(self, name: str, value: str):
         lower_name = name.lower()
         return MagicDict.__setitem__(self, lower_name, value)
 
-    def __getitem__(self, name):
+    def __getitem__(self, name: str):
         lower_name = name.lower()
         return MagicDict.__getitem__(self, lower_name)
 
-    def __delitem__(self, name):
+    def __delitem__(self, name: str):
         lower_name = name.lower()
         return MagicDict.__delitem__(self, lower_name)
 
@@ -199,9 +203,8 @@ class TolerantMagicDict(MagicDict):
     __repr__ = __str__
 
 
-def format_timestamp(ts: typing.Union[int, numbers.Real, tuple,
-                                      time.struct_time,
-                                      datetime.datetime]=None) -> str:
+def format_timestamp(ts: Union[numbers.Real, tuple, time.struct_time,
+                               datetime.datetime, None]=None) -> str:
     """
     Make a HTTP Protocol timestamp.
     """
