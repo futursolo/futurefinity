@@ -189,7 +189,7 @@ class RequestHandler:
         self.connection = self.server.connection
 
         self.request = request
-        self.path_args = path_kwargs or []
+        self.path_args = path_args or []
         self.path_kwargs = path_kwargs or {}
         self.http_version = self.request.http_version
 

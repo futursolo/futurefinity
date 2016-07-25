@@ -1,3 +1,7 @@
+dev
+---
+- Fix a Typo Bug in RequestHandler.
+
 v0.2.1
 ------
 - Abstract HTTPv1 Protocol by HTTPv1Connection
