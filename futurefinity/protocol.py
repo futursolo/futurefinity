@@ -54,6 +54,9 @@ _CONN_BODY_WRITTEN = object()
 
 _CONN_CLOSED = object()
 
+if 451 not in status_code_text.keys():
+    status_code_text[451] = "Unavailable For Legal Reasons"
+
 
 class ProtocolError(FutureFinityError):
     """

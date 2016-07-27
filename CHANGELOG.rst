@@ -3,6 +3,7 @@ dev
 - Fixed a Typo Bug in RequestHandler
 - Fixed a Body Parsing Bug when content-type is `application/json`
 - Fixed a Set Cookie Expires Days Bug
+- Implemented HTTP 451(Unavailable For Legal Reasons)
 
 v0.2.1
 ------
