@@ -348,12 +348,18 @@ class RequestHandler:
             raise HTTPError(500, "You cannot set a new cookie after the "
                                  "initial is written.")
         self._cookies[name] = value
-        if domain:
+
+        if domain is not None:
             self._cookies[name]["domain"] = domain
-        if expires:
+
+        if expires is not None:
             self._cookies[name]["expires"] = expires
+
         self._cookies[name]["path"] = path
-        self._cookies[name]["max-age"] = expires_days
+
+        if expires_days is not None:
+            self._cookies[name]["max-age"] = expires_days * 86400
+
         self._cookies[name]["secure"] = secure
         self._cookies[name]["httponly"] = httponly
 

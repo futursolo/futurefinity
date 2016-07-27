@@ -2,6 +2,7 @@ dev
 ---
 - Fixed a Typo Bug in RequestHandler
 - Fixed a Body Parsing Bug when content-type is `application/json`
+- Fixed a Set Cookie Expires Days Bug
 
 v0.2.1
 ------
