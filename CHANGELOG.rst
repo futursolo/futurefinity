@@ -1,6 +1,7 @@
 dev
 ---
-- Fix a Typo Bug in RequestHandler.
+- Fixed a Typo Bug in RequestHandler
+- Fixed a Body Parsing Bug when content-type is `application/json`
 
 v0.2.1
 ------

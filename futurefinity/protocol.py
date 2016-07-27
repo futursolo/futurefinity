@@ -586,7 +586,8 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
                     data=self.body)
 
             elif content_type.lower().strip() == "application/json":
-                self._body_args = json.loads(ensure_str(self.body))
+                self._body_args = TolerantMagicDict(
+                    json.loads(ensure_str(self.body)))
 
             else:  # Unknown Content Type.
                 raise ProtocolError("Unknown Body Type.")
