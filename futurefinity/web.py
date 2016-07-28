@@ -108,6 +108,9 @@ class ApplicationHTTPServer(server.HTTPServer):
     def error_received(self,
                        incoming: Optional[protocol.HTTPIncomingRequest],
                        exc: tuple):
+        if self.settings.get("debug", False) and exc:
+            traceback.print_exception(*exc)
+
         if not incoming:  # Message unable to parse, create an placeholder.
             incoming = protocol.HTTPIncomingRequest(
                 method="GET",

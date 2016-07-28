@@ -4,6 +4,7 @@ dev
 - Fixed a Body Parsing Bug when content-type is `application/json`
 - Fixed a Set Cookie Expires Days Bug
 - Implemented HTTP 451(Unavailable For Legal Reasons)
+- Print Exceptions in Protocol in debug mode
 
 v0.2.1
 ------
