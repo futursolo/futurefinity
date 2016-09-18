@@ -19,13 +19,16 @@
 ``futurefinity.utils`` contains a series of utilities for common use.
 """
 
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, List
 
+import sys
 import time
+import types
 import struct
 import numbers
 import calendar
 import datetime
+import warnings
 import email.utils
 import collections.abc
 
@@ -203,8 +206,8 @@ class TolerantMagicDict(MagicDict):
     __repr__ = __str__
 
 
-def format_timestamp(ts: Union[numbers.Real, tuple, time.struct_time,
-                               datetime.datetime, None]=None) -> str:
+def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
+                                  datetime.datetime]]=None) -> str:
     """
     Make a HTTP Protocol timestamp.
     """
@@ -219,3 +222,41 @@ def format_timestamp(ts: Union[numbers.Real, tuple, time.struct_time,
     else:
         raise TypeError("unknown timestamp type: %r" % ts)
     return ensure_str(email.utils.formatdate(ts, usegmt=True))
+
+
+class _DeprecatedAttr:
+    def __init__(self, attr, message):
+        self._attr = attr
+        self._message = message
+
+    def get_attr(self):
+        warnings.warn(self._message, DeprecationWarning)
+        return self._attr
+
+
+class _ModWithDeprecatedAttrs:
+    def __init__(self, mod: types.ModuleType):
+        self._mod = module
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._mod, name)
+
+        if isinstance(attr, _DeprecatedAttr):
+            return attr.get_attr()
+
+        return attr
+
+    def __setattr__(self, name: str, value: Any):
+        return setattr(self._mod, name, value)
+
+    def __dir__(self) -> List[str]:
+        return dir(self._mod)
+
+
+def deprecated_attr(attr, mod_name, message):
+    mod = sys.modules[mod_name]
+
+    if not isinstance(mod, _ModWithDeprecatedAttrs):
+        sys.modules[mod_name] = _ModWithDeprecatedAttrs(mod)
+
+    return _DeprecatedAttr(attr, message)

@@ -989,8 +989,8 @@ class Application:
 
     def listen(self, port: int,
                address: str="127.0.0.1",
-               context: Union[bool, ssl.SSLContext,
-                              None]=None) -> CoroutineType:
+               context: Optional[
+                Union[bool, ssl.SSLContext]]=None) -> CoroutineType:
         """
         Make the server to listen to the specified port and address.
 
@@ -1008,8 +1008,8 @@ class Application:
         srv = self._loop.run_until_complete(f)
         return srv
 
-    def add_handler(self, path: str, *args, name: str=None,
-                    handler: RequestHandler=None,
+    def add_handler(self, path: str, *args, name: Optional[str]=None,
+                    handler: Optional[RequestHandler]=None,
                     **kwargs) -> Optional[FunctionType]:
         """
         Add a handler to handler list.
@@ -1031,7 +1031,9 @@ class Application:
         def decorator(handler):
             self.handlers.add(path, handler, *args, name=name, **kwargs)
             return handler
+
         if handler is not None:
             decorator(handler)
+
         else:
             return decorator
