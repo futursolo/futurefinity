@@ -58,7 +58,6 @@ main.html::
 
 from futurefinity.utils import ensure_str, FutureFinityError
 
-from collections import namedtuple
 from typing import Union, Optional, List, Dict, Any
 
 import asyncio
