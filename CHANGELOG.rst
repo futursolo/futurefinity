@@ -5,6 +5,8 @@ dev
 - Fixed a Set Cookie Expires Days Bug
 - Implemented HTTP 451(Unavailable For Legal Reasons)
 - Print Exceptions in Protocol in debug mode
+- Deprecated HAMCSecurityContext
+- Deprecated AESGCMSecurityContext by AESContext
 - Deprecation Tools
 - Introduce FutureFinity Logging Facility
 

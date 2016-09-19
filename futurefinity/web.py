@@ -53,7 +53,7 @@ from futurefinity import template
 from futurefinity import security
 
 from types import FunctionType, CoroutineType
-from typing import Optional, Union, Mapping, List
+from typing import Optional, Union, Mapping, List, Dict, Any
 
 import futurefinity
 
@@ -66,6 +66,7 @@ import sys
 import hmac
 import html
 import hashlib
+import warnings
 import functools
 import mimetypes
 import traceback
@@ -413,8 +414,8 @@ class RequestHandler:
             return default
 
         try:
-            return self.app.security_object.lookup_origin_text(cookie_content,
-                                                               valid_length)
+            return self.app._sec_context.lookup_origin_text(cookie_content,
+                                                            valid_length)
         except:
             return None
 
@@ -446,7 +447,7 @@ class RequestHandler:
                 "Cannot found security_secret. "
                 "Please provide security_secret through Application Settings.")
 
-        content = self.app.security_object.generate_secure_text(value)
+        content = self.app._sec_context.generate_secure_text(value)
 
         self.set_cookie(ensure_str(name), ensure_str(content),
                         expires_days=expires_days, **kwargs)
@@ -959,7 +960,7 @@ class Application:
         self.handlers = routing.RoutingLocator(default_handler=NotFoundHandler)
 
         self.template_loader = None
-        self.security_object = None
+        self._sec_context = None
 
         if "template_path" in self.settings.keys():
             self.template_loader = template.TemplateLoader(
@@ -968,16 +969,30 @@ class Application:
 
         if "security_secret" in self.settings.keys():
             if self.settings.get("aes_security", True):
-                self.security_object = security.AESGCMSecurityContext(
+                self._sec_context = security.AESContext(
                     self.settings["security_secret"])
             else:
-                self.security_object = security.HMACSecurityContext(
+                self._sec_context = security.HMACSecurityContext(
                     self.settings["security_secret"])
 
         if "static_path" in self.settings.keys():
             static_handler_path = self.settings.get("static_handler_path",
                                                     r"/static/(?P<file>.*?)")
             self.handlers.add(static_handler_path, StaticFileHandler)
+
+    @property
+    def security_object(self):
+        """
+        .. deprecated:: 0.3
+            For direct access to `SecurityContext`.
+            Use `Application._sec_context` instead.
+        """
+        warnings.warn(
+            "`Application.security_object` is deprecated. \
+                Use `Application._sec_context` instead.",
+            DeprecationWarning)
+
+        return self._sec_context
 
     def make_server(self) -> asyncio.Protocol:
         """

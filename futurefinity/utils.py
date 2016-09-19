@@ -23,8 +23,8 @@ from typing import Any, Optional, Union, List
 
 import sys
 import time
-import types
 import struct
+import inspect
 import numbers
 import calendar
 import datetime
@@ -225,38 +225,34 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
 
 
 class _DeprecatedAttr:
-    def __init__(self, attr, message):
+    def __init__(self, attr: Any, message: str):
         self._attr = attr
         self._message = message
 
-    def get_attr(self):
+    def get_attr(self) -> Any:
         warnings.warn(self._message, DeprecationWarning)
         return self._attr
-
-
-class _ModWithDeprecatedAttrs:
-    def __init__(self, mod: types.ModuleType):
-        self._mod = module
-
-    def __getattr__(self, name: str) -> Any:
-        attr = getattr(self._mod, name)
-
-        if isinstance(attr, _DeprecatedAttr):
-            return attr.get_attr()
-
-        return attr
-
-    def __setattr__(self, name: str, value: Any):
-        return setattr(self._mod, name, value)
-
-    def __dir__(self) -> List[str]:
-        return dir(self._mod)
 
 
 def deprecated_attr(attr, mod_name, message):
     mod = sys.modules[mod_name]
 
+    class _ModWithDeprecatedAttrs:
+        def __getattr__(self, name: str) -> Any:
+            mod_attr = getattr(mod, name)
+
+            if isinstance(mod_attr, _DeprecatedAttr):
+                return mod_attr.get_attr()
+
+            return mod_attr
+
+        def __setattr__(self, name: str, attr: Any):
+            return setattr(mod, name, attr)
+
+        def __dir__(self) -> List[str]:
+            return dir(mod)
+
     if not isinstance(mod, _ModWithDeprecatedAttrs):
-        sys.modules[mod_name] = _ModWithDeprecatedAttrs(mod)
+        sys.modules[mod_name] = _ModWithDeprecatedAttrs()
 
     return _DeprecatedAttr(attr, message)

@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str, ensure_bytes, FutureFinityError
+from futurefinity.utils import (
+    ensure_str, ensure_bytes, deprecated_attr, FutureFinityError)
 
 from typing import Optional
 
@@ -57,7 +58,7 @@ def get_random_str(length: int) -> str:
     return random_string
 
 
-class BaseSecurityContext:
+class BaseContext:
     def __init__(self, security_secret: str):
         self._security_secret = hashlib.sha256(
             ensure_bytes(security_secret)).digest()
@@ -88,8 +89,17 @@ class BaseSecurityContext:
         raise NotImplementedError
 
 
-class HMACSecurityContext(BaseSecurityContext):
+BaseSecurityContext = deprecated_attr(
+    BaseContext, __name__,
+    "BaseSecurityContext is deprecated. Use BaseContext instead.")
+
+
+class _HMACSecurityContext(BaseContext):
     """
+    .. deprecated: 0.3
+        HMACSecurityContext is deprecated.
+        Install `cryptography` and use `AESContext` instead.
+
     Security Context uses HMAC.
 
     It Uses Built-in ``hmac`` library to create a signature for the given
@@ -151,7 +161,13 @@ class HMACSecurityContext(BaseSecurityContext):
         return ensure_str(base64.b64encode(final_signed_text))
 
 
-class AESGCMSecurityContext(BaseSecurityContext):
+HMACSecurityContext = deprecated_attr(
+    _HMACSecurityContext, __name__,
+    "HMACSecurityContext is deprecated. "
+    "Install cryptography and use AESContext instead.")
+
+
+class AESContext(BaseContext):
     """
     Security Context uses AES GCM.
 
@@ -159,7 +175,7 @@ class AESGCMSecurityContext(BaseSecurityContext):
 
     It Uses ``cryptography`` library which can be installed via pip to
     encrypt/decrypt the content and ensure the intrgrity of the content by
-    AES GCM.
+    AES GCM AEAD Cipher.
 
     If ``cryptography`` is not installed, it will raise an `FutureFinityError`.
 
@@ -170,12 +186,11 @@ class AESGCMSecurityContext(BaseSecurityContext):
     def __init__(self, security_secret: str):
         if None in [AESCipher, aes_algorithms, aes_modes, aes_backend]:
             raise FutureFinityError(
-                "Currently, `futurefinity.security.AESGCMSecurityContext` "
-                "needs Cryptography to work. Please install it before "
-                "using security features(such as security_secret), "
-                "or turn aes_security to False in Application Settings.")
+                "Currently, `futurefinity.security.AESContext` "
+                "requires Cryptography. Please install it before "
+                "using security features(such as security_secret).")
 
-        BaseSecurityContext.__init__(self, security_secret)
+        super().__init__(security_secret)
 
     def lookup_origin_text(
         self, secure_text: str,
@@ -235,3 +250,7 @@ class AESGCMSecurityContext(BaseSecurityContext):
         final_encrypted_text += encryptor.tag
 
         return ensure_str(base64.b64encode(final_encrypted_text))
+
+AESGCMSecurityContext = deprecated_attr(
+    AESContext, __name__,
+    "AESGCMSecurityContext is deprecated. Use AESContext instead.")
