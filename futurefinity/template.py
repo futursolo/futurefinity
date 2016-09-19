@@ -15,6 +15,47 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+"""
+FutureFinity Template.
+
+Examples:
+
+layout.html::
+    <html>
+        <head>
+            <title><%= await get_page_title()s %></title>
+        </head>
+        <body>
+            <% include "header.htm" %>
+
+            <r= await self.blocks.body() %>
+        </body>
+    </html>
+
+Examples:
+
+header.html::
+    <header>
+        <nav><%= await get_page_title() %></nav>
+    </header>
+
+main.html::
+    <% inherit "layout.html" %>
+    <main>
+        <% try %>
+            <% async for article in db.articles.find() %>
+                <div>article.title</div>
+                <div>article.content</div>
+            <% end %>
+        <% except Exception as e %>
+            <div>Internal Server Error.</div>
+            <%= e %>
+        <% end %>
+    </main>
+
+
+"""
+
 from futurefinity.utils import ensure_str, FutureFinityError
 
 from collections import namedtuple
@@ -331,7 +372,7 @@ class TemplateBlockSmt(TemplateStatement):
 
 
 class TemplateIndentSmt(TemplateStatement):
-    names = ("if", "with", "for", "while")
+    names = ("if", "with", "for", "while", "try")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -362,7 +403,7 @@ class TemplateUnindentSmt(TemplateStatement):
 
 
 class TemplateHalfIndentSmt(TemplateUnindentSmt, TemplateIndentSmt):
-    names = ("else", "elif")
+    names = ("else", "elif", "except", "finally")
 
 
 class TemplateSubControlSmt(TemplateStatement):
