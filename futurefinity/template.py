@@ -59,7 +59,7 @@ class TemplateNotFoundError(TemplateError, FileNotFoundError):
     pass
 
 
-class TemplateRenderError(TemplateError, FileNotFoundError):
+class TemplateRenderError(TemplateError):
     pass
 
 
@@ -615,7 +615,7 @@ class CodeGenerator:
 
 class TemplateEscaper:
     def __init__(
-        self, default_escape_type="html",
+        self, default_escape_type: str="html",
             url_plus_encoding: bool=True):
         self._url_plus_encoding = url_plus_encoding
 
@@ -630,6 +630,12 @@ class TemplateEscaper:
 
         elif default_escape_type == "raw":
             self.escape_default = self.no_escape
+
+        else:
+            raise TemplateRenderError(
+                ("Unknown default_escape_type,"
+                 "expecting one of html, json, url and raw, got: {}")
+                .format(default_escape_type))
 
     def no_escape(self, raw_str):
         return raw_str
