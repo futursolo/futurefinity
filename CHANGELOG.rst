@@ -5,6 +5,8 @@ dev
 - Fixed a Set Cookie Expires Days Bug
 - Implemented HTTP 451(Unavailable For Legal Reasons)
 - Print Exceptions in Protocol in debug mode
+- Introduce FutureFinity Template
+- Removed Jinja2 from Full Requirements
 - Deprecated HAMCSecurityContext
 - Deprecated AESGCMSecurityContext by AESContext
 - Deprecation Tools

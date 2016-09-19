@@ -52,9 +52,6 @@ FutureFinity |version| will only work on Python 3.5.1 or higher.
 * `Cryptograhy <https://pypi.python.org/pypi/cryptography/>`_ is the crypto library
   currently used by FutureFinity's security features.
 
-* `Jinja2 <https://pypi.python.org/pypi/cryptography/>`_ is the template library
-  currently used by FutureFinity's template rendering.
-
 **Platform**:
 
 Theoretically, FutureFinity can run on any system that supports asyncio.

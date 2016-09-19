@@ -24,7 +24,6 @@ Requirements
 - Python>=3.5.1
 
 - Cryptography>=1.0.0(Optional, Recommended, Used by AES GCM Secure Cookie)
-- Jinja2>=2.0.0(Optional, Used by Template Rendering)
 
 Installation
 ------------

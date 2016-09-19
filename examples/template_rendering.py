@@ -32,7 +32,7 @@ class MainHandler(futurefinity.web.RequestHandler):
         if not username:
             return self.redirect("/login")
 
-        return self.render("main.htm", template_dict={"name": username})
+        return await self.render("main.htm", template_dict={"name": username})
 
 
 @app.add_handler("/login")

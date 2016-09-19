@@ -512,39 +512,51 @@ class RequestHandler:
             self._response_body.clear()
         self._response_body += ensure_bytes(text)
 
-    def render_string(
-     self, template_name: str,
-     template_dict: Optional[Mapping[str, str]]=None) -> str:
-        """
-        Render Template in template folder into string.
+    @property
+    def render_string(self) -> FunctionType:
+        warnings.warn("RequestHandler.render_string is deprecated, \
+            use RequestHandler.render_str instead.")
 
-        Currently, FutureFinity uses Jinja2 as the Default Template Rendering
-        Engine. However, You can Specify Template Engine by override this
-        function.
-        """
+        return self.render_str
 
-        template_args = {
+    def get_template_args(self) -> Dict[str, Any]:
+        return {
             "handler": self,
             "csrf_form_html": self.csrf_form_html
         }
+
+    async def render_str(
+        self, template_name: str,
+            template_dict: Optional[Mapping[str, str]]=None) -> str:
+        """
+        Render Template in template folder into string.
+
+        You can Specify Template Engine by override this function.
+        """
+
+        template_args = self.get_template_args()
+
+        template_args.update(**template_dict)
 
         if "template_path" not in self.settings.keys():
             raise ValueError(
                 "Cannot found template_path. "
                 "Please provide template_path through Application Settings.")
 
-        parsed_tpl = self.app.template_loader.load_template(template_name)
-        return parsed_tpl.render(**template_dict)
+        parsed_tpl = await self.app._tpl_loader.load_template(
+            template_name)
+        return await parsed_tpl.render_str(**template_args)
 
-    def render(
-     self, template_name: str,
-     template_dict: Optional[Mapping[str, str]]=None):
+    async def render(
+        self, template_name: str,
+            template_dict: Optional[Mapping[str, str]]=None):
         """
-        Render the template with render_string, and write them into response
+        Render the template with render_str, and write them into response
         body directly.
         """
-        self.finish(self.render_string(template_name,
-                                       template_dict=template_dict))
+        self.finish(
+            await self.render_str(
+                template_name, template_dict=template_dict))
 
     def redirect(self, url: str, permanent: bool=False,
                  status: Optional[int]=None):
@@ -959,13 +971,14 @@ class Application:
 
         self.handlers = routing.RoutingLocator(default_handler=NotFoundHandler)
 
-        self.template_loader = None
+        self._tpl_loader = None
         self._sec_context = None
 
         if "template_path" in self.settings.keys():
-            self.template_loader = template.TemplateLoader(
+            self._tpl_loader = template.TemplateLoader(
                 self.settings["template_path"],
-                (not self.settings.get("debug", False)))
+                cache_template=(not self.settings.get("debug", False)),
+                loop=self._loop)
 
         if "security_secret" in self.settings.keys():
             if self.settings.get("aes_security", True):
@@ -979,6 +992,20 @@ class Application:
             static_handler_path = self.settings.get("static_handler_path",
                                                     r"/static/(?P<file>.*?)")
             self.handlers.add(static_handler_path, StaticFileHandler)
+
+    @property
+    def template_loader(self):
+        """
+        .. deprecated:: 0.3
+            For direct access to `TemplateLoader`.
+            Use `Application._tpl_loader` instead.
+        """
+        warnings.warn(
+            "`Application.template_loader` is deprecated. \
+                Use `Application._tpl_loader` instead.",
+            DeprecationWarning)
+
+        return self._tpl_loader
 
     @property
     def security_object(self):

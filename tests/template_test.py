@@ -15,12 +15,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.template import render_template, TemplateLoader
+from futurefinity.template import render_template, Template, TemplateLoader
 
 import asyncio
 
 import os
-import jinja2
 import unittest
 
 
@@ -35,7 +34,7 @@ class TemplateTestCollector(unittest.TestCase):
             async def tester(self, *args, **kwargs):
                 return {"a": "b"}
 
-            def render(self, template_name: str, template_dict: dict):
+            async def render(self, template_name: str, template_dict: dict):
                 self._body_written = True
                 result_placer.append((template_name, template_dict))
 
@@ -54,35 +53,44 @@ class TemplateTestCollector(unittest.TestCase):
         loader_multi = TemplateLoader(template_path=["/tmp", "."])
         self.assertRaises(ValueError, TemplateLoader, {})
 
-        self.assertListEqual(loader_single.template_path, ["/tmp"])
-        self.assertListEqual(loader_multi.template_path, ["/tmp", "."])
+        self.assertListEqual(loader_single._template_path, ["/tmp"])
+        self.assertListEqual(loader_multi._template_path, ["/tmp", "."])
 
     def test_template_loader_find_abs_path(self):
         loader = TemplateLoader(template_path="examples/template/")
-        file_path = loader.find_abs_path("login.htm")
-        self.assertEqual(file_path,
+        self.assertEqual(loader._find_abs_path("login.htm"),
                          os.path.realpath("examples/template/login.htm"))
-        self.assertRaises(FileNotFoundError, loader.find_abs_path,
+        self.assertRaises(FileNotFoundError, loader._find_abs_path,
                           "login.html")
 
     def test_template_loader_load_template_file_content(self):
+        loop = asyncio.get_event_loop()
+
         loader = TemplateLoader(template_path="examples/template/")
-        file_path = loader.find_abs_path("login.htm")
+        file_path = loader._find_abs_path("login.htm")
         with open("examples/template/login.htm") as f:
-            self.assertEqual(f.read(),
-                             loader.load_template_file_content(file_path))
+            self.assertEqual(f.read(), loop.run_until_complete(
+                loader._load_tpl_str(file_path)))
 
     def test_template_loader_load_template(self):
-        loader = TemplateLoader(template_path="examples/template/")
-        loader_loaded_template = loader.load_template("login.htm")
-        with open("examples/template/login.htm") as f:
-            test_loaded_template = jinja2.Template(f.read())
+        loop = asyncio.get_event_loop()
 
-        self.assertEqual(loader_loaded_template.render(),
-                         test_loaded_template.render())
+        loader = TemplateLoader(template_path="examples/template/")
+        loader_loaded_template = loop.run_until_complete(
+            loader.load_template("login.htm"))
+        with open("examples/template/login.htm") as f:
+            test_loaded_template = Template(f.read())
+
+        self.assertEqual(
+            loop.run_until_complete(loader_loaded_template.render_str()),
+            loop.run_until_complete((test_loaded_template.render_str())))
 
     def test_template_loader_load_template_cache(self):
+        loop = asyncio.get_event_loop()
+
         loader = TemplateLoader(template_path="examples/template/")
-        first_loaded_template = loader.load_template("login.htm")
-        second_loaded_template = loader.load_template("login.htm")
+        first_loaded_template = loop.run_until_complete(
+            loader.load_template("login.htm"))
+        second_loaded_template = loop.run_until_complete(
+            loader.load_template("login.htm"))
         self.assertIs(first_loaded_template, second_loaded_template)

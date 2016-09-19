@@ -29,7 +29,7 @@ if not sys.version_info >= (3, 5, 1):
 
 install_requires = []
 
-full_requires = ["jinja2", "cryptography"]
+full_requires = ["cryptography"]
 
 tests_require = ["requests", "nose2"]
 tests_require.extend(full_requires)
