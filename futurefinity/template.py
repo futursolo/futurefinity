@@ -74,8 +74,6 @@ import concurrent.futures
 
 _ALLOWED_NAME = re.compile(r"^[a-zA-Z]([a-zA-Z0-9\_]+)?$")
 
-_STATEMENT_MODIFIERS = ("async",)
-
 _SEARCH_FINISHED = object()
 
 
@@ -130,7 +128,7 @@ def render_template(template_name: str):
     return decorator
 
 
-class TemplateNamespace:
+class _TemplateNamespace:
     def __init__(self, tpl: "Template", tpl_globals: Dict[str, Any]):
         self._tpl = tpl
         self._tpl_globals = tpl_globals
@@ -153,7 +151,7 @@ class TemplateNamespace:
     def blocks(self) -> Any:
         class AttrDict(dict):
             def __getattr__(_self, name):
-                block_fn = self._block_dict[name]._get_block_fn(
+                block_fn = self._block_dict[name].get_block_fn(
                     tpl_namespace=self, tpl_globals=self._sub_globals)
 
                 async def wrapper(_defined_here=False):
@@ -218,7 +216,7 @@ class TemplateNamespace:
         if self._parent is None:
             return
 
-        body_block_smt = TemplateBlockSmt(name="block", rest="body")
+        body_block_smt = _TemplateBlockSmt(name="block", rest="body")
         body_block_smt.append_statement(self.__tpl_result__)
         body_block_smt.unindent()
 
@@ -245,19 +243,64 @@ class TemplateNamespace:
         raise NotImplementedError
 
 
-class TemplateStatement:
-    names = ()
+class _TemplateSmtModifier:
+    _modifier_args = {
+        "async": 0,
+        "from": 1
+    }
+
+    def __init__(self, name, rest):
+        self._name = name or ""
+        self._rest = rest.strip() if rest else ""
+
+    @staticmethod
+    def parse_modifier(
+        smt_str: str) -> (
+            Optional["_TemplateSmtModifier"], str):
+        _splitted_smt_str = smt_str.strip().split(" ", maxsplit=1)
+
+        if (_splitted_smt_str[0] not in
+           _TemplateSmtModifier._modifier_args.keys()):
+            return (None, smt_str)
+
+        rest_str = _splitted_smt_str[1]
+
+        modifier_name = _splitted_smt_str[0]
+        modifier_rest = ""
+
+        for _ in range(0, _TemplateSmtModifier._modifier_args[modifier_name]):
+            _splitted_smt_str = rest_str.strip().split(" ", maxsplit=1)
+
+            if len(_splitted_smt_str) < 2:
+                raise ParseError(
+                    ("Not Suffient Modifier Argument(s). "
+                     "{} modifier is expecting {} arguments.").format(
+                        modifier_name,
+                        _TemplateSmtModifier._modifier_args[modifier_name]))
+
+            modifier_rest += " " + _splitted_smt_str[0]
+
+            rest_str = _splitted_smt_str[1]
+
+        return (_TemplateSmtModifier(modifier_name, modifier_rest), rest_str)
+
+    def gen_modifier(self) -> str:
+        return "{} {}".format(self._name, self._rest).strip()
+
+
+class _TemplateStatement:
+    _names = ()
 
     def __init__(self,
                  name: Optional[str]=None,
                  rest: Optional[str]=None,
-                 modifier: Optional[str]=None):
+                 modifier: Optional[_TemplateSmtModifier]=None):
         self._statements = []
         self._finished = False
 
         self._name = name or ""
         self._rest = rest.strip() if rest else ""
-        self._modifier = modifier or ""
+        self._modifier = modifier
 
         self._allow_indent = False
 
@@ -265,7 +308,7 @@ class TemplateStatement:
     def allow_indent(self):
         return self._allow_indent
 
-    def append_statement(self, statement: Union["TemplateStatement", str]):
+    def append_statement(self, statement: Union["_TemplateStatement", str]):
         if not self.allow_indent or self._finished:
             raise InvalidStatementOperation
 
@@ -277,14 +320,19 @@ class TemplateStatement:
 
         self._finished = True
 
-    def _gen_code_for_str(self, code_gener: "CodeGenerator", str_smt):
-        code_gener.append_result(repr(ensure_str(str_smt)))
+    def _gen_code_for_str(self, code_printer: "TemplateCodePrinter", str_smt):
+        code_printer.append_result(repr(ensure_str(str_smt)))
 
-    def gen_code(self, code_gener: "CodeGenerator"):
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
         raise NotImplementedError
 
+    def gen_smt_code(self) -> str:
+        modifier = self._modifier.gen_modifier() if self._modifier else ""
 
-class TemplateRootSmt(TemplateStatement):
+        return "{} {} {}".format(modifier, self._name, self._rest).strip()
+
+
+class _TemplateRootSmt(_TemplateStatement):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -292,7 +340,7 @@ class TemplateRootSmt(TemplateStatement):
 
         self._allow_indent = True
 
-    def add_block(block: "TemplateBlockSmt"):
+    def add_block(block: "_TemplateBlockSmt"):
         if block.block_name in self._blocks.keys():
             raise ParseError(
                 "Block with name {} has already been defined."
@@ -300,41 +348,42 @@ class TemplateRootSmt(TemplateStatement):
 
         self._blocks[block.block_name] = block
 
-    def gen_code(self, code_gener: "CodeGenerator"):
-        code_gener.write_line(
-            "class CurrentTplNameSpace(TemplateNamespace):")
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line(
+            "class CurrentTplNameSpace(_TemplateNamespace):")
 
-        with code_gener.code_indent():
-            code_gener.write_line("async def _render(self):")
+        with code_printer.code_indent():
+            code_printer.write_line("async def _render(self):")
 
-            with code_gener.code_indent():
+            with code_printer.code_indent():
                 for smt in self._statements:
                     if isinstance(smt, str):
-                        self._gen_code_for_str(code_gener, smt)
+                        self._gen_code_for_str(code_printer, smt)
                     else:
-                        smt.gen_code(code_gener)
+                        smt.gen_code(code_printer)
 
-                code_gener.write_line("await self._inherit_tpl()")
-                code_gener.write_line("self._finished = True")
-
-
-class TemplateIncludeSmt(TemplateStatement):
-    names = ("include", )
-
-    def gen_code(self, code_gener: "CodeGenerator"):
-        code_gener.write_line("await self._include_tpl({})".format(self._rest))
+                code_printer.write_line("await self._inherit_tpl()")
+                code_printer.write_line("self._finished = True")
 
 
-class TemplateInheritSmt(TemplateStatement):
-    names = ("inherit", )
+class _TemplateIncludeSmt(_TemplateStatement):
+    _names = ("include", )
 
-    def gen_code(self, code_gener: "CodeGenerator"):
-        code_gener.write_line(
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line(
+            "await self._include_tpl({})".format(self._rest))
+
+
+class _TemplateInheritSmt(_TemplateStatement):
+    _names = ("inherit", )
+
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line(
             "await self._add_parent({})".format(self._rest))
 
 
-class TemplateBlockSmt(TemplateStatement):
-    names = ("block",)
+class _TemplateBlockSmt(_TemplateStatement):
+    _names = ("block",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -352,109 +401,95 @@ class TemplateBlockSmt(TemplateStatement):
     def block_name(self):
         return self._block_name
 
-    def gen_block_code(self, code_gener: "CodeGenerator"):
-        code_gener.write_line("async def __tpl_render_block__(self):")
+    def gen_block_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line("async def __tpl_render_block__(self):")
 
-        with code_gener.code_indent():
-            code_gener.write_line("__tpl_result__ = \"\"")
+        with code_printer.code_indent():
+            code_printer.write_line("__tpl_result__ = \"\"")
             for smt in self._statements:
                 if isinstance(smt, str):
-                    self._gen_code_for_str(code_gener, smt)
+                    self._gen_code_for_str(code_printer, smt)
                 else:
-                    smt.gen_code(code_gener)
-            code_gener.write_line("return __tpl_result__")
+                    smt.gen_code(code_printer)
+            code_printer.write_line("return __tpl_result__")
 
-    def gen_code(self, code_gener: "CodeGenerator"):
-        code_gener.append_result(
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.append_result(
             "await self.blocks.{}(_defined_here=True)".format(
                 self._block_name))
 
 
-class TemplateIndentSmt(TemplateStatement):
-    names = ("if", "with", "for", "while", "try")
+class _TemplateIndentSmt(_TemplateStatement):
+    _names = ("if", "with", "for", "while", "try")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._allow_indent = True
 
-    def gen_code(self, code_gener: "CodeGenerator"):
-        smt_line = self._name
-        if self._modifier:
-            smt_line = self._modifier + " " + smt_line
-        if self._rest:
-            smt_line += " " + self._rest
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line("{}:".format(self.gen_smt_code()))
 
-        smt_line += ":"
-
-        code_gener.write_line(smt_line)
-
-        with code_gener.code_indent():
+        with code_printer.code_indent():
             for smt in self._statements:
                 if isinstance(smt, str):
-                    self._gen_code_for_str(code_gener, smt)
+                    self._gen_code_for_str(code_printer, smt)
                 else:
-                    smt.gen_code(code_gener)
+                    smt.gen_code(code_printer)
 
 
-class TemplateUnindentSmt(TemplateStatement):
-    names = ("end",)
+class _TemplateUnindentSmt(_TemplateStatement):
+    _names = ("end",)
 
 
-class TemplateHalfIndentSmt(TemplateUnindentSmt, TemplateIndentSmt):
-    names = ("else", "elif", "except", "finally")
+class _TemplateHalfIndentSmt(_TemplateUnindentSmt, _TemplateIndentSmt):
+    _names = ("else", "elif", "except", "finally")
 
 
-class TemplateSubControlSmt(TemplateStatement):
-    names = ("break", "continue")
+class _TemplateInlineSmt(_TemplateStatement):
+    _names = ("break", "continue", "import")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._allow_indent = False
 
-    def gen_code(self, code_gener: "CodeGenerator"):
-        smt_line = self._name
-        if self._modifier:
-            smt_line = self._modifier + " " + smt_line
-        if self._rest:
-            smt_line += " " + self._rest
-
-        code_gener.write_line(smt_line)
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line(self.gen_smt_code())
 
 
-class TemplateOutputSmt(TemplateStatement):
-    names = ("=", "r=", "raw=", "u=", "url=", "j=", "json=", "h=", "html=")
+class _TemplateOutputSmt(_TemplateStatement):
+    _names = ("=", "r=", "raw=", "u=", "url=", "j=", "json=", "h=", "html=")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def gen_code(self, code_gener: "CodeGenerator"):
-        code_gener.write_line(
+    def gen_code(self, code_printer: "TemplateCodePrinter"):
+        code_printer.write_line(
             "__tpl_output_raw_result__ = {}".format(self._rest))
 
         if self._name == "=":
-            code_gener.write_line(
+            code_printer.write_line(
                 "__tpl_output_result__ = \
                     self._escaper.escape_default(__tpl_output_raw_result__)")
 
         elif self._name in ("r=", "raw="):
-            code_gener.write_line(
+            code_printer.write_line(
                 "__tpl_output_result__ = \
                 self._escaper.no_escape(__tpl_output_raw_result__)")
 
         elif self._name in ("u=", "url="):
-            code_gener.write_line(
+            code_printer.write_line(
                 "__tpl_output_result__ = \
                     self._escaper.escape_url(__tpl_output_raw_result__)")
 
         elif self._name in ("j=", "json="):
-            code_gener.write_line(
+            code_printer.write_line(
                 "__tpl_output_result__ = \
                     self._escaper.escape_json(__tpl_output_raw_result__)")
 
         elif self._name in ("h=", "html="):
-            code_gener.write_line(
+            code_printer.write_line(
                 "__tpl_output_result__ = \
                     self._escaper.escape_html(__tpl_output_raw_result__)")
 
@@ -462,24 +497,13 @@ class TemplateOutputSmt(TemplateStatement):
             raise CodeGenerationError(
                 "Unknown Type of Output: {}".format(self._name))
 
-        code_gener.append_result("__tpl_output_result__")
+        code_printer.append_result("__tpl_output_result__")
 
 
 _smt_classes = (
-    TemplateOutputSmt, TemplateIndentSmt, TemplateHalfIndentSmt,
-    TemplateIncludeSmt, TemplateBlockSmt, TemplateUnindentSmt,
-    TemplateSubControlSmt, TemplateInheritSmt)
-
-
-def _get_statement(*args, **kwargs):
-    name = args[0] if args else kwargs["name"]
-
-    for SmtClass in _smt_classes:
-        if name in SmtClass.names:
-            return SmtClass(*args, **kwargs)
-
-    else:
-        raise ParseError("Unknown Statement Name: {}.".format(name))
+    _TemplateOutputSmt, _TemplateIndentSmt, _TemplateHalfIndentSmt,
+    _TemplateIncludeSmt, _TemplateBlockSmt, _TemplateUnindentSmt,
+    _TemplateInlineSmt, _TemplateInheritSmt)
 
 
 class TemplateParser:
@@ -488,14 +512,10 @@ class TemplateParser:
         self._begin_mark = begin_mark
         self._end_mark = end_mark
 
-    def _parse_statement(self, smt_str) -> TemplateStatement:
-        splitted_smt_str = smt_str.strip().split(" ", 1)
+    def _parse_statement(self, smt_str) -> _TemplateStatement:
+        modifier, rest_str = _TemplateSmtModifier.parse_modifier(smt_str)
 
-        if splitted_smt_str[0] in _STATEMENT_MODIFIERS:
-            modifier = splitted_smt_str.pop(0)
-            splitted_smt_str = splitted_smt_str.strip().split(" ", 1)
-        else:
-            modifier = None
+        splitted_smt_str = rest_str.strip().split(" ", 1)
 
         name = splitted_smt_str[0]
 
@@ -504,11 +524,16 @@ class TemplateParser:
         else:
             rest = None
 
-        return _get_statement(name, rest, modifier)
+        for SmtClass in _smt_classes:
+            if name in SmtClass._names:
+                return SmtClass(name, rest, modifier)
+
+        else:
+            raise ParseError("Unknown Statement Name: {}.".format(name))
 
     def _find_next_statement(
         self, tpl_str) -> (
-            List[Union[TemplateStatement, str]], Union[object, str]):
+            List[Union[_TemplateStatement, str]], Union[object, str]):
 
         split_result = tpl_str.split(self._begin_mark, 1)
         if len(split_result) == 1:
@@ -527,8 +552,8 @@ class TemplateParser:
 
         return (smt_list, rest_str)
 
-    def parse_str(self, tpl_str: str) -> TemplateRootSmt:
-        root = TemplateRootSmt()
+    def parse_str(self, tpl_str: str) -> _TemplateRootSmt:
+        root = _TemplateRootSmt()
         indents = []
 
         rest_str = tpl_str
@@ -552,14 +577,14 @@ class TemplateParser:
             smt_list, rest_str = self._find_next_statement(rest_str)
 
             for smt in smt_list:
-                if isinstance(smt, TemplateUnindentSmt):
+                if isinstance(smt, _TemplateUnindentSmt):
                     unindent_current_indent()
                     if not smt.allow_indent:
                         continue
 
                 append_to_current_indent(smt)
 
-                if isinstance(smt, TemplateStatement) and smt.allow_indent:
+                if isinstance(smt, _TemplateStatement) and smt.allow_indent:
                     indents.append(smt)
 
             if rest_str == _SEARCH_FINISHED:
@@ -572,23 +597,12 @@ class TemplateParser:
         return root
 
 
-class _WithCodeIndent:
-    def __init__(self, code_gener: "CodeGenerator"):
-        self._code_gener = code_gener
-
-    def __enter__(self):
-        self._code_gener._inc_indent_num()
-
-    def __exit__(self, *exc):
-        self._code_gener._dec_indent_num()
-
-
-class CodeGenerator:
+class TemplateCodePrinter:
     def __init__(
         self, top_indent: int=0,
         template_name: Optional[str]=None,
-            indent_mark="    ", end_of_line="\n",
-            result_var="self.__tpl_result__"):
+            indent_mark: str="    ", end_of_line: str="\n",
+            result_var: str="self.__tpl_result__"):
 
         self._indent_num = top_indent
         self._template_name = template_name
@@ -596,17 +610,21 @@ class CodeGenerator:
         self._end_of_line = end_of_line
         self._result_var = result_var
 
-        self._with_code_indent = _WithCodeIndent(self)
-
         self._committed_code = ""
 
         self._finished = False
 
-    def code_indent(self) -> _WithCodeIndent:
+    def code_indent(self) -> "TemplateCodePrinter":
         if self._finished:
             raise CodeGenerationError
 
-        return self._with_code_indent
+        return self
+
+    def __enter__(self):
+        self._inc_indent_num()
+
+    def __exit__(self, *exc):
+        self._dec_indent_num()
 
     def _inc_indent_num(self):
         if self._finished:
@@ -694,7 +712,7 @@ class TemplateEscaper:
 
 
 class _TemplateBlock:
-    def __init__(self, block_smt: TemplateBlockSmt, tpl: "Template"):
+    def __init__(self, block_smt: _TemplateBlockSmt, tpl: "Template"):
         self._block_smt = block_smt
         self._tpl = tpl
 
@@ -705,17 +723,17 @@ class _TemplateBlock:
     @property
     def _compiled_code(self):
         if not hasattr(self, "_prepared_compiled_code"):
-            code_gener = CodeGenerator(
+            code_printer = TemplateCodePrinter(
                 template_name="{} Block: {}".format(
                     self._tpl._template_name, self.block_name),
                 result_var="__tpl_result__")
 
-            self._block_smt.gen_block_code(code_gener)
-            self._prepared_compiled_code = code_gener.compiled_code
+            self._block_smt.gen_block_code(code_printer)
+            self._prepared_compiled_code = code_printer.compiled_code
 
         return self._prepared_compiled_code
 
-    def _get_block_fn(self, tpl_namespace, tpl_globals: Dict[str, Any]):
+    def get_block_fn(self, tpl_namespace, tpl_globals: Dict[str, Any]):
         exec(self._compiled_code, tpl_globals)
 
         block_fn = functools.partial(
@@ -757,10 +775,11 @@ class Template:
     @property
     def _compiled_code(self):
         if not hasattr(self, "_prepared_compiled_code"):
-            code_gener = CodeGenerator(template_name=self._template_name)
+            code_printer = TemplateCodePrinter(
+                template_name=self._template_name)
 
-            self._root.gen_code(code_gener)
-            self._prepared_compiled_code = code_gener.compiled_code
+            self._root.gen_code(code_printer)
+            self._prepared_compiled_code = code_printer.compiled_code
 
         return self._prepared_compiled_code
 
@@ -777,7 +796,7 @@ class Template:
     def _tpl_globals(self):
         tpl_globals = {
             "asyncio": asyncio,
-            "TemplateNamespace": TemplateNamespace,
+            "_TemplateNamespace": _TemplateNamespace,
         }
 
         return tpl_globals
