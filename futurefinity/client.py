@@ -15,13 +15,10 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import (TolerantMagicDict, FutureFinityError,
-                                ensure_bytes)
-from futurefinity import protocol
+from .utils import (TolerantMagicDict, FutureFinityError, ensure_bytes)
+from . import protocol
 
 from typing import Union, Optional, Mapping
-
-import futurefinity
 
 import asyncio
 

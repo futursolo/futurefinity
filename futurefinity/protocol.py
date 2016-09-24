@@ -15,16 +15,15 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import (MagicDict, TolerantMagicDict,
-                                FutureFinityError, ensure_str, ensure_bytes)
-from futurefinity import security
+from .utils import (MagicDict, TolerantMagicDict,
+                    FutureFinityError, ensure_str, ensure_bytes)
+from . import security
+from ._version import version as futurefinity_version
 
 from collections import namedtuple
 from http.cookies import SimpleCookie as HTTPCookies
 from http.client import responses as status_code_text
 from typing import Union, Optional, Any, List, Mapping, Tuple
-
-import futurefinity
 
 import sys
 import json
@@ -628,9 +627,9 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
     This class represents a Incoming HTTP Response.
     """
     def __init__(self, status_code: int, http_version: int=10,
-                 headers: HTTPHeaders=None,
+                 headers: Optional[HTTPHeaders]=None,
                  body: Optional[bytes]=None,
-                 connection: "HTTPv1Connection"=None):
+                 connection: Optional["HTTPv1Connection"]=None):
         self.http_version = http_version
         self.status_code = status_code
         self.headers = headers
@@ -1083,10 +1082,10 @@ class HTTPv1Connection:
             if "accept" not in headers.keys():
                 headers["accept"] = "*/*"
             if "user-agent" not in headers.keys():
-                headers["user-agent"] = "futurefinity/" + futurefinity.version
+                headers["user-agent"] = "futurefinity/" + futurefinity_version
         else:
             if "server" not in headers.keys():
-                headers["server"] = "futurefinity/" + futurefinity.version
+                headers["server"] = "futurefinity/" + futurefinity_version
             if method.lower() == "head":
                 # For Head Request, there will not be a body.
                 self._outgoing_chunked_body = False
@@ -1151,7 +1150,9 @@ class HTTPv1Connection:
             else:
                 self._close_connection()
 
-    def connection_lost(self, exc: Optional[tuple]=None):
+    def connection_lost(
+        self,
+            exc: Tuple[Optional[Any], Optional[Any], Optional[Any]]=None):
         """
         Triggered when remote is closed.
         """

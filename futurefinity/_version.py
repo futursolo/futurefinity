@@ -15,17 +15,6 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from ._version import __version__, version
+__version__ = ("0", "3", "1", "-1000")
 
-from . import log
-from . import web
-from . import utils
-from . import client
-from . import server
-from . import routing
-from . import protocol
-from . import security
-
-__all__ = [
-    "__version__", "version", "log", "web", "utils", "client", "server",
-    "routing", "protocol", "security"]
+version = "0.3.0.dev0"

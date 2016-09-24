@@ -44,16 +44,15 @@ Finally, listen to the port you want, and start asyncio event loop::
 
 """
 
-from futurefinity.utils import (ensure_str, ensure_bytes, format_timestamp,
-                                default_mark)
-from futurefinity import server
-from futurefinity import routing
-from futurefinity import protocol
-from futurefinity import templating
-from futurefinity import security
+from .utils import (ensure_str, ensure_bytes, format_timestamp, default_mark)
+from . import server
+from . import routing
+from . import protocol
+from . import templating
+from . import security
 
 from types import FunctionType, CoroutineType
-from typing import Optional, Union, Mapping, List, Dict, Any
+from typing import Optional, Union, Mapping, List, Dict, Any, Callable
 
 import futurefinity
 
@@ -513,7 +512,9 @@ class RequestHandler:
         self._response_body += ensure_bytes(text)
 
     @property
-    def render_string(self) -> FunctionType:
+    def render_string(self) -> Callable[
+        [str, Optional[Mapping[str, str]]],
+            str]:
         warnings.warn("RequestHandler.render_string is deprecated, \
             use RequestHandler.render_str instead.")
 
@@ -1050,9 +1051,10 @@ class Application:
         srv = self._loop.run_until_complete(f)
         return srv
 
-    def add_handler(self, path: str, *args, name: Optional[str]=None,
-                    handler: Optional[RequestHandler]=None,
-                    **kwargs) -> Optional[FunctionType]:
+    def add_handler(
+        self, path: str, *args, name: Optional[str]=None,
+        handler: Optional[RequestHandler]=None, **kwargs) -> Optional[
+            Callable[[RequestHandler], RequestHandler]]:
         """
         Add a handler to handler list.
         If you specific a handler in parameter, it will return nothing.
