@@ -49,7 +49,7 @@ from futurefinity.utils import (ensure_str, ensure_bytes, format_timestamp,
 from futurefinity import server
 from futurefinity import routing
 from futurefinity import protocol
-from futurefinity import template
+from futurefinity import templating
 from futurefinity import security
 
 from types import FunctionType, CoroutineType
@@ -946,7 +946,7 @@ class Application:
       will become invalid. This will also initialize the default
       security object if it is set.
     :arg aes_security: Default: `True`.
-      Use `security.AESGCMSecurityObject` to secure the data
+      Use `security.AESContext` to secure the data
       (such as: cookies). Turn it to false to use
       `security.HMACSecurityObject`. This attribute will not work unless the
       `security_secret` attribute is set.
@@ -975,7 +975,7 @@ class Application:
         self._sec_context = None
 
         if "template_path" in self.settings.keys():
-            self._tpl_loader = template.TemplateLoader(
+            self._tpl_loader = templating.TemplateLoader(
                 self.settings["template_path"],
                 cache_template=(not self.settings.get("debug", False)),
                 loop=self._loop)
@@ -994,7 +994,7 @@ class Application:
             self.handlers.add(static_handler_path, StaticFileHandler)
 
     @property
-    def template_loader(self):
+    def template_loader(self) -> templating.TemplateLoader:
         """
         .. deprecated:: 0.3
             For direct access to `TemplateLoader`.
@@ -1008,7 +1008,7 @@ class Application:
         return self._tpl_loader
 
     @property
-    def security_object(self):
+    def security_object(self) -> security.BaseContext:
         """
         .. deprecated:: 0.3
             For direct access to `SecurityContext`.

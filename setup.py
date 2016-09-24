@@ -15,10 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import find_packages, setup
 
 import futurefinity
 
@@ -45,7 +42,7 @@ if __name__ == "__main__":
         description="FutureFinity is an asynchronous Python web framework "
                     "designed for asyncio and native coroutines.",
         long_description=open("README.rst", "r").read(),
-        packages=["futurefinity"],
+        packages=find_packages(),
         package_data={
             "futurefinity": ["README.rst", "LICENSE"]
         },

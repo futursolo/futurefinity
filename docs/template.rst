@@ -1,7 +1,7 @@
-``futurefinity.template`` -- FutureFinity Template Wrapper
-==========================================================
+``futurefinity.templating`` -- FutureFinity Template
+====================================================
 
 .. highlight:: python3
 
-.. automodule:: futurefinity.template
+.. automodule:: futurefinity.templating
    :members:

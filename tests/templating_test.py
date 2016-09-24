@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.template import render_template, Template, TemplateLoader
+from futurefinity.templating import render_template, Template, TemplateLoader
 
 import asyncio
 
