@@ -51,7 +51,7 @@ from . import protocol
 from . import templating
 from . import security
 
-from types import FunctionType, CoroutineType
+from types import CoroutineType
 from typing import Optional, Union, Mapping, List, Dict, Any, Callable
 
 import futurefinity
