@@ -26,10 +26,39 @@ import typing
 
 import html
 import json
+import functools
 import urllib.parse
 
 if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
     from . import loader
+
+
+class BlockAttrs:
+    _namespace = None  # type: Namespace
+
+    def __getattr__(self, name: str) -> Callable[[], Any]:
+        if name not in self._namespace._tpl._root._block_statements.keys():
+            raise TemplateRenderError from KeyError("Unknown Block Name.")
+
+        if name in self._namespace._update_blocks.keys():
+            block_fn = self._namespace._update_blocks[name]
+        else:
+            block_fn = getattr(
+                self._namespace, "_render_block_{}_str".format(name))
+
+        async def wrapper(_defined_here=False):
+            if _defined_here and self._namespace._parent is not None:
+                return ""
+
+            return await functools.partial(block_fn, self=self._namespace)()
+
+        return wrapper
+
+    def __setattr__(self, name: str, value: Any):
+        raise NotImplementedError
+
+    __getitem__ = __getattr__
+    __setitem__ = __setattr__
 
 
 class Namespace:
@@ -52,6 +81,10 @@ class Namespace:
         self.escape_url_with_plus = self._tpl._escape_url_with_plus
         self.default_escape = self._tpl._default_escape
 
+        self._child_body = None
+
+        self._updated_block_fns = {}
+
     @property
     def _block_dict(self) -> Dict[str, Any]:
         if not hasattr(self, "_prepared_block_dict"):
@@ -61,25 +94,18 @@ class Namespace:
         return self._prepared_block_dict
 
     @property
+    def child_body(self) -> str:
+        if self._child_body is None:
+            raise TemplateRenderError("There's no child body.")
+
+        return self._child_body
+
+    @property
     def blocks(self) -> Dict[str, Any]:
-        class AttrDict(dict):
-            def __getattr__(_self, name: str) -> Callable[[], Any]:
-                block_fn = self._block_dict[name].get_block_fn(
-                    tpl_namespace=self, tpl_globals=self._sub_globals)
+        class CurrentBlockAttrs(BlockAttrs):
+            _namespace = self
 
-                async def wrapper(_defined_here=False):
-                    if _defined_here:
-                        if self._parent:
-                            return ""
-
-                    return await block_fn()
-
-                return wrapper
-
-            def __setattr__(_self, name: str, value: Any):
-                raise NotImplementedError
-
-        return AttrDict(self._tpl._blocks)
+        return CurrentBlockAttrs()
 
     @property
     def parent(self) -> "Namespace":
@@ -105,8 +131,8 @@ class Namespace:
 
         sub_globals.update(self._tpl_globals)
 
-        if "CurrentTplNameSpace" in sub_globals.keys():
-            del sub_globals["CurrentTplNameSpace"]
+        if "__TplCurrentNamespace__" in sub_globals.keys():
+            del sub_globals["__TplCurrentNamespace__"]
 
         return sub_globals
 
@@ -119,21 +145,26 @@ class Namespace:
         self.__tpl_result__ += tpl_namespace._tpl_result
 
     def _update_blocks(self, **kwargs):
-        self._block_dict.update(**kwargs)
+        self._updated_block_fns.update(**kwargs)
 
-    async def _inherit_tpl(self):
+    def _update_child_body(self, child_body: str):
+        if self._child_body is not None:
+            raise TemplateRenderError("There's already a child body.")
+
+        self._child_body = child_body
+
+    async def _inherit_tpl(self):  # Need to be Changed.
         if self._parent is None:
             return
 
-        body_block_smt = statement.BlockStatement(name="block", rest="body")
-        body_block_smt.append_statement(self.__tpl_result__)
-        body_block_smt.unindent()
+        self._parent._update_child_body(self.__tpl_result__)
 
-        body_block = template.TemplateBlock(
-            tpl=self._tpl, block_smt=body_block_smt)
+        block_fns = {}
 
-        self._parent._update_blocks(
-            body=body_block, **self._block_dict)
+        for key in self._tpl._root._block_statements.keys():
+            block_fns[key] = getattr(self, "_render_block_{}_str".format(key))
+
+        self._parent._update_blocks(**block_fns)
 
         await self._parent._render()
 
@@ -148,7 +179,16 @@ class Namespace:
 
         self._parent = parent_tpl._get_namespace(tpl_globals=self._sub_globals)
 
-    async def _render(self) -> str:
+    async def _render(self):
+        if self._finished:
+            raise TemplateRenderError("Renderring has already been finished.")
+
+        self.__tpl_result__ = await self._render_body_str()
+
+        await self._inherit_tpl()
+        self._finished = True
+
+    async def _render_body_str(self) -> str:
         raise NotImplementedError
 
     @property

@@ -30,41 +30,11 @@ if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
     from . import loader
 
 
-class TemplateBlock:
-    def __init__(self, block_smt: statement.BlockStatement, tpl: "Template"):
-        self._block_smt = block_smt
-        self._tpl = tpl
-
-    @property
-    def block_name(self) -> str:
-        return self._block_smt.block_name
-
-    @property
-    def _compiled_code(self):
-        if not hasattr(self, "_prepared_compiled_code"):
-            code_printer = TemplateCodePrinter(
-                template_name="{} Block: {}".format(
-                    self._tpl._template_name, self.block_name),
-                result_var="__tpl_result__")
-
-            self._block_smt.print_block_code(code_printer)
-            self._prepared_compiled_code = code_printer.compiled_code
-
-        return self._prepared_compiled_code
-
-    def get_block_fn(self, tpl_namespace, tpl_globals: Dict[str, Any]):
-        exec(self._compiled_code, tpl_globals)
-
-        block_fn = functools.partial(
-            tpl_globals["__tpl_render_block__"], self=tpl_namespace)
-
-        return block_fn
-
-
 class Template:
     def __init__(
         self, tpl_str: str,
-        template_name: Optional[str]=None,
+        template_name: str="<string>",
+        template_path: str="<string>",
         loader: Optional["loader.TemplateLoader"]=None,
         default_escape: str="html",
             escape_url_with_plus: bool=True):
@@ -72,6 +42,7 @@ class Template:
 
         self._loader = loader
         self._template_name = template_name
+        self._template_path = template_path
 
         self._default_escape = default_escape
         self._escape_url_with_plus = escape_url_with_plus
@@ -79,37 +50,24 @@ class Template:
     @property
     def _root(self):
         if not hasattr(self, "_prepared_root"):
-            self._prepared_root = parser.TemplateParser(self._tpl_str).root
+            self._prepared_root = parser.TemplateParser(self).root
 
         return self._prepared_root
 
     @property
     def _compiled_code(self):
         if not hasattr(self, "_prepared_compiled_code"):
-            code_printer = printer.CodePrinter(
-                template_name=self._template_name)
-
-            self._root.print_code(code_printer)
+            code_printer = printer.CodePrinter(self)
+            code_printer.from_root(self._root)
             self._prepared_compiled_code = code_printer.compiled_code
 
         return self._prepared_compiled_code
 
     @property
-    def _blocks(self) -> Dict[str, TemplateBlock]:
-        if not hasattr(self, "_prepared_blocks"):
-            self._prepared_blocks = {}
-
-            for name, item in self._root._blocks:
-                self._prepared_blocks[name] = TemplateBlock(
-                    block_smt=item, tpl=self)
-
-        return self._prepared_blocks
-
-    @property
     def _tpl_globals(self):
         tpl_globals = {
             "asyncio": asyncio,
-            "_TemplateNamespace": namespace.Namespace,
+            "__TplNamespace__": namespace.Namespace,
         }
 
         return tpl_globals
@@ -120,7 +78,7 @@ class Template:
         tpl_globals = tpl_globals or self._tpl_globals
         exec(self._compiled_code, tpl_globals)
 
-        tpl_namespace = tpl_globals["CurrentTplNameSpace"](
+        tpl_namespace = tpl_globals["__TplCurrentNamespace__"](
             tpl=self, tpl_globals=tpl_globals,
             *namespace_args, **namespace_kwargs)
 

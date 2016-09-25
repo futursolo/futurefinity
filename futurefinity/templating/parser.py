@@ -19,7 +19,12 @@ from .utils import ParseError, ReadFinished
 
 from . import statement
 
-from typing import Union
+from typing import Union, Optional
+
+import typing
+
+if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+    from . import template
 
 _BEGIN_MARK = "<%"
 _END_MARK = "%>"
@@ -27,10 +32,10 @@ _ESCAPE_MARK = "%"
 
 
 class TemplateParser:
-    def __init__(self, tpl_str: str):
-        self._tpl_str = tpl_str
+    def __init__(self, tpl: "template.Template"):
+        self._tpl = tpl
 
-        self._splitted = self._tpl_str.splitlines(keepends=True)
+        self._splitted = self._tpl._tpl_str.splitlines(keepends=True)
 
         self._current_at = 0
         self._current_line = ""
@@ -39,19 +44,32 @@ class TemplateParser:
 
         self._parse()
 
+    def raise_parse_error(self, message: str,
+                          line: Union[int, str]="<unknown>",
+                          from_err: Optional[Exception]=None):
+        err_str = "{} in file {} at line {}.".format(
+            message, self._tpl._template_path, line)
+
+        if from_err:
+            raise ParseError(err_str) from from_err
+        else:
+            raise ParseError(err_str)
+
     @property
     def root(self) -> statement.RootStatement:
         if not self._finished:
-            raise ParseError("Root is not Ready yet.")
+            self.raise_parse_error(
+                "Root is not Ready yet", self.current_at)
 
         return self._root
 
     def _move_to_next_line(self):
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         if self._current_line:
-            raise ParseError("The Parse of last line is not completed.")
+            self.raise_parse_error(
+                "Parsing of last line is not completed", self.current_at)
 
         if not self._splitted:
             raise ReadFinished
@@ -61,7 +79,7 @@ class TemplateParser:
 
     def _find_next_begin_mark(self) -> int:
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         start_pos = 0
 
@@ -87,7 +105,7 @@ class TemplateParser:
 
     def _find_next_end_mark(self) -> int:
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         start_pos = 0
 
@@ -118,13 +136,13 @@ class TemplateParser:
     @property
     def current_at(self) -> int:
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         return self._current_at
 
     def _append_to_current(self, smt: statement.Statement):
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         if not smt:
             return
@@ -137,19 +155,18 @@ class TemplateParser:
 
     def _unindent_current():
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         if self._indents:
             indents.pop().unindent()
 
         else:
-            raise ParseError(
-                "Redundant Unindent Statement at line {}.".format(
-                    self.current_at))
+            self.raise_parse_error(
+                "Redundant Unindent Statement", self.current_at)
 
     def _find_next_statement(self) -> Union[statement.Statement, str]:
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         smt_str = ""
         begin_mark_line_no = -1
@@ -161,10 +178,9 @@ class TemplateParser:
 
                 except ReadFinished as e:
                     if begin_mark_line_no != -1:
-                        raise ParseError(
-                            ("Cannot find statement end mark "
-                             "for begin mark at line {}.")
-                            .format(begin_mark_at)) from e
+                        self.raise_parse_error(
+                            "Cannot find statement end mark "
+                            "for begin mark", begin_mark_at, from_err=e)
 
                     elif smt_str:
                         return smt_str
@@ -204,12 +220,16 @@ class TemplateParser:
             smt_str += self._current_line[:end_mark_pos]
             self._current_line = self._current_line[end_mark_pos + 2:]
 
-            return statement.Statement.parse_statement(
-                smt_str, smt_at=self._current_at)
+            try:
+                return statement.Statement.parse_statement(
+                    smt_str, smt_at=self._current_at)
+            except Exception as e:
+                self.raise_parse_error(
+                    "Error Occurred when parsing statememt", from_err=e)
 
     def _parse(self):
         if self._finished:
-            raise ParseError("Parse has already been finished.")
+            raise ParseError("Parsing has already been finished.")
 
         self._root = statement.RootStatement()
         self._indents = []
@@ -226,17 +246,27 @@ class TemplateParser:
                     smt, smt_at=self.current_at))
                 continue
 
-            if smt.should_unindent:
-                self._unindent_current()
+            try:
+                if smt.should_unindent:
+                    self._unindent_current()
 
-            if smt.should_append:
-                self._append_to_current(smt)
+                if smt.should_append:
+                    self._append_to_current(smt)
 
-            if smt.should_indent:
-                self._indents.append(smt)
+                if smt.should_indent:
+                    self._indents.append(smt)
+
+                if isinstance(smt, statement.BlockStatement):
+                    self._root.append_block_statement(smt)
+
+            except Exception as e:
+                self.raise_parse_error(
+                    "Error Occurred when dealing with statememt", from_err=e)
 
         if self._indents:
-            raise ParseError("Unindented Indent Statement(s).")
+            self.raise_parse_error(
+                "Unindented Indent Statement",
+                line=self._indents[-1]._smt_at)
 
         self._root.unindent()
         self._finished = True

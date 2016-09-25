@@ -57,5 +57,13 @@ main.html::
 """
 from .utils import *
 
-from .loader import TemplateLoader
 from .template import Template
+from .statement import Statement
+from .loader import TemplateLoader
+
+from . import utils
+from . import loader
+from . import parser
+from . import printer
+from . import template
+from . import namespace

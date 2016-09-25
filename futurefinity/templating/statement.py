@@ -38,7 +38,6 @@ class StatementModifier:
 
     @staticmethod
     def parse_modifier(smt_str: str) -> (Optional["StatementModifier"], str):
-
         _splitted = smt_str.strip().split(" ", maxsplit=1)
 
         if _splitted[0] not in StatementModifier._modifier_args.keys():
@@ -92,6 +91,14 @@ class Statement:
 
         self._should_unindent = False
 
+    def raise_invalid_operation(
+     self, message: str, from_err: Optional[Exception]=None):
+        err_str = "{} at line {}.".format(message, self._smt_at)
+        if from_err:
+            raise InvalidStatementOperation(err_str) from from_err
+        else:
+            raise InvalidStatementOperation(err_str)
+
     @property
     def should_indent(self) -> bool:
         return self._should_indent
@@ -105,19 +112,31 @@ class Statement:
         return self._should_unindent
 
     def append_statement(self, smt: "Statement"):
-        if not self.should_indent or self._finished:
-            raise InvalidStatementOperation
+        if self._finished:
+            self.raise_invalid_operation(
+                "This statement has already been finished")
+
+        if not self.should_indent:
+            self.raise_invalid_operation(
+                "This statement is not an indent statement")
 
         self._statements.append(smt)
 
     def unindent(self):
-        if not self.should_indent or self._finished:
-            raise InvalidStatementOperation
+        if self._finished:
+            self.raise_invalid_operation(
+                "This statement has already been finished")
+
+        if not self.should_indent:
+            self.raise_invalid_operation(
+                "This statement is not an indent statement")
 
         self._finished = True
 
     def print_code(self, code_printer: "printer.CodePrinter"):
-        raise NotImplementedError
+        self.raise_invalid_operation(
+            "Method print_code is not implemented",
+            from_err=NotImplementedError())
 
     def gen_smt_code(self) -> str:
         modifier = self._modifier.gen_modifier() if self._modifier else ""
@@ -128,12 +147,12 @@ class Statement:
     def parse_statement(smt_str: str, smt_at: int) -> "Statement":
         modifier, rest_str = StatementModifier.parse_modifier(smt_str)
 
-        splitted_smt_str = rest_str.strip().split(" ", 1)
+        splitted = rest_str.strip().split(" ", 1)
 
-        keyword = splitted_smt_str[0]
+        keyword = splitted[0]
 
-        if len(splitted_smt_str) > 1:
-            rest = splitted_smt_str[1]
+        if len(splitted) > 1:
+            rest = splitted[1]
         else:
             rest = None
 
@@ -154,36 +173,45 @@ class RootStatement(Statement):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._blocks = {}
+        self._block_statements = {}
 
         self._should_indent = True
 
     @property
     def should_append(self) -> bool:
-        raise InvalidStatementOperation(
-            "_TemplateRootSmt cannot be appended to other statements.")
+        self.raise_invalid_operation(
+            "RootStatement cannot be appended to other statements")
 
-    def add_block(block: "_TemplateBlockSmt"):
-        if block.block_name in self._blocks.keys():
+    def append_block_statement(smt: "BlockStatement"):
+        if smt.block_name in self._block_statements.keys():
             raise InvalidStatementOperation(
                 "Block with name {} has already been defined."
                 .format(block.block_name))
 
-        self._blocks[block.block_name] = block
+        self._block_statements[block.block_name] = block
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
-            "class CurrentTplNameSpace(_TemplateNamespace):")
+            "class __TplCurrentNamespace__(__TplNamespace__):",
+            smt_at=self._smt_at)
 
         with code_printer.code_indent():
-            code_printer.write_line("async def _render(self):")
+            code_printer.write_line(
+                "async def _render_body_str(self) -> str:",
+                smt_at=self._smt_at)
 
             with code_printer.code_indent():
+                code_printer.write_line(
+                    "__tpl_result__ = \"\"", smt_at=self._smt_at)
+
                 for smt in self._statements:
                     smt.print_code(code_printer)
 
-                code_printer.write_line("await self._inherit_tpl()")
-                code_printer.write_line("self._finished = True")
+                code_printer.write_line(
+                    "return __tpl_result__", smt_at=self._smt_at)
+
+            for block_smt in self._block_statements.values():
+                block_smt.print_block_code(code_printer)
 
 
 class IncludeStatement(Statement):
@@ -191,7 +219,8 @@ class IncludeStatement(Statement):
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
-            "await self._include_tpl({})".format(self._rest))
+            "await self._include_tpl({})".format(self._rest),
+            smt_at=self._smt_at)
 
 
 class InheritStatement(Statement):
@@ -199,7 +228,8 @@ class InheritStatement(Statement):
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
-            "await self._add_parent({})".format(self._rest))
+            "await self._add_parent({})".format(self._rest),
+            smt_at=self._smt_at)
 
 
 class BlockStatement(Statement):
@@ -222,18 +252,22 @@ class BlockStatement(Statement):
         return self._block_name
 
     def print_block_code(self, code_printer: "printer.CodePrinter"):
-        code_printer.write_line("async def __tpl_render_block__(self):")
+        code_printer.write_line("@staticmethod", smt_at=self._smt_at)
+        code_printer.write_line("async def _render_block_{}_str(self) -> str:"
+                                .format(self._block_name), smt_at=self._smt_at)
 
         with code_printer.code_indent():
-            code_printer.write_line("__tpl_result__ = \"\"")
+            code_printer.write_line(
+                "__tpl_result__ = \"\"", smt_at=self._smt_at)
             for smt in self._statements:
                 smt.print_code(code_printer)
-            code_printer.write_line("return __tpl_result__")
+            code_printer.write_line(
+                "return __tpl_result__", smt_at=self._smt_at)
 
     def print_code(self, code_printer: "printer.CodePrinter"):
-        code_printer.append_result(
-            "await self.blocks.{}(_defined_here=True)".format(
-                self._block_name))
+        code_printer.write_line(
+            "__tpl_result__ += await self.blocks.{}(_defined_here=True)"
+            .format(self._block_name), smt_at=self._smt_at)
 
 
 class IndentStatement(Statement):
@@ -245,7 +279,8 @@ class IndentStatement(Statement):
         self._should_indent = True
 
     def print_code(self, code_printer: "printer.CodePrinter"):
-        code_printer.write_line("{}:".format(self.gen_smt_code()))
+        code_printer.write_line(
+            "{}:".format(self.gen_smt_code()), smt_at=self._smt_at)
 
         with code_printer.code_indent():
             for smt in self._statements:
@@ -273,10 +308,10 @@ class HalfIndentStatement(UnindentStatement, IndentStatement):
 
 
 class InlineStatement(Statement):
-    _keywords = ("break", "continue", "import")
+    _keywords = ("break", "continue", "import", "raise")
 
     def print_code(self, code_printer: "printer.CodePrinter"):
-        code_printer.write_line(self.gen_smt_code())
+        code_printer.write_line(self.gen_smt_code(), smt_at=self._smt_at)
 
 
 class OutputStatement(Statement):
@@ -284,38 +319,46 @@ class OutputStatement(Statement):
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
-            "__tpl_output_raw_result__ = {}".format(self._rest))
+            "__tpl_output_raw_result__ = {}".format(self._rest),
+            smt_at=self._smt_at)
 
         if self._keyword == "=":
             code_printer.write_line(
-                "__tpl_output_result__ = \
-                    self.default_escape(__tpl_output_raw_result__)")
+                "__tpl_output_result__ = "
+                "self.default_escape(__tpl_output_raw_result__)",
+                smt_at=self._smt_at)
 
         elif self._keyword in ("r=", "raw="):
             code_printer.write_line(
-                "__tpl_output_result__ = \
-                self.no_escape(__tpl_output_raw_result__)")
+                "__tpl_output_result__ = "
+                "self.no_escape(__tpl_output_raw_result__)",
+                smt_at=self._smt_at)
 
         elif self._keyword in ("u=", "url="):
             code_printer.write_line(
-                "__tpl_output_result__ = \
-                    self.escape_url(__tpl_output_raw_result__)")
+                "__tpl_output_result__ = "
+                "self.escape_url(__tpl_output_raw_result__)",
+                smt_at=self._smt_at)
 
         elif self._keyword in ("j=", "json="):
             code_printer.write_line(
-                "__tpl_output_result__ = \
-                    self.escape_json(__tpl_output_raw_result__)")
+                "__tpl_output_result__ = "
+                "self.escape_json(__tpl_output_raw_result__)",
+                smt_at=self._smt_at)
 
         elif self._keyword in ("h=", "html="):
             code_printer.write_line(
-                "__tpl_output_result__ = \
-                    self.escape_html(__tpl_output_raw_result__)")
+                "__tpl_output_result__ = "
+                "self.escape_html(__tpl_output_raw_result__)",
+                smt_at=self._smt_at)
 
         else:
             raise CodeGenerationError(
                 "Unknown Type of Output: {}".format(self._keyword))
 
-        code_printer.append_result("__tpl_output_result__")
+        code_printer.write_line(
+            "__tpl_result__ += __tpl_output_result__",
+            smt_at=self._smt_at)
 
 
 class StrStatement(Statement):
@@ -325,4 +368,6 @@ class StrStatement(Statement):
         self._smt_str = smt_str
 
     def print_code(self, code_printer: "printer.CodePrinter"):
-        code_printer.append_result(repr(ensure_str(self._smt_str)))
+        code_printer.write_line(
+            "__tpl_result__ += {}".format(repr(ensure_str(self._smt_str))),
+            smt_at=self._smt_at)

@@ -17,31 +17,43 @@
 
 from .utils import CodeGenerationError
 
-from typing import Optional
+from typing import Optional, Union
 
 import types
+import typing
+
+if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+    from . import template
+    from . import statement
+
+_INDENT_MARK = "    "
+_END_OF_LINE = "\n"
 
 
 class CodePrinter:
-    def __init__(
-        self, top_indent: int=0,
-        template_name: Optional[str]=None,
-        indent_mark: str="    ", end_of_line: str="\n",
-            result_var: str="self.__tpl_result__"):
+    def __init__(self, tpl: "template.Template"):
 
-        self._indent_num = top_indent
-        self._template_name = template_name
-        self._indent_mark = indent_mark
-        self._end_of_line = end_of_line
-        self._result_var = result_var
+        self._indent_num = 0
+        self._tpl = tpl
 
         self._committed_code = ""
 
         self._finished = False
 
+    def raise_code_gen_error(self, message: str,
+                             from_err: Optional[Exception]=None):
+        err_str = "{} in file {}.".format(
+            message, self._tpl._template_path)
+
+        if from_err:
+            raise CodeGenerationError(err_str) from from_err
+        else:
+            raise CodeGenerationError(err_str)
+
     def code_indent(self) -> "CodePrinter":
         if self._finished:
-            raise CodeGenerationError
+            raise CodeGenerationError(
+                "Code Generation has already been finished.")
 
         return self
 
@@ -53,28 +65,31 @@ class CodePrinter:
 
     def _inc_indent_num(self):
         if self._finished:
-            raise CodeGenerationError
+            raise CodeGenerationError(
+                "Code Generation has already been finished.")
 
         self._indent_num += 1
 
     def _dec_indent_num(self):
         if self._finished:
-            raise CodeGenerationError
+            raise CodeGenerationError(
+                "Code Generation has already been finished.")
 
         self._indent_num -= 1
 
-    def write_line(self, line_str: str):
+    def write_line(self, line_str: str, smt_at: Union[str, int]="<unknown>"):
         if self._finished:
-            raise CodeGenerationError
+            raise CodeGenerationError(
+                "Code Generation has already been finished.")
 
-        self._committed_code += self._indent_mark * self._indent_num
+        self._committed_code += _INDENT_MARK * self._indent_num
 
         self._committed_code += line_str
 
-        self._committed_code += self._end_of_line
+        self._committed_code += "  # In file {} at line {}.".format(
+            self._tpl._template_path, smt_at)
 
-    def append_result(self, line_str: str):
-        self.write_line(self._result_var + " += " + line_str)
+        self._committed_code += _END_OF_LINE
 
     @property
     def finished(self) -> bool:
@@ -90,7 +105,13 @@ class CodePrinter:
         if not hasattr(self, "_compiled_code"):
             self._compiled_code = compile(
                 self.plain_code,
-                "<Template: {}>".format(self._template_name), "exec",
+                "<Template: {}>".format(self._tpl._template_name), "exec",
                 dont_inherit=True)
 
         return self._compiled_code
+
+    def from_root(self, root: "statement.RootStatement"):
+        try:
+            root.print_code(self)
+        except Exception as e:
+            self.raise_code_gen_error("Error During Printing Code", from_err=e)
