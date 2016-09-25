@@ -24,13 +24,13 @@ import sys
 if not sys.version_info >= (3, 5, 1):
     raise RuntimeError("FutureFinity Requires Python 3.5.1 or higher.")
 
-setup_requires = ["pytest-runner"]
+setup_requires = ["pytest-runner>=2.0,<3.0"]
 
 install_requires = []
 
-full_requires = ["cryptography"]
+full_requires = ["cryptography>=1.2,<2.0"]
 
-tests_require = ["pytest"]
+tests_require = ["pytest>=3.0,<4.0"]
 tests_require.extend(full_requires)
 
 if __name__ == "__main__":
