@@ -1,0 +1,12 @@
+include README.rst
+include CHANGELOG.rst
+include LICENSE
+include setup.cfg
+recursive-include . *.py
+recursive-include futurefinity/tests *
+recursive-include docs *
+recursive-include examples *
+exclude *.pyc
+exclude *.pyo
+global-exclude __pycache__/*.pyc
+prune docs/_build

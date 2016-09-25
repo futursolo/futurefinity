@@ -153,12 +153,12 @@ class TemplateParser:
         else:
             self._root.append_statement(smt)
 
-    def _unindent_current():
+    def _unindent_current(self):
         if self._finished:
             raise ParseError("Parsing has already been finished.")
 
         if self._indents:
-            indents.pop().unindent()
+            self._indents.pop().unindent()
 
         else:
             self.raise_parse_error(

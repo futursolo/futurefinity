@@ -24,11 +24,13 @@ import sys
 if not sys.version_info >= (3, 5, 1):
     raise RuntimeError("FutureFinity Requires Python 3.5.1 or higher.")
 
+setup_requires = ["pytest-runner"]
+
 install_requires = []
 
 full_requires = ["cryptography"]
 
-tests_require = ["requests", "nose2"]
+tests_require = ["pytest"]
 tests_require.extend(full_requires)
 
 if __name__ == "__main__":
@@ -43,10 +45,8 @@ if __name__ == "__main__":
                     "designed for asyncio and native coroutines.",
         long_description=open("README.rst", "r").read(),
         packages=find_packages(),
-        package_data={
-            "futurefinity": ["README.rst", "LICENSE"]
-        },
-        test_suite="nose2.collector.collector",
+        include_package_data=True,
+        setup_requires=setup_requires,
         install_requires=install_requires,
         tests_require=tests_require,
         zip_safe=False,

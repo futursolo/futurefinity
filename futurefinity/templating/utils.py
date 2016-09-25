@@ -76,3 +76,7 @@ def render_template(template_name: str):
             await self.render(template_name, template_dict)
         return wrapper
     return decorator
+
+
+def is_allowed_name(name: str) -> bool:
+    return (re.fullmatch(_ALLOWED_NAME, name) is not None)

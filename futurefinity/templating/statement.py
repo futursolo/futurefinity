@@ -15,8 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import InvalidStatementOperation
 from futurefinity.utils import ensure_str
+from .utils import InvalidStatementOperation, is_allowed_name
 
 from typing import Optional
 
@@ -182,13 +182,13 @@ class RootStatement(Statement):
         self.raise_invalid_operation(
             "RootStatement cannot be appended to other statements")
 
-    def append_block_statement(smt: "BlockStatement"):
+    def append_block_statement(self, smt: "BlockStatement"):
         if smt.block_name in self._block_statements.keys():
             raise InvalidStatementOperation(
                 "Block with name {} has already been defined."
-                .format(block.block_name))
+                .format(smt.block_name))
 
-        self._block_statements[block.block_name] = block
+        self._block_statements[smt.block_name] = smt
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
@@ -242,7 +242,7 @@ class BlockStatement(Statement):
 
         self._block_name = self._rest.strip()
 
-        if re.fullmatch(_ALLOWED_NAME, self._block_name) is None:
+        if not is_allowed_name(self._block_name):
             raise ParseError(
                 "Invalid Block Statement. Block Name expected, got: {} {}."
                 .format(self._keyword, self._rest))

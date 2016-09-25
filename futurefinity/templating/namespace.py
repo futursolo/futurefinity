@@ -40,8 +40,8 @@ class BlockAttrs:
         if name not in self._namespace._tpl._root._block_statements.keys():
             raise TemplateRenderError from KeyError("Unknown Block Name.")
 
-        if name in self._namespace._update_blocks.keys():
-            block_fn = self._namespace._update_blocks[name]
+        if name in self._namespace._updated_block_fns.keys():
+            block_fn = self._namespace._updated_block_fns[name]
         else:
             block_fn = getattr(
                 self._namespace, "_render_block_{}_str".format(name))
@@ -211,7 +211,7 @@ class Namespace:
             raise TemplateRenderError(
                 ("Unknown escape type,"
                  "expecting one of {}, got: {}")
-                .format(self._escape_types.keys(), default_escape_type))
+                .format(self._escape_types.keys(), default_type))
 
     @property
     def escape_url_with_plus(self) -> bool:
