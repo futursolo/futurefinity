@@ -1048,7 +1048,7 @@ class Application:
             context = None
         f = self._loop.create_server(self.make_server(), address, port,
                                      ssl=context)
-        srv = self._loop.run_until_complete(f)
+        srv = asyncio.ensure_future(f, loop=self._loop)
         return srv
 
     def add_handler(

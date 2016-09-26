@@ -23,7 +23,9 @@ import functools
 
 def run_until_complete(f) -> Callable[[Callable[[Any], Any]], Any]:
     def wrapper(self, *args, **kwargs):
-        return self._loop.run_until_complete(f(self, *args, **kwargs))
+        return self._loop.run_until_complete(
+            asyncio.wait_for(f(self, *args, **kwargs), timeout=10))
+        # In the test, the timeout for one task is 10s.
 
     return wrapper
 
