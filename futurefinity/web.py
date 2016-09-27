@@ -71,6 +71,34 @@ import mimetypes
 import traceback
 
 
+_DEFAULT_ERROR_TPL = """
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{error_code}: {status_code_detail}</title>
+</head>
+<body>
+    <div><pre>{error_code}: {status_code_detail}\n\n{content}\n</pre></div>
+</body>
+</html>
+""".strip()
+
+_DEFAULT_REDIRECT_TPL = """
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{status_code} {status_message}</title>
+</head>
+<body>
+    <h1>{status_code} {status_message}</h1>
+    The document has moved <a href="{url}">here</a>.
+</body>
+</html>
+""".strip()
+
+
 class HTTPError(server.ServerError):
     """
     Common HTTPError class, this Error should be raised when a non-200 status
@@ -221,7 +249,8 @@ class RequestHandler:
         """
         arg_content = self.request.link_args.get_first(name, default)
         if arg_content is default_mark:
-            raise KeyError("The name %s cannot be found in link args." % name)
+            raise KeyError(
+                "The name {} cannot be found in link args.".format(name))
         return arg_content
 
     def get_all_link_args(self, name: str) -> List[str]:
@@ -244,7 +273,8 @@ class RequestHandler:
         """
         arg_content = self.request.body_args.get_first(name, default)
         if arg_content is default_mark:
-            raise KeyError("The name %s cannot be found in body args." % name)
+            raise KeyError(
+                "The name {} cannot be found in body args.".format(name))
         return arg_content
 
     def get_all_body_args(self, name: str) -> List[str]:
@@ -267,7 +297,8 @@ class RequestHandler:
         """
         header_content = self.request.headers.get_first(name, default)
         if header_content is default_mark:
-            raise KeyError("The name %s cannot be found in headers." % name)
+            raise KeyError(
+                "The name {} cannot be found in headers.".format(name))
         return header_content
 
     def get_all_headers(self, name: str) -> List[str]:
@@ -493,7 +524,8 @@ class RequestHandler:
         Return a HTML form field contains _csrf value.
         """
         value = self._csrf_value
-        return "<input type=\"hidden\" name=\"_csrf\" value=\"%s\">" % value
+        return "<input type=\"hidden\" name=\"_csrf\" value=\"{}\">".format(
+            value)
 
     def write(self, text: Union[str, bytes], clear_text: bool=False):
         """
@@ -576,22 +608,11 @@ class RequestHandler:
         else:
             assert isinstance(status, int) and 300 <= status <= 399
         self._status_code = status
-        self.set_header("location", ensure_str(url))
-        self.finish("<!DOCTYPE HTML>"
-                    "<html>"
-                    "<head>"
-                    "    <meta charset=\"utf-8\">"
-                    "    <title>%(status_code)d %(status_message)s</title>"
-                    "</head>"
-                    "<body>"
-                    "    <h1>%(status_code)d %(status_message)s</h1>"
-                    "    The document has moved <a href=\"%(url)s\">here</a>."
-                    "</body>"
-                    "</html>" % {
-                        "status_code": status,
-                        "status_message": protocol.status_code_text[status],
-                        "url": ensure_str(url)
-                     })
+        self.set_header("location", url)
+        self.finish(_DEFAULT_REDIRECT_TPL.format(
+            status_code=status,
+            status_message=protocol.status_code_text[status],
+            url=url))
 
     def set_body_etag(self):
         """
@@ -601,7 +622,7 @@ class RequestHandler:
             sha1_hash_object = hashlib.sha1()
             sha1_hash_object.update(self._response_body)
 
-            self.__body_etag = '"%s"' % sha1_hash_object.hexdigest()
+            self.__body_etag = '"{}"'.format(sha1_hash_object.hexdigest())
             if self.__body_etag is not '""':
                 self.set_header("etag", self.__body_etag)
 
@@ -735,40 +756,32 @@ class RequestHandler:
         You may override this page if you want to custom the error page.
         """
         self._status_code = error_code
-        self.set_header("Content-Type", "text/html; charset=UTF-8")
+        self.set_header("Content-Type", "text/html; charset=utf-8")
 
         if self._status_code >= 400:
             self.set_header("Connection", "Close")
 
-        self.write("<!DOCTYPE HTML>"
-                   "<html>"
-                   "<head>"
-                   "    <meta charset=\"UTF-8\">"
-                   "    <title>%(error_code)d: %(status_code_detail)s</title>"
-                   "</head>"
-                   "<body>"
-                   "    <div>%(error_code)d: %(status_code_detail)s</div>" % {
-                        "error_code": error_code,
-                        "status_code_detail": protocol.status_code_text[
-                            error_code]
-                   },
-                   clear_text=True)
+        content = ""
+
         if message:
-            self.write(""
-                       "    <div>%(message)s</div>" % {
-                           "message": ensure_str(message)})
+            content += html.escape(ensure_str(message)) + "\n\n"
 
         if self.settings.get("debug", False) and exc_info:
             print(self.request, file=sys.stderr)
 
             traceback.print_exception(*exc_info)
-            for line in traceback.format_exception(*exc_info):
-                self.write("    <div>%s</div>" % html.escape(line).replace(
-                    " ", "&nbsp;"))
 
-        self.write(""
-                   "</body>"
-                   "</html>")
+            content += html.escape(
+                "\n".join(traceback.format_exception(*exc_info))) + "\n\n"
+
+        self.write(
+            _DEFAULT_ERROR_TPL.format(
+                error_code=error_code,
+                status_code_detail=protocol.status_code_text[error_code],
+                content=content),
+            clear_text=True)
+
+        self.finish()
 
     async def head(self, *args, **kwargs):
         """

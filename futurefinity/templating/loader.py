@@ -81,7 +81,7 @@ class TemplateLoader(BaseLoader):
             if os.path.exists(file_path):
                 return file_path
         raise TemplateNotFoundError(
-            "No such file %s in template_path" % repr(template_name))
+            "No such file {} in template_path".format(template_name))
 
     def _load_tpl_str_sync(self, template_name: str):
         file_path = self._find_abs_path(template_name)

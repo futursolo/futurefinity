@@ -146,7 +146,7 @@ class HTTPHeaders(TolerantMagicDict):
     """
     def __str__(self) -> str:
         content_list = [(key, value) for (key, value) in self.items()]
-        return "HTTPHeaders(%s)" % str(content_list)
+        return "HTTPHeaders({})".format(str(content_list))
 
     def copy(self) -> "HTTPHeaders":
         return HTTPHeaders(self)
@@ -164,7 +164,7 @@ class HTTPHeaders(TolerantMagicDict):
         """
         headers_str = ""
         for (name, value) in self.items():
-            headers_str += "%s: %s" % (_capitalize_header[name], value)
+            headers_str += "{}: {}".format(_capitalize_header[name], value)
             headers_str += _CRLF_MARK
 
         return ensure_bytes(headers_str)
@@ -209,10 +209,8 @@ class HTTPHeaders(TolerantMagicDict):
         if "cookie" in self.keys():
             cookie_string += self["cookie"]
         for cookie_name, cookie_morsel in cookies.items():
-            cookie_string += "%(cookie_name)s=%(cookie_value)s; " % {
-                "cookie_name": cookie_name,
-                "cookie_value": cookie_morsel.value
-            }
+            cookie_string += "{}={}; ".format(cookie_name, cookie_morsel.value)
+
         if cookie_string:
             self["cookie"] = cookie_string
 
@@ -244,15 +242,15 @@ class HTTPMultipartFileField:
         self.encoding = encoding
 
     def __str__(self) -> str:
-        return ("HTTPMultipartFileField(filename=%(filename)s, "
-                "content_type=%(content_type)s, "
-                "headers=%(headers)s, "
-                "encoding=%(encoding)s)") % {
-                    "filename": repr(self.filename),
-                    "content_type": repr(self.content_type),
-                    "headers": repr(self.headers),
-                    "encoding": repr(self.encoding)
-                }
+        return ("HTTPMultipartFileField(filename={filename}, "
+                "content_type={content_type}, "
+                "headers={headers}, "
+                "encoding={encoding})").format(
+                    filename=repr(self.filename),
+                    content_type=repr(self.content_type),
+                    headers=repr(self.headers),
+                    encoding=repr(self.encoding)
+                )
 
     def assemble(self) -> bytes:
         """
@@ -262,8 +260,8 @@ class HTTPMultipartFileField:
         self.headers["content-transfer-encoding"] = self.encoding
 
         content_disposition = "form-data; "
-        content_disposition += "name=\"%s\"; " % self.fieldname
-        content_disposition += "filename=\"%s\"" % self.filename
+        content_disposition += "name=\"{}\"; ".format(self.fieldname)
+        content_disposition += "filename=\"{}\"".format(self.filename)
         self.headers["content-disposition"] = content_disposition
 
         field = self.headers.assemble()
@@ -381,7 +379,7 @@ class HTTPMultipartBody(TolerantMagicDict):
 
             if isinstance(field_value, str):
                 body += b"Content-Disposition: form-data; "
-                body += ensure_bytes("name=\"%s\"\r\n" % field_name)
+                body += ensure_bytes("name=\"{}\"\r\n".format(field_name))
                 body += _CRLF_BYTES_MARK
 
                 body += ensure_bytes(field_value)
@@ -598,22 +596,21 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     def __str__(self) -> str:
         return ("HTTPIncomingRequest("
-                "method=%(method)s, "
-                "path=%(path)s, "
-                "http_version=%(http_version)s, "
-                "host=%(host)s, "
-                "headers=%(headers)s, "
-                "cookies=%(cookies)s, "
-                "link_args=%(link_args)s, "
-                ")") % {
-                    "method": repr(self.method),
-                    "path": repr(self.path),
-                    "http_version": repr(self.http_version),
-                    "host": repr(self.host),
-                    "headers": repr(self.headers),
-                    "cookies": repr(self.cookies),
-                    "link_args": repr(self.link_args)
-                }
+                "method={method}, "
+                "path={path}, "
+                "http_version={http_version}, "
+                "host={host}, "
+                "headers={headers}, "
+                "cookies={cookies}, "
+                "link_args={link_args}, "
+                ")").format(
+                    method=repr(self.method),
+                    path=repr(self.path),
+                    http_version=repr(self.http_version),
+                    host=repr(self.host),
+                    headers=repr(self.headers),
+                    cookies=repr(self.cookies),
+                    link_args=repr(self.link_args))
 
     __repr__ = __str__
 
@@ -651,16 +648,15 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
 
     def __str__(self) -> str:
         return ("HTTPIncomingResponse("
-                "status_code=%(status_code)s, "
-                "http_version=%(http_version)s, "
-                "headers=%(headers)s, "
-                "cookies=%(cookies)s, "
-                ")") % {
-                    "status_code": repr(self.status_code),
-                    "http_version": repr(self.http_version),
-                    "headers": repr(self.headers),
-                    "cookies": repr(self.cookies)
-                }
+                "status_code={status_code}, "
+                "http_version={http_version}, "
+                "headers={headers}, "
+                "cookies={cookies}, "
+                ")").format(
+                    status_code=repr(self.status_code),
+                    http_version=repr(self.http_version),
+                    headers=repr(self.headers),
+                    cookies=repr(self.cookies))
 
     __repr__ = __str__
 
@@ -1036,23 +1032,21 @@ class HTTPv1Connection:
         else:
             raise ProtocolError("Unknown HTTP Version.")
 
-        basic_info_template = b"%s %s %s" + _CRLF_BYTES_MARK
+        basic_info_template = "{} {} {}" + _CRLF_MARK
         if self.is_client:
             if self.stage is not _CONN_INIT:
                 raise ProtocolError(
                     "Cannot write when connection stage is not _CONN_INIT.")
 
-            basic_info = basic_info_template % (
-                ensure_bytes(method), ensure_bytes(path),
-                ensure_bytes(http_version_text))
+            basic_info = ensure_bytes(
+                basic_info_template.format(method, path, http_version_text))
 
         else:
             if self.stage is not _CONN_MESSAGE_PARSED:
                 raise ProtocolError("Unacceptable Function Access.")
 
-            basic_info = basic_info_template % (
-                ensure_bytes(http_version_text), ensure_bytes(status_code),
-                ensure_bytes(status_code_text[status_code]))
+            basic_info = ensure_bytes(basic_info_template.format(
+                http_version_text, status_code, status_code_text[status_code]))
 
         initial += basic_info
 

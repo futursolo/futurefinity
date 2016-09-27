@@ -151,7 +151,7 @@ class MagicDict(collections.abc.MutableMapping):
     def __str__(self):
         content_list = [(key, value) for (key, value) in self.items()]
 
-        return "MagicDict(%s)" % str(content_list)
+        return "MagicDict({})".format(str(content_list))
 
     def copy(self):
         return MagicDict(self)
@@ -197,7 +197,7 @@ class TolerantMagicDict(MagicDict):
     def __str__(self):
         content_list = [(key, value) for (key, value) in self.items()]
 
-        return "TolerantMagicDict(%s)" % str(content_list)
+        return "TolerantMagicDict({})".format(str(content_list))
 
     def copy(self):
         return TolerantMagicDict(self)
@@ -220,7 +220,7 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
     elif isinstance(ts, datetime.datetime):
         ts = calendar.timegm(ts.utctimetuple())
     else:
-        raise TypeError("unknown timestamp type: %r" % ts)
+        raise TypeError("unknown timestamp type: {}".format(ts))
     return ensure_str(email.utils.formatdate(ts, usegmt=True))
 
 
