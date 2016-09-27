@@ -142,13 +142,13 @@ channel = logging.StreamHandler()
 getattr(channel, "setFormatter")(formatter)
 set_log_level(channel, logging.DEBUG)
 
-global_log = get_logger("futurefinity")
+global_log = get_logger("futurefinity")  # type: logging.Logger
 set_log_level(global_log, logging.INFO)
 
 getattr(global_log, "addHandler")(channel)
 
 get_child_logger = getattr(global_log, "getChild")
 
-utils_log = get_child_logger("utils")
-web_log = get_child_logger("web")
-access_log = get_child_logger("web_access")
+utils_log = get_child_logger("utils")  # type: logging.Logger
+web_log = get_child_logger("web")  # type: logging.Logger
+access_log = get_child_logger("web_access")  # type: logging.Logger

@@ -45,6 +45,7 @@ Finally, listen to the port you want, and start asyncio event loop::
 """
 
 from .utils import (ensure_str, ensure_bytes, format_timestamp, default_mark)
+from . import log
 from . import server
 from . import routing
 from . import protocol
@@ -99,6 +100,39 @@ _DEFAULT_REDIRECT_TPL = """
 """.strip()
 
 
+def print_access_log(
+    request: protocol.HTTPIncomingRequest,
+        status_code: int):
+    if status_code < 400:
+        log_fn = log.access_log.info
+
+    elif status_code < 500:
+        log_fn = log.access_log.warn
+
+    else:
+        log_fn = log.access_log.error
+
+    if request.http_version == 10:
+        http_version_text = "HTTP/1.0"
+
+    elif request.http_version == 11:
+        http_version_text = "HTTP/1.1"
+
+    else:
+        raise ValueError("Unknown HTTP Version.")
+
+    log_msg = ("{method} {path} {http_version_text} - "
+               "{status_code} {status_code_text}").format(
+        method=request.method,
+        path=request.origin_path,
+        http_version_text=http_version_text,
+        status_code=status_code,
+        status_code_text=protocol.status_code_text[status_code]
+    )
+
+    log_fn(log_msg)
+
+
 class HTTPError(server.ServerError):
     """
     Common HTTPError class, this Error should be raised when a non-200 status
@@ -129,24 +163,27 @@ class ApplicationHTTPServer(server.HTTPServer):
         self._request_handlers = {}
         self._futures = {}
 
-    def stream_received(self, incoming: protocol.HTTPIncomingRequest,
-                        data: bytes):
+    def stream_received(
+        self, incoming: protocol.HTTPIncomingRequest,
+            data: bytes):
         self._request_handlers[incoming].data_received(data)
 
-    def error_received(self,
-                       incoming: Optional[protocol.HTTPIncomingRequest],
-                       exc: tuple):
-        if self.settings.get("debug", False) and exc:
-            traceback.print_exception(*exc)
-
-        if not incoming:  # Message unable to parse, create an placeholder.
+    def error_received(
+        self, incoming: Optional[protocol.HTTPIncomingRequest],
+            exc: tuple):
+        if not incoming:
+            # Message is not able to be parsed, create an placeholder.
             incoming = protocol.HTTPIncomingRequest(
                 method="GET",
                 origin_path="/",
                 http_version=11,
                 headers=protocol.HTTPHeaders(),
                 connection=self.connection)
-        handler = self.app.settings.get("default_handler", NotFoundHandler)
+
+        handler = self._request_handlers.get(
+            incoming,
+            self.app.settings.get("default_handler", NotFoundHandler))
+
         request_handler = handler(
             app=self.app,
             server=self,
@@ -154,11 +191,22 @@ class ApplicationHTTPServer(server.HTTPServer):
             path_args=[],
             path_kwargs={}
         )
+
         error_code = 400
+
         if isinstance(exc[1], protocol.ConnectionEntityTooLarge):
             error_code = 413
-        request_handler.write_error(error_code)
-        request_handler.finish()
+
+        try:
+            request_handler.write_error(error_code)
+            request_handler.finish()
+        except:
+            print_access_log(request=incoming, status_code=error_code)
+            traceback.print_exc()
+
+        finally:
+            self.transport.close()
+            self.connection.connection_lost()
 
     def initial_received(self, incoming: protocol.HTTPIncomingRequest):
         matched_obj = self.app.handlers.find(incoming.path)
@@ -174,12 +222,32 @@ class ApplicationHTTPServer(server.HTTPServer):
             self.use_stream = True
 
     def message_received(self, incoming: protocol.HTTPIncomingRequest):
-        def _future_done(coro_future):
-            if incoming in self._futures.keys():
-                del self._request_handlers[incoming]
-                del self._futures[incoming]
-        coro_future = self._loop.create_task(
-            self._request_handlers[incoming]._handle_request())
+        def _future_done(coro_future: asyncio.Future):
+            try:
+                coro_future.result()
+
+            except:
+                print_access_log(request=incoming, status_code=500)
+                traceback.print_exc()
+
+                # System Error, Teardown the connection.
+                self.transport.close()
+                self.connection.connection_lost()
+
+            else:
+                print_access_log(
+                    request=incoming,
+                    status_code=self._request_handlers[incoming]._status_code)
+
+            finally:
+                if incoming in self._futures.keys():
+                    del self._request_handlers[incoming]
+                    del self._futures[incoming]
+
+        coro_future = asyncio.ensure_future(
+            self._request_handlers[incoming]._handle_request(),
+            loop=self._loop)
+
         coro_future.add_done_callback(_future_done)
         self._futures[incoming] = coro_future
 
