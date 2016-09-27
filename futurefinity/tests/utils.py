@@ -30,23 +30,5 @@ def run_until_complete(f) -> Callable[[Callable[[Any], Any]], Any]:
     return wrapper
 
 
-def create_task(f) -> Callable[[Callable[[Any], Any]], Any]:
-    def wrapper(self, *args, **kwargs):
-        return self._loop.create_task(f(self, *args, **kwargs))
-
-    return wrapper
-
-
-def run_forever(f) -> Callable[[Callable[[Any], Any]], Any]:
-    def wrapper(self, *args, **kwargs):
-        result = f(self, *args, **kwargs)
-
-        self._loop.run_forever()
-
-        return result
-
-    return wrapper
-
-
 class TestCase:  # Base TestCase.
     _loop = asyncio.get_event_loop()  # type: asyncio.BaseEventLoop

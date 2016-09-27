@@ -86,14 +86,6 @@ class Namespace:
         self._updated_block_fns = {}
 
     @property
-    def _block_dict(self) -> Dict[str, Any]:
-        if not hasattr(self, "_prepared_block_dict"):
-            self._prepared_block_dict = {}
-            self._prepared_block_dict.update(self._tpl._blocks)
-
-        return self._prepared_block_dict
-
-    @property
     def child_body(self) -> str:
         if self._child_body is None:
             raise TemplateRenderError("There's no child body.")
@@ -193,10 +185,6 @@ class Namespace:
 
     @property
     def default_escape(self) -> Callable[[str], str]:
-        if not hasattr(self, "_default_escape"):
-            return self.escape_html
-            # Default Escape Type from the Templating System is escape_html.
-
         return self._default_escape
 
     @default_escape.setter
@@ -215,9 +203,6 @@ class Namespace:
 
     @property
     def escape_url_with_plus(self) -> bool:
-        if not hasattr(self, "_escape_url_with_plus"):
-            return True
-
         return self._escape_url_with_plus
 
     @escape_url_with_plus.setter
