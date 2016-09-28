@@ -19,7 +19,7 @@
 FutureFinity Logging Facility
 """
 
-from typing import Union
+from typing import Union, Callable
 
 import sys
 import logging
@@ -147,8 +147,5 @@ set_log_level(global_log, logging.INFO)
 
 getattr(global_log, "addHandler")(channel)
 
-get_child_logger = getattr(global_log, "getChild")
-
-utils_log = get_child_logger("utils")  # type: logging.Logger
-web_log = get_child_logger("web")  # type: logging.Logger
-access_log = get_child_logger("web_access")  # type: logging.Logger
+get_child_logger = getattr(global_log, "getChild")  # type: Callable[
+# [str], logging.Logger]

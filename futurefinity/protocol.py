@@ -17,6 +17,7 @@
 
 from .utils import (MagicDict, TolerantMagicDict,
                     FutureFinityError, ensure_str, ensure_bytes)
+from . import log
 from . import security
 from ._version import version as futurefinity_version
 
@@ -55,6 +56,9 @@ _CONN_CLOSED = object()
 
 if 451 not in status_code_text.keys():
     status_code_text[451] = "Unavailable For Legal Reasons"
+
+
+protocol_log = log.get_child_logger("protocol")
 
 
 class ProtocolError(FutureFinityError):
@@ -853,8 +857,9 @@ class HTTPv1Connection:
 
         try:
             headers = HTTPHeaders.parse(origin_headers)
-        except:
-            raise ConnectionBadMessage("Bad Headers Received.")
+
+        except Exception as e:
+            raise ConnectionBadMessage("Bad Headers Received.") from e
 
         if self._can_keep_alive and "connection" in headers:
             self._use_keep_alive = headers.get_first(
@@ -866,15 +871,16 @@ class HTTPv1Connection:
             try:
                 self.incoming = HTTPIncomingResponse(
                     **self._parsed_incoming_info)
-            except:
-                raise ConnectionBadMessage("Bad Initial Received.")
+            except Exception as e:
+                raise ConnectionBadMessage("Bad Initial Received.") from e
 
         else:
             try:
                 self.incoming = HTTPIncomingRequest(
                     **self._parsed_incoming_info, connection=self)
-            except:
-                raise ConnectionBadMessage("Bad Initial Received.")
+
+            except Exception as e:
+                raise ConnectionBadMessage("Bad Initial Received.") from e
 
         self.stage = _CONN_INITIAL_PARSED
 
@@ -897,9 +903,11 @@ class HTTPv1Connection:
 
                 try:
                     self._next_chunk_length = int(length_bytes, 16)
-                except ValueError:  # Not Valid Hexadecimal bytes
+
+                except ValueError as e:
+                    # Not Valid Hexadecimal bytes
                     raise ConnectionBadMessage(
-                        "Bad Chunk Length Received.")
+                        "Bad Chunk Length Received.") from e
 
                 if self._next_chunk_length > self.max_body_length:
                     raise ConnectionEntityTooLarge(
@@ -963,9 +971,18 @@ class HTTPv1Connection:
         except:
             if self.is_client:
                 self._close_connection()
+
             else:
                 self.stage = _CONN_MESSAGE_PARSED
-            self.controller.error_received(self.incoming, sys.exc_info())
+
+            try:
+                self.controller.error_received(self.incoming, sys.exc_info())
+
+            except:
+                protocol_log.exception(
+                    "Error Occurred in error_received, "
+                    "teardown the connection.")
+                self._close_connection()
 
     def _parse_incoming_message(self):
         self.controller.cancel_timeout_handler()

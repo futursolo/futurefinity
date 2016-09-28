@@ -99,18 +99,21 @@ _DEFAULT_REDIRECT_TPL = """
 </html>
 """.strip()
 
+web_log = log.get_child_logger("web")
+access_log = log.get_child_logger("web_access")
+
 
 def print_access_log(
     request: protocol.HTTPIncomingRequest,
         status_code: int):
     if status_code < 400:
-        log_fn = log.access_log.info
+        log_fn = access_log.info
 
     elif status_code < 500:
-        log_fn = log.access_log.warn
+        log_fn = access_log.warn
 
     else:
-        log_fn = log.access_log.error
+        log_fn = access_log.error
 
     if request.http_version == 10:
         http_version_text = "HTTP/1.0"
@@ -200,9 +203,10 @@ class ApplicationHTTPServer(server.HTTPServer):
         try:
             request_handler.write_error(error_code)
             request_handler.finish()
+
         except:
             print_access_log(request=incoming, status_code=error_code)
-            traceback.print_exc()
+            web_log.exception("Error Occurred in RequestHandler.")
 
         finally:
             self.transport.close()
@@ -228,7 +232,7 @@ class ApplicationHTTPServer(server.HTTPServer):
 
             except:
                 print_access_log(request=incoming, status_code=500)
-                traceback.print_exc()
+                web_log.exception("Error Occurred in _handle_request.")
 
                 # System Error, Teardown the connection.
                 self.transport.close()
@@ -834,13 +838,15 @@ class RequestHandler:
         if message:
             content += html.escape(ensure_str(message)) + "\n\n"
 
-        if self.settings.get("debug", False) and exc_info:
-            print(self.request, file=sys.stderr)
+        if exc_info:
+            if self.settings.get("debug", False):
+                web_log.error(str(self.request), exc_info=exc_info)
 
-            traceback.print_exception(*exc_info)
+                content += html.escape(
+                    "\n".join(traceback.format_exception(*exc_info))) + "\n\n"
 
-            content += html.escape(
-                "\n".join(traceback.format_exception(*exc_info))) + "\n\n"
+            else:
+                web_log.error("", exc_info=exc_info)
 
         self.write(
             _DEFAULT_ERROR_TPL.format(
