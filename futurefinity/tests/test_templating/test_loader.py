@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import TestCase, run_until_complete
+from futurefinity.tests.utils import (
+    TestCase, run_until_complete, get_tests_path)
 
 from futurefinity.templating.loader import BaseLoader
 from futurefinity.templating import TemplateLoader, TemplateNotFoundError
@@ -35,25 +36,28 @@ class BaseLoaderTestCase(TestCase):
 
 class TemplateLoaderTestCase(TestCase):
     def test_init(self):
-        signle_loader = TemplateLoader("./tpls")
-        assert signle_loader._template_path == ["./tpls"]
+        signle_loader = TemplateLoader(get_tests_path("tpls"))
+        assert signle_loader._template_path == [get_tests_path("tpls")]
 
-        multi_loader = TemplateLoader([".", "./tpls"])
-        assert multi_loader._template_path == [".", "./tpls"]
+        multi_loader = TemplateLoader(
+            [get_tests_path("tpls"), get_tests_path()])
+
+        assert multi_loader._template_path == [
+            get_tests_path("tpls"), get_tests_path()]
 
         with pytest.raises(ValueError):
             TemplateLoader(-1)
 
     @run_until_complete
     async def test_load_template(self):
-        loader = TemplateLoader("futurefinity/tests/tpls")
+        loader = TemplateLoader(get_tests_path("tpls"))
 
         with pytest.raises(TemplateNotFoundError):
             await loader.load_template("phantasm.html")
 
         loaded_tpl = await loader.load_template("index.html")
 
-        with open("futurefinity/tests/tpls/index.html") as f:
+        with open(get_tests_path("tpls/index.html")) as f:
             tpl_str = f.read()
 
         assert loaded_tpl._tpl_str == tpl_str  # Test Correctness.
@@ -64,8 +68,7 @@ class TemplateLoaderTestCase(TestCase):
 
     @run_until_complete
     async def test_load_template_no_cache(self):
-        loader = TemplateLoader(
-            "futurefinity/tests/tpls", cache_template=False)
+        loader = TemplateLoader(get_tests_path("tpls"), cache_template=False)
 
         loaded_tpl = await loader.load_template("index.html")
         sec_loaded_tpl = await loader.load_template("index.html")

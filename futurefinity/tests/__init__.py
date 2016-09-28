@@ -18,3 +18,17 @@
 """
 FutureFinity Test Suite.
 """
+from futurefinity.tests.__main__ import main
+from setuptools.command.test import test as BaseTestCommand
+
+
+class TestCommand(BaseTestCommand):
+    user_options = [
+        ("test-args=", "a", "Arguments to pass to Test Suite(pytest).")]
+
+    def initialize_options(self):
+        super().initialize_options()
+        self.test_args = []
+
+    def run_tests(self):
+        main(self.test_args)

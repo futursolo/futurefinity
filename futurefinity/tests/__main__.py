@@ -15,31 +15,29 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import (
-    TestCase, run_until_complete, get_tests_path)
-
-from futurefinity.templating import TemplateLoader
+import os
+import sys
 
 
-class TemplateTestCase(TestCase):
-    loader = TemplateLoader(get_tests_path("tpls"), cache_template=False)
+def main(args=None):
+    try:
+        import pytest
+    except ImportError as e:
+        raise RuntimeError(
+            "Cannot Import pytest. Try installing test requirements.") from e
 
-    @run_until_complete
-    async def test_inherit(self):
-        tpl = await self.loader.load_template("index.html")
+    args = args if args is not None else sys.argv[1:]
 
-        result = await tpl.render_str()
+    if "-c" not in args:
+        test_path = os.path.dirname(os.path.abspath(__file__))
+        config_file_path = os.path.join(test_path, "pytest.ini")
 
-        assert """\
-<!DOCTYPE HTML>
-<html>
-    <head>
-        <title>Index Title</title>
-    </head>
-    <body>
-        \n
-This is body.
+        args.append("-c")
+        args.append(config_file_path)
 
-    </body>
-</html>
-""" == result
+    args.append(test_path)
+
+    raise SystemExit(pytest.main(args=args))
+
+if __name__ == "__main__":
+    main()

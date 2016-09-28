@@ -58,13 +58,11 @@ class TemplateLoader(BaseLoader):
     """
     def __init__(self, template_path: Union[list, str], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._template_path = template_path
-
-        if isinstance(self._template_path, str):
-            self._template_path = [self._template_path]
+        if isinstance(template_path, str):
+            self._template_path = [template_path]
 
         elif isinstance(template_path, list):
-            pass
+            self._template_path = template_path
 
         else:
             raise ValueError("Unsupported template_path type.")
@@ -73,15 +71,17 @@ class TemplateLoader(BaseLoader):
         """
         Find the absolute path of the template from the template_path.
 
-        If no matched file found, it will raise a ``FileNotFoundError``.
+        If no matched file found, it will raise a ``TemplateNotFoundError``.
         """
         for current_path in self._template_path:
-            file_path = os.path.join(os.path.realpath(current_path),
+            file_path = os.path.join(os.path.abspath(current_path),
                                      template_name)
+
             if os.path.exists(file_path):
                 return file_path
         raise TemplateNotFoundError(
-            "No such file {} in template_path".format(template_name))
+            "No such file {} in {}.".format(
+                template_name, repr(self._template_path)))
 
     def _load_tpl_str_sync(self, template_name: str):
         file_path = self._find_abs_path(template_name)

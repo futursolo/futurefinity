@@ -15,6 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.tests import TestCommand
 from setuptools import find_packages, setup
 
 import futurefinity
@@ -23,8 +24,6 @@ import sys
 
 if not sys.version_info >= (3, 5, 1):
     raise RuntimeError("FutureFinity Requires Python 3.5.1 or higher.")
-
-setup_requires = ["pytest-runner>=2.0,<3.0"]
 
 install_requires = []
 
@@ -46,13 +45,15 @@ if __name__ == "__main__":
         long_description=open("README.rst", "r").read(),
         packages=find_packages(),
         include_package_data=True,
-        setup_requires=setup_requires,
         install_requires=install_requires,
         tests_require=tests_require,
         zip_safe=False,
         extras_require={
             "full": full_requires,
             "test": tests_require
+        },
+        cmdclass={
+            "test": TestCommand
         },
         classifiers=[
             "License :: OSI Approved :: Apache Software License",

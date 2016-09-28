@@ -15,10 +15,21 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Callable, Any
+from typing import Optional, Callable, Any
 
+import os
 import asyncio
 import functools
+
+
+def get_tests_path(sub_path: Optional[str]=None) -> str:
+    root_dir = os.path.abspath(os.path.dirname(os.path.abspath(__file__)))
+
+    if sub_path:
+        return os.path.abspath(
+            os.path.realpath(os.path.join(root_dir, sub_path)))
+
+    return root_dir
 
 
 def run_until_complete(f) -> Callable[[Callable[[Any], Any]], Any]:

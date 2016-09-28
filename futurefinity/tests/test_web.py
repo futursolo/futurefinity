@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import TestCase, run_until_complete
+from futurefinity.tests.utils import (
+    TestCase, run_until_complete, get_tests_path)
 
 from futurefinity.web import (
     Application, RequestHandler, StaticFileHandler, HTTPError)
@@ -38,7 +39,7 @@ def get_app(loop: Optional[asyncio.BaseEventLoop]=None,
     loop = loop or asyncio.get_event_loop()
     return Application(
         allow_keep_alive=allow_keep_alive, debug=True, loop=loop,
-        static_path="futurefinity/tests/statics",
+        static_path=get_tests_path("statics"),
         csrf_protect=csrf_protect,
         security_secret=get_random_str(32))
 
@@ -198,7 +199,7 @@ class StaticFileHandlerTestCase(TestCase):
         assert result.status == 200
         assert result.getheader("Content-Type") == "application/octet-stream"
 
-        with open("futurefinity/tests/statics/random_str", "rb") as f:
+        with open(get_tests_path("statics/random_str"), "rb") as f:
             assert f.read() == result.read()
 
 
