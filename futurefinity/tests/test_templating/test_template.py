@@ -18,7 +18,7 @@
 from futurefinity.tests.utils import (
     TestCase, run_until_complete, get_tests_path)
 
-from futurefinity.templating import TemplateLoader
+from futurefinity.templating import Template, TemplateLoader
 
 
 class TemplateTestCase(TestCase):
@@ -43,3 +43,25 @@ This is body.
     </body>
 </html>
 """ == result
+
+    @run_until_complete
+    async def test_output(self):
+        tpl = Template(
+            "Hello, <%= name %>!")
+        assert await tpl.render_str(
+            name="FutureFinity") == "Hello, FutureFinity!"
+
+    @run_until_complete
+    async def test_if_elif_else(self):
+        tpl = Template(
+            "<% if cond %>cond_str<% elif sub_cond %>sub_cond_str"
+            "<% else %>else_str<% end %>")
+
+        first_result = await tpl.render_str(cond=True, sub_cond=True)
+        assert first_result == "cond_str"
+
+        second_result = await tpl.render_str(cond=False, sub_cond=True)
+        assert second_result == "sub_cond_str"
+
+        third_result = await tpl.render_str(cond=False, sub_cond=False)
+        assert third_result == "else_str"

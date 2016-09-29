@@ -301,7 +301,7 @@ class HalfIndentStatement(UnindentStatement, IndentStatement):
     _keywords = ("else", "elif", "except", "finally")
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        Statement.__init__(self, *args, **kwargs)
 
         self._should_indent = True
         self._should_unindent = True
