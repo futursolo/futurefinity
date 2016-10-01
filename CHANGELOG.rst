@@ -11,6 +11,7 @@ dev
 - Deprecated AESGCMSecurityContext by AESContext
 - Deprecation Tools
 - Introduce FutureFinity Logging Facility
+- Introduce New Routing Dispatcher.
 
 v0.2.1
 ------
