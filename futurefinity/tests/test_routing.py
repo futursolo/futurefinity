@@ -17,60 +17,82 @@
 
 from futurefinity.tests.utils import TestCase
 
-from futurefinity.routing import RoutingRule, RoutingLocator
+from futurefinity.routing import Dispatcher, NoMatchesFound
+from futurefinity.web import RequestHandler
 
 import re
+import pytest
 
 
 class RoutingTestCase(TestCase):
-    def test_routing_rule(self):
-        handler = object()
+    def test_dispatcher_add(self):
+        dispatcher = Dispatcher()
 
-        rule = RoutingRule(
-            handler=handler, path_args=["a"], path_kwargs={"b": "c"})
+        dispatcher.add(
+            r"/", "a", "b", "c", Handler=RequestHandler, name="root", d="e")
 
-        assert rule.handler is handler
-        assert rule.path_args == ["a"]
-        assert rule.path_kwargs == {"b": "c"}
+        assert "root" in dispatcher._name_dict.keys()
 
-    def test_locator_add(self):
-        handler = object()
-        locator = RoutingLocator()
+        rule = dispatcher._name_dict["root"]
 
-        locator.add(r"/", handler, "a", "b", "c", name="root", d="e")
+        assert "root" in dispatcher._name_dict.keys()
+        assert rule.path == re.compile(r"/")
 
-        assert "root" in locator.links_dict
-        assert locator.links_dict["root"] in locator.handlers_dict
-
-        assert locator.links_dict["root"] == re.compile(r"/")
-
-        rule = locator.handlers_dict[locator.links_dict["root"]]
-
-        assert rule.handler is handler
+        assert rule.Handler is RequestHandler
         assert rule.path_args == ["a", "b", "c"]
         assert rule.path_kwargs == {"d": "e"}
 
-    def test_locator_find(self):
-        handler = object()
-        locator = RoutingLocator()
+    def test_dispatcher_find(self):
+        dispatcher = Dispatcher()
 
-        locator.add(r"/(.*?)/(?P<d>.*?)/(?P<f>.*?)",
-                    handler, "a", "b", "c", d="e")
+        dispatcher.add(r"/(.*?)/(?P<d>.*?)/(?P<f>.*?)", "a", "b", "c",
+                    Handler=RequestHandler, d="e")
 
-        rule = locator.find("/asdf/ghjk/qwerty")
+        Handler, args, kwargs = dispatcher.find("/asdf/ghjk/qwerty")
 
-        assert rule.handler is handler
-        assert rule.path_args == ["a", "b", "c", "asdf", "ghjk", "qwerty"]
-        assert rule.path_kwargs == {"d": "e", "f": "qwerty"}
+        assert Handler is RequestHandler
+        assert args == ["a", "b", "c", "asdf", "ghjk", "qwerty"]
+        assert kwargs == {"d": "e", "f": "qwerty"}
 
-    def test_locator_find_default(self):
-        handler = object()
-        locator = RoutingLocator(default_handler=handler)
+    def test_dispatcher_find_default(self):
+        dispatcher = Dispatcher(DefaultHandler=RequestHandler)
 
-        locator.add(path=r"/a", handler=object())
+        class SubHandler(RequestHandler):
+            pass
 
-        rule = locator.find("/b")
+        dispatcher.add(path=r"/a", Handler=SubHandler)
 
-        assert rule.handler is handler
-        assert rule.path_args == []
-        assert rule.path_kwargs == {}
+        Handler, args, kwargs = dispatcher.find("/b")
+
+        assert Handler is RequestHandler
+        assert args == []
+        assert kwargs == {}
+
+    def test_dispatcher_find_no_default_raised(self):
+        dispatcher = Dispatcher()
+
+        class SubHandler(RequestHandler):
+            pass
+
+        dispatcher.add(path=r"/a", Handler=SubHandler)
+
+        with pytest.raises(NoMatchesFound):
+            dispatcher.find("/b")
+
+    def test_dispatcher_reverse_positional(self):
+        dispatcher = Dispatcher()
+
+        dispatcher.add(r"/(.*?)/(?P<d>.*?)/(?P<f>.*?)",
+                    Handler=RequestHandler, name="test")
+
+        assert "/asdf/ghjk/qwerty" == dispatcher.reverse(
+            name="test", path_args=["asdf", "ghjk", "qwerty"])
+
+    def test_dispatcher_reverse_positional(self):
+        dispatcher = Dispatcher()
+
+        dispatcher.add(r"/(?P<a>.*?)/(?P<b>.*?)/(?P<c>.*?)",
+                    Handler=RequestHandler, name="test")
+
+        assert "/asdf/ghjk/qwerty" == dispatcher.reverse(
+            name="test", path_kwargs={"a": "asdf", "b": "ghjk", "c": "qwerty"})

@@ -15,47 +15,200 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Optional
+from .utils import deprecated_attr, FutureFinityError
+
+from typing.re import Pattern
+from typing import Optional, Tuple, List, Any, Dict, Text, Union
 
 import re
+import typing
+import warnings
 import collections
 
+if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+    from futurefinity import web
 
-class RoutingRule(collections.namedtuple(
- "RoutingRule", ("handler", "path_args", "path_kwargs"))):
-    """
-    Basic Routing Rule for Routing, which contains a handler, path_args,
-    and a path_kwargs. It can be either a stored rule in a routing locator,
-    or a matched rule that will be returned to the application.
 
-    :arg handler: should be a ``futurefinity.web.RequestHandler`` object.
-    :arg path_args: is a tuple or list that contains the positional arguments.
-    :arg path_kwargs: is a dict that contains the keyword arguments.
-    """
-
+class RoutingError(FutureFinityError):
     pass
 
 
-class RoutingLocator:
+class NotMatched(RoutingError):
+    pass
+
+
+class NoMatchesFound(NotMatched):
+    pass
+
+
+class ReverseError(NotMatched):
+    pass
+
+
+class _ReMatchGroup:
+    _named_group_re = re.compile("\?\P\<(.*)\>.*")
+
+    def __init__(self, group_str: Text, index: int):
+        self._group_str = group_str
+        self._index = index
+
+    @property
+    def _name(self) -> Text:
+        if not hasattr(self, "_prepared_name"):
+            matched = self._named_group_re.fullmatch(self._group_str)
+
+            if matched:
+                self._prepared_name = matched.groups()[0]
+            else:
+                raise ReverseError("Cannot reverse positional group by name.")
+
+        return self._prepared_name
+
+
+class Rule:
     """
-    A Routing Locator.
+    Rule for Routing, which contains a Handler, path_args(Deprecated),
+    and a path_kwargs. It can be either a stored rule in a routing locator,
+    or a matched rule that will be returned to the application.
 
-    :arg default_handler: should be a ``futurefinity.web.RequestHandler``
-        object, which will be returned if a handler cannot be found during the
-        path matching.
+    :arg Handler: should be a subclass of ``futurefinity.web.RequestHandler``.
+    :arg path_args: is a tuple or list that contains the positional arguments.
+        This argument is Deprecated, use keyword arugments instead.
+    :arg path_kwargs: is a dict that contains the keyword arguments.
     """
 
-    def __init__(self, default_handler: Optional[object]=None):
-        self.handlers_dict = collections.OrderedDict()
-        self.links_dict = collections.OrderedDict()
-        self.default_handler = default_handler
+    def __init__(
+        self, path: Union[Text, Pattern[Text]],
+        Handler: "web.RequestHandler", path_args: Tuple[Any]=(),
+        name: Optional[Text]=None, path_kwargs: Dict[Text, Any]={}):
+        self.path = path
 
-    def add(self, path: str, handler: object, *args, name: str=None, **kwargs):
+        if isinstance(self.path, str):
+            self.path = re.compile(path)
+
+        self.Handler = Handler
+
+        self.name = name
+
+        self.path_args = list(path_args)
+        self.path_kwargs = path_kwargs
+
+        if len(self.path_args) != 0:
+            warnings.warn(
+                    "Arguments without a name are deprecated, "
+                    "use keyword arguments instead.", DeprecationWarning)
+
+    def match(
+            self, path: Text) -> (
+                "web.RequestHandler", Tuple[Any], Dict[Text, Any]):
+        matched_obj = self.path.fullmatch(path)
+
+        if not matched_obj:
+            raise NotMatched("The path does not match the rule.")
+
+        path_args = []
+        path_args.extend(self.path_args)
+        matched_args = matched_obj.groups() or []
+        path_args.extend(matched_args)
+
+        path_kwargs = {}
+        matched_kwargs = matched_obj.groupdict() or {}
+        path_kwargs.update(matched_kwargs)
+        path_kwargs.update(self.path_kwargs)
+
+        return self.Handler, path_args, path_kwargs
+
+    @property
+    def _match_groups(self) -> List[Union[Text, _ReMatchGroup]]:
+        if not hasattr(self, "_prepared_match_groups"):
+            groups = []
+            rest_pattern_str = self.path.pattern
+
+            index_count = 0
+
+            inside_group = False
+
+            while True:
+                begin_pos = rest_pattern_str.find("(")
+
+                if begin_pos == -1:
+                    groups.append(rest_pattern_str)
+                    rest_pattern_str = ""
+                    break
+                groups.append(rest_pattern_str[:begin_pos])
+
+                rest_pattern_str = rest_pattern_str[begin_pos + 1:]
+
+                end_pos = rest_pattern_str.find(")")
+                groups.append(
+                    _ReMatchGroup(rest_pattern_str[:end_pos], index_count))
+
+                index_count += 1
+
+                rest_pattern_str = rest_pattern_str[end_pos + 1:]
+
+            self._prepared_match_groups = groups
+
+        return self._prepared_match_groups
+
+    def reverse(self, *args, **kwargs) -> Text:
+        result = ""
+
+        if len(args) != 0 and len(kwargs) != 0:
+            raise ReverseError(
+                "Cannot Reverse the path using positional and "
+                "keyword arguments at the same time.")
+
+        use_kwargs = False
+        if len(kwargs) != 0:
+            use_kwargs = True
+
+        for group in self._match_groups:
+            if isinstance(group, str):
+                result += group
+                continue
+
+            if use_kwargs:
+                result += kwargs[group._name]
+                continue
+
+            result += args[group._index]
+
+        return result
+
+
+class Dispatcher:
+    """
+    A Routing Dispatcher.
+
+    :arg DefaultHandler: should be a subclass of
+        ``futurefinity.web.RequestHandler`` , which will be returned if a
+        handler cannot be found during the matching.
+    """
+    def __init__(self, DefaultHandler: Optional["web.RequestHandler"]=None):
+        self._rules = []
+        self._name_dict = {}
+
+        self._DefaultHandler = DefaultHandler
+
+    def add(
+        self, path: Union[Text, Pattern[Text]], *args,
+            Handler: Optional["web.RequestHandler"]=None,
+            name: Optional[Text]=None, **kwargs):
         """
-        Add a routing rule to the locator.
+        Add a `futurefinity.web.RequestHandler` to the `Dispatcher`.
+        If you specific a Handler in parameter, it will return nothing.
+
+        On the other hand, if you use it as a decorator, you should not pass
+        a handler to this function or it will cause unexcepted results.
+
+        That is::
+
+          @app.handlers.add("/")
+          class RootHandler(ReuqestHandler): pass
 
         :arg path: is a regular expression of the path that will be matched.
-        :arg handler: should be a ``futurefinity.web.RequestHandler``.
+        :arg Handler: should be a ``futurefinity.web.RequestHandler`` subclass.
         :arg \*args: all the other positional arguments will be come the
             path_args of the routing rule. The arguments passed here always
             have a higher priority in the matched routing rule, which means
@@ -68,51 +221,68 @@ class RoutingLocator:
             that if the same key also exsits in the regular expression,
             this one will override the one in the path.
         """
-        if isinstance(path, str):
-            path = re.compile(path)
+        def wrapper(Handler):
+            self.add(path=path, *args, Handler=Handler, name=name, **kwargs)
+            return Handler
 
-        if name is not None:
-            self.links_dict[name] = path
+        if Handler is None:
+            return wrapper
 
-        self.handlers_dict[path] = RoutingRule(handler=handler,
-                                               path_args=list(args),
-                                               path_kwargs=kwargs)
+        self.add_rules(
+            Rule(path=path, Handler=Handler, path_args=args, name=name,
+                 path_kwargs=kwargs))
 
-    def find(self, path: str) -> RoutingRule:
+    def add_rules(self, *args):
+        for rule in args:
+            if rule.name is not None:
+                if rule.name in self._name_dict.keys():
+                    raise KeyError(
+                        "Rule with the name {} already existed."
+                        .format(rule.name))
+
+                self._name_dict[rule.name] = rule
+            self._rules.append(rule)
+
+    def find(
+        self, path: Text) -> (
+            "web.RequestHandler", Tuple[Any], Dict[Text, Any]):
         """
         Find a handler that matches the path.
 
-        If a handler that matches the path cannot be found, the handler will be
-        the default_handler.
+        If a handler that matches the path cannot be found, the Handler will be
+        the DefaultHandler.
 
-        It returns a ``RoutingRule``.
+        It returns a ``routing.Rule``.
 
-        For the path_args and path_kwargs, the one passes though add method
+        For the path_args and path_kwargs, the ones defined in the Rule
         will have a higher priority.
         """
-        for (key, value) in self.handlers_dict.items():
-            matched_obj = key.fullmatch(path)
-
-            if matched_obj is None:
+        for rule in self._rules:
+            try:
+                Handler, path_args, path_kwargs = rule.match(path)
+            except NotMatched:
                 continue
 
-            path_args = []
-            path_args.extend(value.path_args)
-            link_args = matched_obj.groups()
-            if link_args is not None:
-                path_args.extend(link_args)
+            return Handler, path_args, path_kwargs
 
-            path_kwargs = {}
-            link_kwargs = matched_obj.groupdict()
-            if link_kwargs is not None:
-                path_kwargs.update(link_kwargs)
-
-            path_kwargs.update(value.path_kwargs)
-
-            return RoutingRule(handler=value.handler,
-                               path_args=path_args,
-                               path_kwargs=path_kwargs)
         else:
-            return RoutingRule(handler=self.default_handler,
-                               path_args=[],
-                               path_kwargs={})
+            if self._DefaultHandler is None:
+                raise NoMatchesFound(
+                    "No rules matched the given path, "
+                    "and a DefaultHandler is not set.")
+
+            return self._DefaultHandler, [], {}
+
+    def reverse(
+        self, name: Text, path_args: List[Text]=(),
+            path_kwargs: Dict[Text, Text]={}) -> Text:
+        if name not in self._name_dict.keys():
+            raise KeyError("Unknown Name.")
+
+        rule = self._name_dict[name]
+
+        return rule.reverse(*path_args, **path_kwargs)
+
+RoutingLocator = deprecated_attr(
+    Dispatcher, __name__,
+    "RoutingLocator is deprecated, use `routing.Dispatcher` instead.")

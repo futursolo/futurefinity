@@ -185,7 +185,7 @@ class ApplicationHTTPServer(server.HTTPServer):
 
         handler = self._request_handlers.get(
             incoming,
-            self.app.settings.get("default_handler", NotFoundHandler))
+            self.app.settings.get("DefaultHandler", NotFoundHandler))
 
         request_handler = handler(
             app=self.app,
@@ -213,14 +213,17 @@ class ApplicationHTTPServer(server.HTTPServer):
             self.connection.connection_lost()
 
     def initial_received(self, incoming: protocol.HTTPIncomingRequest):
-        matched_obj = self.app.handlers.find(incoming.path)
-        request_handler = matched_obj.handler(
+        Handler, matched_args, matched_kwargs = self.app.handlers.find(
+            incoming.path)
+
+        request_handler = Handler(
             app=self.app,
             server=self,
             request=incoming,
-            path_args=matched_obj.path_args,
-            path_kwargs=matched_obj.path_kwargs
+            path_args=matched_args,
+            path_kwargs=matched_kwargs
         )
+
         self._request_handlers[incoming] = request_handler
         if request_handler.stream_handler:
             self.use_stream = True
@@ -985,20 +988,23 @@ class StaticFileHandler(RequestHandler):
     """
 
     static_path = None  # Modify this to custom static path for this handler.
+
     async def handle_static_file(self, file_uri_path: str, *args, **kwargs):
         """
         Get the file from the given file path. Override this function if you
         want to customize the way to get file.
         """
         if not self.static_path:
-            self.static_path = self.settings.get("static_path", "static")
+            self.static_path = self.settings.get("static_path", "statics")
         file_path = os.path.join(self.static_path, file_uri_path)
 
         if not os.path.realpath(file_path).startswith(
          os.path.realpath(self.static_path)):
             raise HTTPError(403)
+
         if not os.path.exists(file_path):
             raise HTTPError(404)
+
         if os.path.isdir(file_path):
             raise HTTPError(403)
 
@@ -1041,10 +1047,12 @@ class Application:
     :arg allow_keep_alive: Default: `True`.
       Allow Keep Alive or not. This attribute will be passed to
       `server.HTTPServer` as an attribute.
+    :arg DefaultHandler: Default: `web.NotFoundHandler`.
+      Default handler when no path is matched.
     :arg debug: Enable Debug Feature.
     :arg csrf_protect: Enable Cross Site Request Forgeries(CSRF) protection.
     :arg static_path: Add a default static file handler with the static path.
-    :arg static_handler_path: Default: `r"/static/(?P<file>.*?)"`.
+    :arg static_handler_path: Default: `r"/statics/(?P<file>.*?)"`.
       This is an regualr expression that indicates routing path will be used
       for the default static file handler. The attribute `file` in the
       regualr expression will be passed to the default static file handler.
@@ -1057,7 +1065,9 @@ class Application:
         self._loop = self.settings.get(
             "loop", asyncio.get_event_loop())  # type: asyncio.BaseEventLoop
 
-        self.handlers = routing.RoutingLocator(default_handler=NotFoundHandler)
+        self.handlers = routing.Dispatcher(
+            DefaultHandler=self.settings.get(
+                "DefaultHandler", NotFoundHandler))
 
         self._tpl_loader = None
         self._sec_context = None
@@ -1069,6 +1079,10 @@ class Application:
                 loop=self._loop)
 
         if "security_secret" in self.settings.keys():
+            warnings.warn(
+                "aes_security option is deprecated. "
+                "To ensure security, AESContext should always be used.")
+
             if self.settings.get("aes_security", True):
                 self._sec_context = security.AESContext(
                     self.settings["security_secret"])
@@ -1076,10 +1090,19 @@ class Application:
                 self._sec_context = security.HMACSecurityContext(
                     self.settings["security_secret"])
 
+        else:
+            try:
+                self._sec_context = security.AESContext(
+                    self.settings["security_secret"])
+
+            except:
+                pass
+
         if "static_path" in self.settings.keys():
             static_handler_path = self.settings.get("static_handler_path",
-                                                    r"/static/(?P<file>.*?)")
-            self.handlers.add(static_handler_path, StaticFileHandler)
+                                                    r"/statics/(?P<file>.*?)")
+
+            self.handlers.add(static_handler_path, Handler=StaticFileHandler)
 
     @property
     def template_loader(self) -> templating.TemplateLoader:
@@ -1089,8 +1112,8 @@ class Application:
             Use `Application._tpl_loader` instead.
         """
         warnings.warn(
-            "`Application.template_loader` is deprecated. \
-                Use `Application._tpl_loader` instead.",
+            "`Application.template_loader` is deprecated. "
+            "Use `Application._tpl_loader` instead.",
             DeprecationWarning)
 
         return self._tpl_loader
@@ -1103,8 +1126,8 @@ class Application:
             Use `Application._sec_context` instead.
         """
         warnings.warn(
-            "`Application.security_object` is deprecated. \
-                Use `Application._sec_context` instead.",
+            "`Application.security_object` is deprecated. "
+            "Use `Application._sec_context` instead.",
             DeprecationWarning)
 
         return self._sec_context
@@ -1138,33 +1161,17 @@ class Application:
         srv = asyncio.ensure_future(f, loop=self._loop)
         return srv
 
-    def add_handler(
-        self, path: str, *args, name: Optional[str]=None,
-        handler: Optional[RequestHandler]=None, **kwargs) -> Optional[
-            Callable[[RequestHandler], RequestHandler]]:
+    @property
+    def add_handler(self) -> Callable[[Any], Optional[RequestHandler]]:
         """
+        .. deprecated:: 0.3
+            This method is deprecated. Use `Application.handlers.add` instead.
+
         Add a handler to handler list.
-        If you specific a handler in parameter, it will return nothing.
-
-        On the other hand, if you use it as a decorator, you should not pass
-        a handler to this function or it will cause unexcepted result.
-
-        That is::
-
-          @app.add_handler("/")
-          class RootHandler(ReuqestHandler): pass
-
-        or::
-
-          class RootHandler(ReuqestHandler): pass
-          app.add_handler("/", handler=RootHandler)
         """
-        def decorator(handler):
-            self.handlers.add(path, handler, *args, name=name, **kwargs)
-            return handler
+        warnings.warn(
+            "`Application.add_handler` is deprecated. "
+            "Use `Application.handlers.add` instead.",
+            DeprecationWarning)
 
-        if handler is not None:
-            decorator(handler)
-
-        else:
-            return decorator
+        return self.handlers.add

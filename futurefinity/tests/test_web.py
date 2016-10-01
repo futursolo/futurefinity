@@ -182,7 +182,6 @@ class StaticFileHandlerTestCase(TestCase):
     @run_until_complete
     async def test_static_file_handler_request(self):
         app = get_app(self._loop)
-        app.add_handler("/statics/(?P<file>.*?)", handler=StaticFileHandler)
 
         server = await app.listen(8888)
 
