@@ -32,6 +32,22 @@ import warnings
 import email.utils
 import collections.abc
 
+try:
+    from typing import Text
+    from typing import Awaitable
+    from typing import TYPE_CHECKING
+
+except:
+    from typing import TypeVar
+    import types
+
+    Text = str
+    Awaitable = collections.abc.Awaitable
+    TYPE_CHECKING = False
+
+
+
+
 
 default_mark = object()
 

@@ -30,7 +30,7 @@ class TestCommand(BaseTestCommand):
     def initialize_options(self):
         super().initialize_options()
         self.test_args = []
-    
+
     def finalize_options(self):
         if isinstance(self.test_args, str):
             self.test_args = self.test_args.split(" ")

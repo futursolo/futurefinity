@@ -15,14 +15,14 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str
+from futurefinity.utils import ensure_str, TYPE_CHECKING
 from .utils import InvalidStatementOperation, is_allowed_name
 
 from typing import Optional
 
 import typing
 
-if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from . import printer
 
 

@@ -15,17 +15,16 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import deprecated_attr, FutureFinityError
+from .utils import deprecated_attr, FutureFinityError, Text, TYPE_CHECKING
 
 from typing.re import Pattern
-from typing import Optional, Tuple, List, Any, Dict, Text, Union
+from typing import Optional, Tuple, List, Any, Dict, Union
 
 import re
-import typing
 import warnings
 import collections
 
-if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from futurefinity import web
 
 

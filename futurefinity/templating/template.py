@@ -15,6 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.utils import TYPE_CHECKING
+
 from . import parser
 from . import printer
 from . import namespace
@@ -26,7 +28,7 @@ import asyncio
 
 import typing
 
-if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from . import loader
 
 

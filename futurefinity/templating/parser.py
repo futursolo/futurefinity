@@ -16,14 +16,13 @@
 #   limitations under the License.
 
 from .utils import ParseError, ReadFinished
+from futurefinity.utils import TYPE_CHECKING
 
 from . import statement
 
 from typing import Union, Optional
 
-import typing
-
-if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from . import template
 
 _BEGIN_MARK = "<%"

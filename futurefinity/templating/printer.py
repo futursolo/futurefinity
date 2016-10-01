@@ -16,13 +16,14 @@
 #   limitations under the License.
 
 from .utils import CodeGenerationError
+from futurefinity.utils import TYPE_CHECKING
 
 from typing import Optional, Union
 
 import types
 import typing
 
-if hasattr(typing, "TYPE_CHECKING") and typing.TYPE_CHECKING:
+if TYPE_CHECKING:
     from . import template
     from . import statement
 
