@@ -109,7 +109,7 @@ class Namespace:
     @property
     def _tpl_result(self) -> str:
         if not self._finished:
-            raise TemplateRenderError
+            raise TemplateRenderError("Renderring has already been finished.")
 
         return self.__tpl_result__
 

@@ -38,7 +38,7 @@ class TemplateTestCase(TestCase):
     </head>
     <body>
         \n
-This is body.
+This is body. The old title is Old Title.
 
     </body>
 </html>

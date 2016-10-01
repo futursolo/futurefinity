@@ -6,7 +6,6 @@ recursive-include . *.py
 recursive-include futurefinity/tests *
 recursive-include docs *
 recursive-include examples *
-exclude *.pyc
-exclude *.pyo
-global-exclude __pycache__/*.pyc
+global-exclude *.pyo
+global-exclude *.pyc
 prune docs/_build

@@ -18,6 +18,7 @@
 """
 FutureFinity Test Suite.
 """
+
 from futurefinity.tests.__main__ import main
 from setuptools.command.test import test as BaseTestCommand
 
@@ -29,6 +30,10 @@ class TestCommand(BaseTestCommand):
     def initialize_options(self):
         super().initialize_options()
         self.test_args = []
+    
+    def finalize_options(self):
+        if isinstance(self.test_args, str):
+            self.test_args = self.test_args.split(" ")
 
     def run_tests(self):
         main(self.test_args)

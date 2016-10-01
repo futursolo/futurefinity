@@ -58,3 +58,9 @@ target/
 
 # PyPI Upload Configuration
 .pypirc
+
+# macOS Folder Customization
+.DS_Store
+
+# Ignore Visual Studio Code Workspace Files
+.vscode/
