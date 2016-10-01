@@ -45,7 +45,7 @@ class ReverseError(NotMatched):
 
 
 class _ReMatchGroup:
-    _named_group_re = re.compile(r"\?\P\<(.*)\>.*")
+    _named_group_re = re.compile(r"\?P<(.*)>.*")
 
     def __init__(self, group_str: Text, index: int):
         self._group_str = group_str
