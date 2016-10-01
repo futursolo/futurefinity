@@ -1079,24 +1079,23 @@ class Application:
                 loop=self._loop)
 
         if "security_secret" in self.settings.keys():
-            warnings.warn(
-                "aes_security option is deprecated. "
-                "To ensure security, AESContext should always be used.")
+            if "aes_security" in self.settings.keys():
+                warnings.warn(
+                    "aes_security option is deprecated. "
+                    "To ensure security, AESContext should always be used.",
+                    DeprecationWarning)
 
-            if self.settings.get("aes_security", True):
-                self._sec_context = security.AESContext(
-                    self.settings["security_secret"])
+                if self.settings.get("aes_security", True):
+                    self._sec_context = security.AESContext(
+                        self.settings["security_secret"])
+
+                else:
+                    self._sec_context = security.HMACSecurityContext(
+                        self.settings["security_secret"])
+
             else:
-                self._sec_context = security.HMACSecurityContext(
-                    self.settings["security_secret"])
-
-        else:
-            try:
                 self._sec_context = security.AESContext(
-                    self.settings["security_secret"])
-
-            except:
-                pass
+                        self.settings["security_secret"])
 
         if "static_path" in self.settings.keys():
             static_handler_path = self.settings.get("static_handler_path",
