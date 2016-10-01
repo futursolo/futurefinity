@@ -736,6 +736,9 @@ class RequestHandler:
                     break
         return match
 
+    def when_write_initial(self):
+        pass
+
     def write_initial(self):
         """
         Send the Initial Part(e.g.: Headers) of a Response to the remote.
@@ -751,6 +754,11 @@ class RequestHandler:
         """
         if self._initial_written:
             raise HTTPError(500, "Cannot write initial twice.")
+
+        when_write_initial_result = self.when_write_initial()
+
+        if inspect.isawaitable(when_write_initial_result):
+            asyncio.ensure_future(when_write_initial_result, loop=self._loop)
 
         if "content-type" not in self._headers.keys():
             self.set_header("content-type", "text/html; charset=utf-8;")
@@ -793,6 +801,9 @@ class RequestHandler:
         self.connection.write_body(self._response_body)
         self._response_body.clear()
 
+    def when_finish(self):
+        pass
+
     def finish(self, text: Optional[Union[str, bytes]]=None):
         """
         Finish the request, send the response. If a text is passed, it will be
@@ -803,6 +814,11 @@ class RequestHandler:
         if self._finished:
             raise HTTPError(
                 500, "Cannot Finish the request when it has already finished.")
+
+        when_finish_result = self.when_finish()
+
+        if inspect.isawaitable(when_finish_result):
+            asyncio.ensure_future(when_finish_result, loop=self._loop)
 
         if text is not None:
             self.write(text)
@@ -858,6 +874,9 @@ class RequestHandler:
             clear_text=True)
 
         self.finish()
+
+    async def before(self):
+        pass
 
     async def head(self, *args, **kwargs):
         """
@@ -991,8 +1010,12 @@ class RequestHandler:
             if self.settings.get("csrf_protect", False
                                  ) and self.request._body_expected is True:
                 self.check_csrf_value()
+
+            await self.before()
+
             body = await getattr(self, self.request.method.lower())(
                 *self.path_args, **self.path_kwargs)
+
             if not self._body_written:
                 self.write(body)
 
