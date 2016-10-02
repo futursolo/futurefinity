@@ -19,6 +19,8 @@
 FutureFinity Logging Facility
 """
 
+from .utils import Text, TYPE_CHECKING
+
 from typing import Union, Callable
 
 import sys
@@ -38,7 +40,11 @@ try:
 except:
     _color_term_supported = False
 
-get_logger = getattr(logging, "getLogger")
+if TYPE_CHECKING:
+    T = Callable[[], logging.Logger]
+    T2 = Callable[[Text], logging.Logger]
+
+get_logger = getattr(logging, "getLogger")  # type: T
 
 
 class TermColors:
@@ -66,7 +72,7 @@ class TermColors:
     default = 9
 
 
-def gen_color_code(color_num: int, is_bg: bool=False) -> str:
+def gen_color_code(color_num: int, is_bg: bool=False) -> Text:
     """
     Return proper color code from `color_num` from `TermColors`.
     """
@@ -95,7 +101,7 @@ class _LoggingFmt(str):
 
         self._color_enabled = True
 
-    def _color_levelname(self, levelname: str) -> str:
+    def _color_levelname(self, levelname: Text) -> Text:
         if (self._color_enabled and _color_term_supported and
            levelname in self._colors.keys()):
 
@@ -104,7 +110,7 @@ class _LoggingFmt(str):
 
         return levelname
 
-    def set_level_color(self, levelname: str, color: int):
+    def set_level_color(self, levelname: Text, color: int):
         self._colors[levelname] = color
 
     def enable_color(self):
@@ -113,7 +119,7 @@ class _LoggingFmt(str):
     def disable_color(self):
         self._color_enabled = False
 
-    def format(self, *args, **kwargs) -> str:
+    def format(self, *args, **kwargs) -> Text:
         fmt_kwargs = {}
         fmt_kwargs.update(**kwargs)
 
@@ -147,5 +153,4 @@ set_log_level(global_log, logging.INFO)
 
 getattr(global_log, "addHandler")(channel)
 
-get_child_logger = getattr(global_log, "getChild")  # type: Callable[
-# [str], logging.Logger]
+get_child_logger = getattr(global_log, "getChild")  # type: T2

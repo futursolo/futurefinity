@@ -15,8 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str, TYPE_CHECKING
 from .utils import InvalidStatementOperation, is_allowed_name
+from futurefinity.utils import ensure_str, TYPE_CHECKING, Text
 
 from typing import Optional
 
@@ -32,12 +32,12 @@ class StatementModifier:
         "from": 1
     }
 
-    def __init__(self, keyword: str, rest: Optional[str]=None):
+    def __init__(self, keyword: Text, rest: Optional[Text]=None):
         self._keyword = keyword
         self._rest = rest.strip() if rest else ""
 
     @staticmethod
-    def parse_modifier(smt_str: str) -> (Optional["StatementModifier"], str):
+    def parse_modifier(smt_str: Text) -> (Optional["StatementModifier"], Text):
         _splitted = smt_str.strip().split(" ", maxsplit=1)
 
         if _splitted[0] not in StatementModifier._modifier_args.keys():
@@ -64,7 +64,7 @@ class StatementModifier:
 
         return (StatementModifier(modifier_keyword, modifier_rest), rest_str)
 
-    def gen_modifier(self) -> str:
+    def gen_modifier(self) -> Text:
         return "{} {}".format(self._keyword, self._rest).strip()
 
 
@@ -72,8 +72,8 @@ class Statement:
     _keywords = ()
 
     def __init__(self,
-                 keyword: Optional[str]=None,
-                 rest: Optional[str]=None,
+                 keyword: Optional[Text]=None,
+                 rest: Optional[Text]=None,
                  modifier: Optional[StatementModifier]=None,
                  smt_at: Optional[int]=None):
         self._statements = []
@@ -92,7 +92,7 @@ class Statement:
         self._should_unindent = False
 
     def raise_invalid_operation(
-     self, message: str, from_err: Optional[Exception]=None):
+     self, message: Text, from_err: Optional[Exception]=None):
         err_str = "{} at line {}.".format(message, self._smt_at)
         if from_err:
             raise InvalidStatementOperation(err_str) from from_err
@@ -138,13 +138,13 @@ class Statement:
             "Method print_code is not implemented",
             from_err=NotImplementedError())
 
-    def gen_smt_code(self) -> str:
+    def gen_smt_code(self) -> Text:
         modifier = self._modifier.gen_modifier() if self._modifier else ""
 
         return "{} {} {}".format(modifier, self._keyword, self._rest).strip()
 
     @staticmethod
-    def parse_statement(smt_str: str, smt_at: int) -> "Statement":
+    def parse_statement(smt_str: Text, smt_at: int) -> "Statement":
         modifier, rest_str = StatementModifier.parse_modifier(smt_str)
 
         splitted = rest_str.strip().split(" ", 1)
@@ -362,7 +362,7 @@ class OutputStatement(Statement):
 
 
 class StrStatement(Statement):
-    def __init__(self, smt_str: str, *args, **kwargs):
+    def __init__(self, smt_str: Text, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._smt_str = smt_str

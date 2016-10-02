@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import TYPE_CHECKING
+from futurefinity.utils import TYPE_CHECKING, Text
 
 from . import parser
 from . import printer
@@ -34,11 +34,11 @@ if TYPE_CHECKING:
 
 class Template:
     def __init__(
-        self, tpl_str: str,
-        template_name: str="<string>",
-        template_path: str="<string>",
+        self, tpl_str: Text,
+        template_name: Text="<string>",
+        template_path: Text="<string>",
         loader: Optional["loader.TemplateLoader"]=None,
-        default_escape: str="html",
+        default_escape: Text="html",
             escape_url_with_plus: bool=True):
         self._tpl_str = tpl_str
 
@@ -75,8 +75,8 @@ class Template:
         return tpl_globals
 
     def _get_namespace(
-        self, tpl_globals: Optional[Dict[str, Any]]=None,
-            namespace_args: List[Any]=(), namespace_kwargs: Dict[str, Any]={}):
+        self, tpl_globals: Optional[Dict[Text, Any]]=None,
+            namespace_args: List[Any]=(), namespace_kwargs: Dict[Text, Any]={}):
         tpl_globals = tpl_globals or self._tpl_globals
         exec(self._compiled_code, tpl_globals)
 
@@ -86,7 +86,7 @@ class Template:
 
         return tpl_namespace
 
-    async def render_str(self, **kwargs) -> str:
+    async def render_str(self, **kwargs) -> Text:
         tpl_globals = kwargs
         tpl_globals.update(self._tpl_globals)
 

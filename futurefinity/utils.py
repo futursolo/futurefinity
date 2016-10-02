@@ -38,16 +38,14 @@ try:
     from typing import TYPE_CHECKING
 
 except:
-    from typing import TypeVar
-    import types
+    from typing import TypeVar, Generic, T_co
 
     Text = str
-    Awaitable = collections.abc.Awaitable
+
+    class Awaitable(Generic[T_co], extra=collections.abc.Awaitable):
+        __slots__ = ()
+
     TYPE_CHECKING = False
-
-
-
-
 
 default_mark = object()
 
@@ -78,7 +76,7 @@ def ensure_bytes(var: Any) -> bytes:
     return strvar.encode()
 
 
-def ensure_str(var: Any) -> str:
+def ensure_str(var: Any) -> Text:
     """
     Try to convert passed variable to a str object.
     """
@@ -164,7 +162,7 @@ class MagicDict(collections.abc.MutableMapping):
     def __iter__(self):
         return iter(self._dict)
 
-    def __str__(self):
+    def __str__(self) -> Text:
         content_list = [(key, value) for (key, value) in self.items()]
 
         return "MagicDict({})".format(str(content_list))
@@ -186,27 +184,27 @@ class TolerantMagicDict(MagicDict):
     **This doesn't mean that the normal MagicDict is mean.**
     """
 
-    def add(self, name: str, value: str):
+    def add(self, name: Text, value: Text):
         lower_name = name.lower()
         return MagicDict.add(self, lower_name, value)
 
-    def get_list(self, name: str, default: Optional[str]=None):
+    def get_list(self, name: Text, default: Optional[Text]=None):
         lower_name = name.lower()
         return MagicDict.get_list(self, lower_name, default=default)
 
-    def get_first(self, name: str, default: Optional[str]=None):
+    def get_first(self, name: Text, default: Optional[Text]=None):
         lower_name = name.lower()
         return MagicDict.get_first(self, lower_name, default=default)
 
-    def __setitem__(self, name: str, value: str):
+    def __setitem__(self, name: Text, value: Text):
         lower_name = name.lower()
         return MagicDict.__setitem__(self, lower_name, value)
 
-    def __getitem__(self, name: str):
+    def __getitem__(self, name: Text):
         lower_name = name.lower()
         return MagicDict.__getitem__(self, lower_name)
 
-    def __delitem__(self, name: str):
+    def __delitem__(self, name: Text):
         lower_name = name.lower()
         return MagicDict.__delitem__(self, lower_name)
 
@@ -223,7 +221,7 @@ class TolerantMagicDict(MagicDict):
 
 
 def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
-                                  datetime.datetime]]=None) -> str:
+                                  datetime.datetime]]=None) -> Text:
     """
     Make a HTTP Protocol timestamp.
     """
@@ -241,7 +239,7 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
 
 
 class _DeprecatedAttr:
-    def __init__(self, attr: Any, message: str):
+    def __init__(self, attr: Any, message: Text):
         self._attr = attr
         self._message = message
 
@@ -254,7 +252,7 @@ def deprecated_attr(attr, mod_name, message):
     mod = sys.modules[mod_name]
 
     class _ModWithDeprecatedAttrs:
-        def __getattr__(self, name: str) -> Any:
+        def __getattr__(self, name: Text) -> Any:
             mod_attr = getattr(mod, name)
 
             if isinstance(mod_attr, _DeprecatedAttr):
@@ -262,10 +260,10 @@ def deprecated_attr(attr, mod_name, message):
 
             return mod_attr
 
-        def __setattr__(self, name: str, attr: Any):
+        def __setattr__(self, name: Text, attr: Any):
             return setattr(mod, name, attr)
 
-        def __dir__(self) -> List[str]:
+        def __dir__(self) -> List[Text]:
             return dir(mod)
 
     if not isinstance(mod, _ModWithDeprecatedAttrs):

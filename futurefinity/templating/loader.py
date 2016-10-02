@@ -15,6 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.utils import Text
 from .utils import TemplateNotFoundError
 
 from . import template
@@ -31,7 +32,7 @@ class BaseLoader:
     def __init__(
         self, loop: Optional[asyncio.BaseEventLoop]=None,
         cache_template: bool=True,
-        default_escape: str="html",
+        default_escape: Text="html",
         escape_url_with_plus: bool=True,
             executor: Optional[concurrent.futures.Executor]=None):
         self._loop = loop or asyncio.get_event_loop()
@@ -46,7 +47,7 @@ class BaseLoader:
 
         self._template_cache = {}
 
-    async def load_template(self, template_name: str) -> template.Template:
+    async def load_template(self, template_name: Text) -> template.Template:
         raise NotImplementedError
 
 
@@ -56,7 +57,9 @@ class TemplateLoader(BaseLoader):
 
     The Default template loader of FutureFinity.
     """
-    def __init__(self, template_path: Union[list, str], *args, **kwargs):
+    def __init__(
+        self,
+            template_path: Union[List[Text], Text], *args, **kwargs):
         super().__init__(*args, **kwargs)
         if isinstance(template_path, str):
             self._template_path = [template_path]
@@ -67,7 +70,7 @@ class TemplateLoader(BaseLoader):
         else:
             raise ValueError("Unsupported template_path type.")
 
-    def _find_abs_path(self, template_name: str) -> str:
+    def _find_abs_path(self, template_name: Text) -> Text:
         """
         Find the absolute path of the template from the template_path.
 
@@ -83,13 +86,13 @@ class TemplateLoader(BaseLoader):
             "No such file {} in {}.".format(
                 template_name, repr(self._template_path)))
 
-    def _load_tpl_str_sync(self, template_name: str):
+    def _load_tpl_str_sync(self, template_name: Text):
         file_path = self._find_abs_path(template_name)
 
         with open(file_path) as tpl:
             return tpl.read()
 
-    async def _load_tpl_str(self, template_name: str) -> str:
+    async def _load_tpl_str(self, template_name: Text) -> Text:
         """
         Load the template content asynchronously through a
         `concurrent.futures.ThreadPoolExecutor`.
@@ -97,7 +100,7 @@ class TemplateLoader(BaseLoader):
         return await self._loop.run_in_executor(
             self._executor, self._load_tpl_str_sync, template_name)
 
-    async def load_template(self, template_name: str) -> template.Template:
+    async def load_template(self, template_name: Text) -> template.Template:
         """
         Load and parse the template.
         """

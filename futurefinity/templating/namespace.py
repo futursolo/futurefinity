@@ -15,8 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import TYPE_CHECKING
 from .utils import TemplateRenderError
+from futurefinity.utils import TYPE_CHECKING, Text
 
 from typing import Dict, Any, Dict, Callable, Union
 
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 class BlockAttrs:
     _namespace = None  # type: Namespace
 
-    def __getattr__(self, name: str) -> Callable[[], Any]:
+    def __getattr__(self, name: Text) -> Callable[[], Any]:
         if name not in self._namespace._tpl._root._block_statements.keys():
             raise TemplateRenderError from KeyError("Unknown Block Name.")
 
@@ -53,7 +53,7 @@ class BlockAttrs:
 
         return wrapper
 
-    def __setattr__(self, name: str, value: Any):
+    def __setattr__(self, name: Text, value: Any):
         raise NotImplementedError
 
     __getitem__ = __getattr__
@@ -61,7 +61,7 @@ class BlockAttrs:
 
 
 class Namespace:
-    def __init__(self, tpl: "template.Template", tpl_globals: Dict[str, Any]):
+    def __init__(self, tpl: "template.Template", tpl_globals: Dict[Text, Any]):
         self._tpl = tpl
         self._tpl_globals = tpl_globals
 
@@ -85,14 +85,14 @@ class Namespace:
         self._updated_block_fns = {}
 
     @property
-    def child_body(self) -> str:
+    def child_body(self) -> Text:
         if self._child_body is None:
             raise TemplateRenderError("There's no child body.")
 
         return self._child_body
 
     @property
-    def blocks(self) -> Dict[str, Any]:
+    def blocks(self) -> Dict[Text, Any]:
         class CurrentBlockAttrs(BlockAttrs):
             _namespace = self
 
@@ -106,7 +106,7 @@ class Namespace:
         return self._parent
 
     @property
-    def _tpl_result(self) -> str:
+    def _tpl_result(self) -> Text:
         if not self._finished:
             raise TemplateRenderError("Renderring has already been finished.")
 
@@ -117,7 +117,7 @@ class Namespace:
         return self._tpl._loader
 
     @property
-    def _sub_globals(self) -> Dict[str, Any]:
+    def _sub_globals(self) -> Dict[Text, Any]:
         sub_globals = {}
 
         sub_globals.update(self._tpl_globals)
@@ -127,7 +127,7 @@ class Namespace:
 
         return sub_globals
 
-    async def _include_tpl(self, template_name: str):
+    async def _include_tpl(self, template_name: Text):
         tpl = await self._loader.load_template(template_name)
 
         tpl_namespace = tpl._get_namespace(tpl_globals=self._sub_globals)
@@ -138,7 +138,7 @@ class Namespace:
     def _update_blocks(self, **kwargs):
         self._updated_block_fns.update(**kwargs)
 
-    def _update_child_body(self, child_body: str):
+    def _update_child_body(self, child_body: Text):
         if self._child_body is not None:
             raise TemplateRenderError("There's already a child body.")
 
@@ -161,7 +161,7 @@ class Namespace:
 
         self.__tpl_result__ = self._parent._tpl_result
 
-    async def _add_parent(self, template_name: str):
+    async def _add_parent(self, template_name: Text):
         if self._parent is not None:
             raise TemplateRenderError(
                 "A template can only inherit from one parent template.")
@@ -179,15 +179,15 @@ class Namespace:
         await self._inherit_tpl()
         self._finished = True
 
-    async def _render_body_str(self) -> str:
+    async def _render_body_str(self) -> Text:
         raise NotImplementedError
 
     @property
-    def default_escape(self) -> Callable[[str], str]:
+    def default_escape(self) -> Callable[[Text], Text]:
         return self._default_escape
 
     @default_escape.setter
-    def default_escape(self, default_type: Union[str, Callable[[str], str]]):
+    def default_escape(self, default_type: Union[Text, Callable[[Text], Text]]):
         if default_type in self._escape_types.keys():
             self._default_escape = self._escape_types[default_type]
 
@@ -212,22 +212,22 @@ class Namespace:
 
         self._escape_url_with_plus = value
 
-    def no_escape(self, raw_str: str) -> str:
+    def no_escape(self, raw_str: Text) -> Text:
         return raw_str
 
-    def escape_html(self, raw_str: str) -> str:
+    def escape_html(self, raw_str: Text) -> Text:
         return html.escape(raw_str)
 
-    def escape_json(self, raw_str: str) -> str:
+    def escape_json(self, raw_str: Text) -> Text:
         return json.dumps(raw_str)
 
-    def escape_url_plus(self, raw_str: str) -> str:
+    def escape_url_plus(self, raw_str: Text) -> Text:
         return urllib.parse.quote_plus(raw_str)
 
-    def escape_url_no_plus(self, raw_str: str) -> str:
+    def escape_url_no_plus(self, raw_str: Text) -> Text:
         return urllib.parse.quote(raw_str)
 
-    def escape_url(self, raw_str: str) -> str:
+    def escape_url(self, raw_str: Text) -> Text:
         if self._escape_url_with_plus:
             return self.escape_url_plus(raw_str)
         else:

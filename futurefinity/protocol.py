@@ -16,7 +16,7 @@
 #   limitations under the License.
 
 from .utils import (MagicDict, TolerantMagicDict,
-                    FutureFinityError, ensure_str, ensure_bytes)
+                    FutureFinityError, ensure_str, ensure_bytes, Text)
 from . import log
 from . import security
 from ._version import version as futurefinity_version
@@ -131,7 +131,7 @@ class CapitalizedHTTPv1Headers(dict):
             "proxy-authorization": "Proxy-Authorization",
         })
 
-    def __getitem__(self, key: str) -> str:
+    def __getitem__(self, key: Text) -> Text:
         if key not in self:
             self[key] = key.title()
 
@@ -148,7 +148,7 @@ class HTTPHeaders(TolerantMagicDict):
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Headers.
     """
-    def __str__(self) -> str:
+    def __str__(self) -> Text:
         content_list = [(key, value) for (key, value) in self.items()]
         return "HTTPHeaders({})".format(str(content_list))
 
@@ -156,7 +156,7 @@ class HTTPHeaders(TolerantMagicDict):
         return HTTPHeaders(self)
 
     @staticmethod
-    def parse(data: Union[str, bytes, list,
+    def parse(data: Union[Text, bytes, list,
                           TolerantMagicDict]) -> "HTTPHeaders":
         headers = HTTPHeaders()
         headers.load_headers(data)
@@ -173,7 +173,7 @@ class HTTPHeaders(TolerantMagicDict):
 
         return ensure_bytes(headers_str)
 
-    def load_headers(self, data: Union[str, bytes, list, TolerantMagicDict]):
+    def load_headers(self, data: Union[Text, bytes, list, TolerantMagicDict]):
         """
         Load HTTP Headers from another object.
 
@@ -233,11 +233,11 @@ class HTTPMultipartFileField:
     """
     Containing a file as a http form field.
     """
-    def __init__(self, fieldname: str, filename: str,
+    def __init__(self, fieldname: Text, filename: Text,
                  content: bytes,
-                 content_type: str="application/octet-stream",
+                 content_type: Text="application/octet-stream",
                  headers: Optional[HTTPHeaders]=None,
-                 encoding: str="binary"):
+                 encoding: Text="binary"):
         self.fieldname = fieldname
         self.filename = filename
         self.content = content
@@ -245,7 +245,7 @@ class HTTPMultipartFileField:
         self.headers = headers or HTTPHeaders()
         self.encoding = encoding
 
-    def __str__(self) -> str:
+    def __str__(self) -> Text:
         return ("HTTPMultipartFileField(filename={filename}, "
                 "content_type={content_type}, "
                 "headers={headers}, "
@@ -293,7 +293,7 @@ class HTTPMultipartBody(TolerantMagicDict):
         TolerantMagicDict.__init__(self, *args, **kwargs)
 
     @staticmethod
-    def parse(content_type: str, data: bytes) -> "HTTPMultipartBody":
+    def parse(content_type: Text, data: bytes) -> "HTTPMultipartBody":
         """
         Parse HTTP v1 Multipart Body.
 
@@ -365,7 +365,7 @@ class HTTPMultipartBody(TolerantMagicDict):
 
         return body_args
 
-    def assemble(self) -> Tuple[bytes, str]:
+    def assemble(self) -> Tuple[bytes, Text]:
         """
         Generate HTTP v1 Body to bytes.
 
@@ -398,11 +398,11 @@ class HTTPMultipartBody(TolerantMagicDict):
         body += full_boundary + b"--" + _CRLF_BYTES_MARK
         return body, content_type
 
-    def __str__(self) -> str:
+    def __str__(self) -> Text:
         # Multipart Body is not printable.
         return object.__str__(self)
 
-    def __repr__(self) -> str:
+    def __repr__(self) -> Text:
         # Multipart Body is not printable.
         return object.__repr__(self)
 
@@ -440,7 +440,7 @@ class HTTPIncomingMessage:
         return self.__is_chunked_body
 
     @property
-    def scheme(self) -> str:
+    def scheme(self) -> Text:
         """
         Return the scheme that the connection used.
         """
@@ -498,8 +498,8 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     This class represents a Incoming HTTP Request.
     """
-    def __init__(self, method: str,
-                 origin_path: str,
+    def __init__(self, method: Text,
+                 origin_path: Text,
                  headers: HTTPHeaders,
                  connection: "HTTPv1Connection",
                  http_version: int=10,
@@ -537,7 +537,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._cookies
 
     @property
-    def path(self) -> str:
+    def path(self) -> Text:
         """
         Parse path and return the path in `str`.
         """
@@ -546,7 +546,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._path
 
     @property
-    def host(self) -> str:
+    def host(self) -> Text:
         """
         Parse host and return the host in `str`.
         """
@@ -598,7 +598,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
         return self._body_args
 
-    def __str__(self) -> str:
+    def __str__(self) -> Text:
         return ("HTTPIncomingRequest("
                 "method={method}, "
                 "path={path}, "
@@ -650,7 +650,7 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
             self._cookies = cookies
         return self._cookies
 
-    def __str__(self) -> str:
+    def __str__(self) -> Text:
         return ("HTTPIncomingResponse("
                 "status_code={status_code}, "
                 "http_version={http_version}, "
@@ -758,8 +758,8 @@ class HTTPv1Connection:
     """
     def __init__(self, controller: BaseHTTPConnectionController,
                  is_client: bool, http_version: int=10,
-                 use_tls: bool=False, sockname: Optional[Tuple[str, int]]=None,
-                 peername: Optional[Tuple[str, int]]=None,
+                 use_tls: bool=False, sockname: Optional[Tuple[Text, int]]=None,
+                 peername: Optional[Tuple[Text, int]]=None,
                  allow_keep_alive: bool=True):
         self.http_version = http_version
         self.is_client = is_client
@@ -1031,8 +1031,8 @@ class HTTPv1Connection:
             return
 
     def write_initial(
-        self, http_version: Optional[int]=None, method: str="GET",
-            path: str="/", status_code: int=200,
+        self, http_version: Optional[int]=None, method: Text="GET",
+            path: Text="/", status_code: int=200,
             headers: Optional[HTTPHeaders]=None):
         """
         Write the initial to remote.

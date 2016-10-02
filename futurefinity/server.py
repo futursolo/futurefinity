@@ -21,7 +21,7 @@ FutureFinity Web Application, which can parse http request, initialize
 right RequestHandler and make response to client.
 """
 
-from .utils import ensure_str, ensure_bytes, FutureFinityError
+from .utils import FutureFinityError
 from . import protocol
 
 from typing import Optional

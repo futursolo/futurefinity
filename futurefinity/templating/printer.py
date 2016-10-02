@@ -16,7 +16,7 @@
 #   limitations under the License.
 
 from .utils import CodeGenerationError
-from futurefinity.utils import TYPE_CHECKING
+from futurefinity.utils import TYPE_CHECKING, Text
 
 from typing import Optional, Union
 
@@ -41,7 +41,7 @@ class CodePrinter:
 
         self._finished = False
 
-    def raise_code_gen_error(self, message: str,
+    def raise_code_gen_error(self, message: Text,
                              from_err: Optional[Exception]=None):
         err_str = "{} in file {}.".format(
             message, self._tpl._template_path)
@@ -78,7 +78,7 @@ class CodePrinter:
 
         self._indent_num -= 1
 
-    def write_line(self, line_str: str, smt_at: Union[str, int]="<unknown>"):
+    def write_line(self, line_str: Text, smt_at: Union[Text, int]="<unknown>"):
         if self._finished:
             raise CodeGenerationError(
                 "Code Generation has already been finished.")
@@ -97,7 +97,7 @@ class CodePrinter:
         return self._finished
 
     @property
-    def plain_code(self) -> str:
+    def plain_code(self) -> Text:
         self._finished = True
         return self._committed_code
 

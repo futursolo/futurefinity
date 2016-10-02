@@ -16,7 +16,7 @@
 #   limitations under the License.
 
 from .utils import ParseError, ReadFinished
-from futurefinity.utils import TYPE_CHECKING
+from futurefinity.utils import TYPE_CHECKING, Text
 
 from . import statement
 
@@ -43,8 +43,8 @@ class TemplateParser:
 
         self._parse()
 
-    def raise_parse_error(self, message: str,
-                          line: Union[int, str]="<unknown>",
+    def raise_parse_error(self, message: Text,
+                          line: Union[int, Text]="<unknown>",
                           from_err: Optional[Exception]=None):
         err_str = "{} in file {} at line {}.".format(
             message, self._tpl._template_path, line)
@@ -163,7 +163,7 @@ class TemplateParser:
             self.raise_parse_error(
                 "Redundant Unindent Statement", self.current_at)
 
-    def _find_next_statement(self) -> Union[statement.Statement, str]:
+    def _find_next_statement(self) -> Union[statement.Statement, Text]:
         if self._finished:
             raise ParseError("Parsing has already been finished.")
 
