@@ -40,6 +40,7 @@ def get_app(loop: Optional[asyncio.BaseEventLoop]=None,
     return Application(
         allow_keep_alive=allow_keep_alive, debug=True, loop=loop,
         static_path=get_tests_path("statics"),
+        template_path=get_tests_path("tpls"),
         csrf_protect=csrf_protect,
         security_secret=get_random_str(32))
 
@@ -387,3 +388,91 @@ class RedirectTestCase(TestCase):
 
         assert result.status == 302
         assert result.getheader("location") == "/redirected"
+
+
+class RenderTestCase(TestCase):
+    @run_until_complete
+    async def test_redirect_request(self):
+        app = get_app(loop=self._loop)
+
+        @app.add_handler("/")
+        class TestHandler(RequestHandler):
+            async def get(self, *args, **kwargs):
+                return await self.render("index.html")
+
+        server = await app.listen(8888)
+
+        try:
+            result = await self._loop.run_in_executor(
+                None, functools.partial(
+                    urllib.request.urlopen,
+                    "http://127.0.0.1:8888/"))
+
+        finally:
+            server.close()
+            await server.wait_closed()
+
+        assert result.status == 200
+        assert result.read() == """\
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Index Title</title>
+    </head>
+    <body>
+        \n
+This is body. The old title is Old Title.
+
+    </body>
+</html>
+""".encode()
+
+
+class NotFoundHandlerTestCase(TestCase):
+    @run_until_complete
+    async def test_redirect_request(self):
+        app = get_app(loop=self._loop)
+
+        server = await app.listen(8888)
+
+        try:
+            result = await self._loop.run_in_executor(
+                None, functools.partial(
+                    urllib.request.urlopen,
+                    "http://127.0.0.1:8888/"))
+
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+
+        finally:
+            server.close()
+            await server.wait_closed()
+
+
+class ErrorOnHandleRequestTestCase(TestCase):
+    @run_until_complete
+    async def test_redirect_request(self):
+        app = get_app(loop=self._loop)
+
+        @app.add_handler("/")
+        class Testhandler(RequestHandler):
+            async def _handle_request(self, *args, **kwargs):
+                raise NotImplementedError
+
+        server = await app.listen(8888)
+
+        try:
+            result = await self._loop.run_in_executor(
+                None, functools.partial(
+                    urllib.request.urlopen,
+                    "http://127.0.0.1:8888/"))
+
+        except http.client.RemoteDisconnected as e:
+            pass
+            # Connection will be closed directly
+            # if there is an improper handled error in
+            # RequestHandler._handle_request.
+
+        finally:
+            server.close()
+            await server.wait_closed()

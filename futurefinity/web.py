@@ -669,7 +669,7 @@ class RequestHandler:
 
     async def render(
         self, template_name: Text,
-            template_dict: Optional[Mapping[Text, Text]]=None):
+            template_dict: Mapping[Text, Text]={}):
         """
         Render the template with render_str, and write them into response
         body directly.
