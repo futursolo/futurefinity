@@ -111,6 +111,7 @@ class TemplateLoader(BaseLoader):
 
         parsed_tpl = template.Template(
             tpl_str, template_name=template_name,
+            template_path=self._find_abs_path(template_name),
             default_escape=self._default_escape,
             loader=self,
             escape_url_with_plus=self._escape_url_with_plus)

@@ -18,7 +18,7 @@
 from .utils import InvalidStatementOperation, is_allowed_name
 from futurefinity.utils import ensure_str, TYPE_CHECKING, Text
 
-from typing import Optional
+from typing import Optional, Union
 
 import typing
 
@@ -75,7 +75,7 @@ class Statement:
                  keyword: Optional[Text]=None,
                  rest: Optional[Text]=None,
                  modifier: Optional[StatementModifier]=None,
-                 smt_at: Optional[int]=None):
+                 smt_at: Union[int, str]="<unknown>"):
         self._statements = []
         self._finished = False
 

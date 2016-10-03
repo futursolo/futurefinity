@@ -242,7 +242,7 @@ class TemplateParser:
 
             if isinstance(smt, str):
                 self._append_to_current(statement.StrStatement(
-                    smt, smt_at=self.current_at))
+                    smt, smt_at=self._current_at))
                 continue
 
             try:

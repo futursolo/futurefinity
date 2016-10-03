@@ -37,7 +37,7 @@ install:
   - python -m pip install coveralls
 
 # command to run tests
-script: python -m coverage run --source=futurefinity -m futurefinity.tests
+script: python -m coverage run --source=futurefinity setup.py test
 
 after_success:
   coveralls
