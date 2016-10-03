@@ -65,3 +65,16 @@ This is body. The old title is Old Title.
 
         third_result = await tpl.render_str(cond=False, sub_cond=False)
         assert third_result == "else_str"
+
+    @run_until_complete
+    async def test_statement_escape(self):
+        tpl = Template(
+            "<%% is the begin mark, and <%r= \"%%> is the end mark. \" %>"
+            "<%r= \"<% and\" %> %> only need to be escaped whenever they "
+            "have disambiguation of the templating system.")
+
+        result = await tpl.render_str(cond=True, sub_cond=True)
+        assert result == (
+            "<% is the begin mark, and %> is the end mark. "
+            "<% and %> only need to be escaped whenever they "
+            "have disambiguation of the templating system.")
