@@ -105,9 +105,9 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
      self, incoming: Optional[protocol.HTTPIncomingResponse],
      exc: tuple):
         if isinstance(tuple[1], protocol.ConnectionEntityTooLarge):
-            self._exc = ResponseEntityTooLarge(tuple[1].message)
+            self._exc = ResponseEntityTooLarge(str(tuple[1]))
         else:
-            self._exc = BadResponse(tuple[1].message)
+            self._exc = BadResponse(str(tuple[1]))
         self.close_stream_and_connection()
 
     def message_received(self, incoming: protocol.HTTPIncomingResponse):

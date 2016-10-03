@@ -148,10 +148,19 @@ class HTTPError(server.ServerError):
       async def get(self, *args, **kwargs):
           raise HTTPError(500, message='Please contact system administrator.')
     """
-    def __init__(self, status_code: int=200, message: Text=None,
-                 *args, **kwargs):
+    def __init__(self, status_code: int=200, *args, **kwargs):
         self.status_code = status_code
-        self.message = message
+        super().__init__(*args, **kwargs)
+
+    @property
+    def _err_str(self) -> Text:
+        return super().__str__()
+
+    def __repr__(self) -> Text:
+        return "HTTPError" + repr((self.status_code, ) + self.args)
+
+    def __str__(self) -> Text:
+        return "HTTP {}: {}".format(self.status_code, self._err_str)
 
 
 class ApplicationHTTPServer(server.HTTPServer):
@@ -968,7 +977,7 @@ class RequestHandler:
 
             if isinstance(err, HTTPError):
                 status_code = status_code or err.status_code
-                message = err.message
+                message = err._err_str
 
                 if err.status_code < 400:
                     web_log.info(log_str, exc_info=exc_info)
