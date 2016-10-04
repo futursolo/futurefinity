@@ -27,14 +27,14 @@ matrix:
 language: python
 
 install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update              ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install pyenv       ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv install $PYTHONVER ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv global $PYTHONVER  ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then eval "$(pyenv init -)"   ; fi
-  - python -m pip install pip setuptools --upgrade
-  - python -m pip install .[test]
-  - python -m pip install coveralls
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew -v update              ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew -v install pyenv       ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv install $PYTHONVER -v ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv global $PYTHONVER     ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then eval "$(pyenv init -)"      ; fi
+  - python -m pip install pip setuptools --upgrade --verbose
+  - python -m pip install .[test] --verbose
+  - python -m pip install coveralls --verbose
 
 # command to run tests
 script: python -m coverage run --source=futurefinity setup.py test
