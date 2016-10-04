@@ -20,6 +20,36 @@ from futurefinity.tests.utils import (
 
 from futurefinity.templating import Template, TemplateLoader
 
+import time
+import random
+import asyncio
+
+
+class _AsyncTimeIterator:
+    def __init__(self):
+        self._time = time.time()
+
+        self._counter_left = random.choice(range(10, 20))
+
+        self._iterated_time = []
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        await asyncio.sleep(random.choice(range(1, 10)) / 10)
+
+        if self._counter_left > 0:
+            self._counter_left -= 1
+
+            current_time = time.time()
+            self._iterated_time.append(current_time)
+
+            return current_time
+
+        else:
+            raise StopAsyncIteration
+
 
 class TemplateTestCase(TestCase):
     loader = TemplateLoader(get_tests_path("tpls"), cache_template=False)
@@ -78,3 +108,12 @@ This is body. The old title is Old Title.
             "<% is the begin mark, and %> is the end mark. "
             "<% and %> only need to be escaped whenever they "
             "have disambiguation of the templating system.")
+
+    @run_until_complete
+    async def test_statement_modifier(self):
+        time_iterator = _AsyncTimeIterator()
+        tpl = Template(
+            "<% async for i in time_iterator %><%r= str(i) %>, <% end %>")
+
+        result = await tpl.render_str(time_iterator=time_iterator)
+        assert result == str(time_iterator._iterated_time)[1:-1] + ", "
