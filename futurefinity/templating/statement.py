@@ -319,7 +319,8 @@ class OutputStatement(Statement):
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
-            "__tpl_output_raw_result__ = {}".format(self._rest),
+            "__tpl_output_raw_result__ = __tpl_ensure_str__({})".format(
+                self._rest),
             smt_at=self._smt_at)
 
         if self._keyword == "=":

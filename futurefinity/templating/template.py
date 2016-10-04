@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import TYPE_CHECKING, Text
+from futurefinity.utils import TYPE_CHECKING, Text, ensure_str
 
 from . import parser
 from . import printer
@@ -70,6 +70,7 @@ class Template:
         tpl_globals = {
             "asyncio": asyncio,
             "__TplNamespace__": namespace.Namespace,
+            "__tpl_ensure_str__":ensure_str
         }
 
         return tpl_globals
