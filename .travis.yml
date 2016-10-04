@@ -32,9 +32,9 @@ install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv install $PYTHONVER -v ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv global $PYTHONVER     ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then eval "$(pyenv init -)"      ; fi
-  - python -m pip install pip setuptools --upgrade --verbose
-  - python -m pip install .[test] --verbose
-  - python -m pip install coveralls --verbose
+  - python -m pip install pip setuptools --upgrade
+  - python -m pip install .[test]
+  - python -m pip install coveralls
 
 # command to run tests
 script: python -m coverage run --source=futurefinity setup.py test
