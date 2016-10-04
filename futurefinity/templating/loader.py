@@ -20,7 +20,7 @@ from .utils import TemplateNotFoundError
 
 from . import template
 
-from typing import Union, Optional, List
+from typing import Union, Optional, List, Callable
 
 import asyncio
 
@@ -32,16 +32,12 @@ class BaseLoader:
     def __init__(
         self, loop: Optional[asyncio.BaseEventLoop]=None,
         cache_template: bool=True,
-        default_escape: Text="html",
-        escape_url_with_plus: bool=True,
-            executor: Optional[concurrent.futures.Executor]=None):
+        default_escape: Union[Text, Callable[[Text], Text]]="html",
+        escape_url_with_plus: bool=True):
         self._loop = loop or asyncio.get_event_loop()
 
         self._default_escape = default_escape
         self._escape_url_with_plus = escape_url_with_plus
-
-        self._executor = executor or concurrent.futures.ThreadPoolExecutor(
-            100)
 
         self._cache_template = cache_template
 
@@ -69,6 +65,8 @@ class TemplateLoader(BaseLoader):
 
         else:
             raise ValueError("Unsupported template_path type.")
+
+        self._executor = concurrent.futures.ThreadPoolExecutor(100)
 
     def _find_abs_path(self, template_name: Text) -> Text:
         """

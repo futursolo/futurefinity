@@ -1114,15 +1114,19 @@ class Application:
       Treat it like a password. If the secret is changed, all secure cookies
       will become invalid. This will also initialize the default
       security object if it is set.
-    :arg aes_security: Default: `True`.
-      Use `security.AESContext` to secure the data
-      (such as: cookies). Turn it to false to use
-      `security.HMACSecurityObject`. This attribute will not work unless the
-      `security_secret` attribute is set.
+    :arg cache_template: The default value is reverse of debug option.
+      See :class:`futurefinity.templating.loader.BaseLoader`
+      for more details.
+    :arg default_escape: Default: `"html"`.
+      See :class:`futurefinity.templating.loader.BaseLoader`
+      for more details.
+    :arg escape_url_with_plus: Default: `True`.
+      See :class:`futurefinity.templating.loader.BaseLoader`
+      for more details.
     :arg allow_keep_alive: Default: `True`.
       Allow Keep Alive or not. This attribute will be passed to
-      `server.HTTPServer` as an attribute.
-    :arg DefaultHandler: Default: `web.NotFoundHandler`.
+      :class:`futurefinity.server.HTTPServer` as an attribute.
+    :arg DefaultHandler: Default: :class:`.NotFoundHandler`.
       Default handler when no path is matched.
     :arg debug: Enable Debug Feature.
     :arg csrf_protect: Enable Cross Site Request Forgeries(CSRF) protection.
@@ -1148,9 +1152,14 @@ class Application:
         self._sec_context = None
 
         if "template_path" in self.settings.keys():
+            cache_template = self.settings.get(
+                "cache_template", (not self.settings.get("debug", False)))
             self._tpl_loader = templating.TemplateLoader(
                 self.settings["template_path"],
-                cache_template=(not self.settings.get("debug", False)),
+                cache_template=cache_template,
+                default_escape=self.settings.get("default_escape", "html"),
+                escape_url_with_plus=self.settings.get(
+                    "escape_url_with_plus", True),
                 loop=self._loop)
 
         if "security_secret" in self.settings.keys():
