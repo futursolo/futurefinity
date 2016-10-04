@@ -19,7 +19,7 @@ from setuptools import find_packages, setup
 
 import sys
 
-if not sys.version_info >= (3, 5, 1):
+if not sys.version_info[:3] >= (3, 5, 1):
     raise RuntimeError("FutureFinity Requires Python 3.5.1 or higher.")
 
 else:

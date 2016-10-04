@@ -20,6 +20,7 @@ from futurefinity.tests.utils import (
 
 from futurefinity.templating import Template, TemplateLoader
 
+import sys
 import time
 import random
 import asyncio
@@ -29,15 +30,20 @@ class _AsyncTimeIterator:
     def __init__(self):
         self._time = time.time()
 
-        self._counter_left = random.choice(range(10, 20))
+        self._counter_left = random.choice(range(2, 5))
 
         self._iterated_time = []
 
     def __aiter__(self):
+        if sys.version_info[:3] <= (3, 5, 1):
+            fur = asyncio.Future()
+            fur.set_result(self)
+            return fur
+
         return self
 
     async def __anext__(self):
-        await asyncio.sleep(random.choice(range(1, 10)) / 10)
+        await asyncio.sleep(random.choice(range(1, 5)) / 10)
 
         if self._counter_left > 0:
             self._counter_left -= 1
