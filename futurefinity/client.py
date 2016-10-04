@@ -139,7 +139,7 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
         if not (self.reader and self.writer and self.transport):
             await _create_new_stream_and_connection()
 
-        if self.writer.transport.is_closing():
+        if self.writer.transport._closing:
             await _create_new_stream_and_connection()
 
     def close_stream_and_connection(self):
@@ -192,7 +192,7 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
                 raise RequestTimeoutError("Request Timeout.")
 
             if not incoming_data:
-                if (not self.writer) or self.writer.transport.is_closing():
+                if (not self.writer) or self.writer.transport._closing:
                     self.close_stream_and_connection()
                     raise BadResponse("Unexpected Remote Close.")
 

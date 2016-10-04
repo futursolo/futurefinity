@@ -45,7 +45,8 @@ Finally, listen to the port you want, and start asyncio event loop::
 """
 
 from .utils import (
-    ensure_str, ensure_bytes, format_timestamp, default_mark, Awaitable, Text)
+    ensure_str, ensure_bytes, ensure_future,
+    format_timestamp, default_mark, Awaitable, Text)
 from . import log
 from . import server
 from . import routing
@@ -222,7 +223,7 @@ class ApplicationHTTPServer(server.HTTPServer):
                 self.transport.close()
                 self.connection.connection_lost()
 
-        asyncio.ensure_future(_try_handle_exception(), loop=self._loop)
+        ensure_future(_try_handle_exception(), loop=self._loop)
 
     def initial_received(self, incoming: protocol.HTTPIncomingRequest):
         Handler, matched_args, matched_kwargs = self.app.handlers.find(
@@ -263,7 +264,7 @@ class ApplicationHTTPServer(server.HTTPServer):
                     del self._request_handlers[incoming]
                     del self._futures[incoming]
 
-        coro_future = asyncio.ensure_future(
+        coro_future = ensure_future(
             self._request_handlers[incoming]._handle_request(),
             loop=self._loop)
 
@@ -766,7 +767,7 @@ class RequestHandler:
         when_write_initial_result = self.when_write_initial()
 
         if inspect.isawaitable(when_write_initial_result):
-            asyncio.ensure_future(when_write_initial_result, loop=self._loop)
+            ensure_future(when_write_initial_result, loop=self._loop)
 
         if "content-type" not in self._headers.keys():
             self.set_header("content-type", "text/html; charset=utf-8;")
@@ -826,7 +827,7 @@ class RequestHandler:
         when_finish_result = self.when_finish()
 
         if inspect.isawaitable(when_finish_result):
-            asyncio.ensure_future(when_finish_result, loop=self._loop)
+            ensure_future(when_finish_result, loop=self._loop)
 
         if text is not None:
             self.write(text)
@@ -1241,7 +1242,7 @@ class Application:
             context = None
         f = self._loop.create_server(self.make_server(), address, port,
                                      ssl=context)
-        srv = asyncio.ensure_future(f, loop=self._loop)
+        srv = ensure_future(f, loop=self._loop)
         return srv
 
     @property

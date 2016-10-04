@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str
+from futurefinity.utils import ensure_str, ensure_future
 from futurefinity.tests.utils import TestCase, run_until_complete
 
 from futurefinity.client import HTTPClient
@@ -116,7 +116,7 @@ class ClientGetTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 
@@ -140,7 +140,7 @@ class ClientGetTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 
@@ -164,7 +164,7 @@ class ClientGetTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 
@@ -188,7 +188,7 @@ class ClientGetTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 
@@ -214,7 +214,7 @@ class ClientPostTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 
@@ -246,7 +246,7 @@ class ClientPostTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 
@@ -280,7 +280,7 @@ class ClientPostTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            asyncio.ensure_future(
+            ensure_future(
                 self._loop.run_in_executor(None, server.serve_forever),
                 loop=self._loop)
 

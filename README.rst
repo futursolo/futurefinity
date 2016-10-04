@@ -21,7 +21,7 @@ and do `cd doc; make html`.
 
 Requirements
 ------------
-- Python>=3.5.1
+- Python>=3.5.0
 
 - Cryptography>=1.0.0(Optional, Recommended, Used by AES GCM Secure Cookie)
 

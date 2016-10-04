@@ -15,6 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from futurefinity.utils import PY352
 from futurefinity.tests.utils import (
     TestCase, run_until_complete, get_tests_path)
 
@@ -35,7 +36,7 @@ class _AsyncTimeIterator:
         self._iterated_time = []
 
     def __aiter__(self):
-        if sys.version_info[:3] <= (3, 5, 1):
+        if not PY352:
             fur = asyncio.Future()
             fur.set_result(self)
             return fur

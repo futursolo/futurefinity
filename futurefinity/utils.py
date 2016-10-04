@@ -24,6 +24,7 @@ from typing import Any, Optional, Union, List
 import sys
 import time
 import struct
+import asyncio
 import inspect
 import numbers
 import calendar
@@ -48,6 +49,10 @@ except:
     TYPE_CHECKING = False
 
 default_mark = object()
+
+PY350 = sys.version_info[:3] >= (3, 5, 0)
+PY351 = sys.version_info[:3] >= (3, 5, 1)
+PY352 = sys.version_info[:3] >= (3, 5, 2)
 
 
 class FutureFinityError(Exception):
@@ -89,6 +94,36 @@ def ensure_str(var: Any) -> Text:
     else:
         strvar = var
     return str(strvar)
+
+def ensure_future(coro_or_future, *, loop=None):
+    """
+    Python 3.5.0 Compatibility Layer.
+
+    Behave like `asyncio.ensure_future` on Python 3.5.1 or higher.
+    """
+    if PY351:
+        return asyncio.ensure_future(coro_or_future, loop=loop)
+
+    if isinstance(
+        coro_or_future, asyncio.Future) or asyncio.iscoroutine(
+            coro_or_future):
+
+        return asyncio.ensure_future(coro_or_future, loop=loop)
+
+    if inspect.isawaitable(coro_or_future):
+        return asyncio.ensure_future(
+            _wrap_awaitable(coro_or_future), loop=loop)
+
+    else:
+        raise TypeError('A Future, a coroutine or an awaitable is required')
+
+def _wrap_awaitable(awaitable):
+    """
+    Python 3.5.0 Compatibility Layer.
+
+    from `asyncio.tasks` on Python 3.5.2.
+    """
+    return (yield from awaitable.__await__())
 
 
 class MagicDict(collections.abc.MutableMapping):

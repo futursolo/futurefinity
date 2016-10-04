@@ -77,7 +77,7 @@ class Rule:
     """
 
     def __init__(
-        self, path: Union[Text, Pattern[Text]],
+        self, path: Union[Text, "Pattern[Text]"],
         Handler: "web.RequestHandler", path_args: Tuple[Any]=(),
         name: Optional[Text]=None, path_kwargs: Dict[Text, Any]={}):
         self.path = path
@@ -191,7 +191,7 @@ class Dispatcher:
         self._DefaultHandler = DefaultHandler
 
     def add(
-        self, path: Union[Text, Pattern[Text]], *args,
+        self, path: Union[Text, "Pattern[Text]"], *args,
             Handler: Optional["web.RequestHandler"]=None,
             name: Optional[Text]=None, **kwargs):
         """
