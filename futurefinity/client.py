@@ -15,6 +15,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+"""
+``futurefinity.client`` contains the `HTTPClient` which implements the
+:class:`futurefinity.protocol.HTTPv1Connection` from the client side.
+
+"""
+
 from .utils import (
     TolerantMagicDict, FutureFinityError, ensure_bytes, Text)
 from . import protocol
@@ -75,7 +81,7 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
 
     THis is a subclass of `protocol.BaseHTTPConnectionController`.
 
-    This is used to control a HTTP Connection.
+    This is used to control a HTTP Connection from the client side.
     """
     def __init__(self, host: Text, port: int, *args,
                  allow_keep_alive: bool=True,
@@ -214,6 +220,18 @@ class HTTPClient:
     FutureFinity HTTPClient Class.
 
     This is the HTTPClient Implementation of FutureFinity.
+
+    Example:
+        import asyncio
+        import futurefinity
+
+        client = futurefinity.client.HTTPClient()
+        fur = client.get("https://www.example.com/")
+        response = loop.run_until_complete(fur)
+
+        assert response.status_code == 200
+        print(response.body)
+
     """
     def __init__(self, *args, http_version=11,
                  allow_keep_alive: bool=True,

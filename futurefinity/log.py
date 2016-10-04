@@ -16,7 +16,8 @@
 #   limitations under the License.
 
 """
-FutureFinity Logging Facility
+``futurefinity.log`` contains the logging facility used by futurefinity.
+
 """
 
 from .utils import Text, TYPE_CHECKING
@@ -74,7 +75,7 @@ class TermColors:
 
 def gen_color_code(color_num: int, is_bg: bool=False) -> Text:
     """
-    Return proper color code from `color_num` from `TermColors`.
+    Return proper color code based on `color_num` from :class:`.TermColors`.
     """
     if color_num == -1:
         return "\033[0m"  # Reset the term.
@@ -133,6 +134,9 @@ class _LoggingFmt(str):
 def set_log_level(
     logger: Union[logging.Logger, logging.StreamHandler],
         lvl: int):
+    """
+    Set the log level of a logger.
+    """
     set_level = getattr(logger, "setLevel")
 
     set_level(lvl)

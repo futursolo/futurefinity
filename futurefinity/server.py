@@ -16,9 +16,9 @@
 #   limitations under the License.
 
 """
-``futurefinity.server`` contains the FutureFinity HTTPServer Class used by
-FutureFinity Web Application, which can parse http request, initialize
-right RequestHandler and make response to client.
+``futurefinity.client`` contains the `HTTPServer` which implements the
+:class:`futurefinity.protocol.HTTPv1Connection` from the server side.
+
 """
 
 from .utils import FutureFinityError
@@ -43,6 +43,30 @@ class ServerError(FutureFinityError):
 class HTTPServer(asyncio.Protocol, protocol.BaseHTTPConnectionController):
     """
     FutureFinity HTTPServer Class.
+
+    It provides a low-level interface to communicate with the
+    :class:`futurefinity.protocol.HTTPv1Connection`, by overriding the proper
+    methods.
+
+    Example::
+      import asyncio
+      import futurefinity
+
+      class MyHTTPServer(futurefinity.server.HTTPServer):
+          def message_received(self, incoming):
+              self.connection.write_initial(
+                  http_version=incoming.http_version,
+                  status_code=200, headers={"Content-Length": "13"})
+
+              self.connection.write_body(b"Hello, world!")
+              self.connection.finish_writing()
+
+      loop = asyncio.get_event_loop()
+
+      asyncio.ensure_future(
+          loop.create_server(ApplicationHTTPServer, loop=loop)
+
+      loop.run_forever()
 
     :arg allow_keep_alive: Default: `True`. Turn it to `False` if you want to
       disable keep alive connection for `HTTP/1.1`.

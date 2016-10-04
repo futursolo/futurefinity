@@ -15,6 +15,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+"""
+``futurefinity.routing`` contains the url-based routing system used by
+``futurefinity.web``.
+
+"""
+
 from .utils import deprecated_attr, FutureFinityError, Text, TYPE_CHECKING
 
 from typing.re import Pattern
@@ -243,17 +249,19 @@ class Dispatcher:
             self._rules.append(rule)
 
     def find(
-        self, path: Text) -> (
-            "web.RequestHandler", Tuple[Any], Dict[Text, Any]):
+        self, path: Text) -> Tuple[
+            "web.RequestHandler", Tuple[Any], Dict[Text, Any]]:
         """
-        Find a handler that matches the path.
+        Find a `Rule` that matches the path and combine both arguments from
+        `Rule` and the provided path together.
 
-        If a handler that matches the path cannot be found, the Handler will be
-        the DefaultHandler.
+        If a `Rule` that matches the path cannot be found, the `DefaultHandler`
+        will be returned.
 
-        It returns a ``routing.Rule``.
+        It returns Tuple[
+            futurefinity.web.RequestHandler, Tuple[Any], Dict[Text, Any]].
 
-        For the path_args and path_kwargs, the ones defined in the Rule
+        For the path_args and path_kwargs, the ones defined in the `Rule`
         will have a higher priority.
         """
         for rule in self._rules:
@@ -275,6 +283,16 @@ class Dispatcher:
     def reverse(
         self, name: Text, path_args: List[Text]=(),
             path_kwargs: Dict[Text, Text]={}) -> Text:
+        """
+        Reverse a Rule in the dispatcher.
+
+        .. code-block:: python3
+            >>> dispatcher = Dispatcher()
+            >>> dispatcher.add("/page/(?P<page_id>.*)/", name="page")
+            >>> dispatcher.reverse("index", path_kwargs={"page_id": "1"})
+            /page/1/
+
+        """
         if name not in self._name_dict.keys():
             raise KeyError("Unknown Name.")
 

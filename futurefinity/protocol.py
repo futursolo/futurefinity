@@ -15,6 +15,12 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+"""
+``futurefinity.protocol`` contains the implementation of HTTP Protocol from
+both client side and server side.
+
+"""
+
 from .utils import (MagicDict, TolerantMagicDict,
                     FutureFinityError, ensure_str, ensure_bytes, Text)
 from . import log
