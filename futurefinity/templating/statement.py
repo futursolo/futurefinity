@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import InvalidStatementOperation, is_allowed_name
+from .utils import InvalidStatementOperation, ParseError, is_allowed_name
 from futurefinity.utils import ensure_str, TYPE_CHECKING, Text
 
 from typing import Optional, Union
@@ -45,7 +45,7 @@ class StatementModifier:
 
         rest_str = _splitted[1]
 
-        modifier_keyword = _splitted[0]
+        modifier_keyword = _splitted[0].strip()
         modifier_rest = ""
 
         for _ in range(0, StatementModifier._modifier_args[modifier_keyword]):
@@ -149,7 +149,7 @@ class Statement:
 
         splitted = rest_str.strip().split(" ", 1)
 
-        keyword = splitted[0]
+        keyword = splitted[0].strip()
 
         if len(splitted) > 1:
             rest = splitted[1]
@@ -375,14 +375,15 @@ class StrStatement(Statement):
             smt_at=self._smt_at)
 
 class CommentStatement(Statement):
-    _keywords = ("#", )
+    _keywords = ("#",)
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         pass  # Just Print Nothing.
 
 
 class CodeStatement(Statement):
-    _keywords = ("@", )
+    _keywords = ("@",)
+
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
             "{}".format(self._rest), smt_at=self._smt_at)

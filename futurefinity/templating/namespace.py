@@ -35,12 +35,14 @@ if TYPE_CHECKING:
 class BlockAttrs:
     _namespace = None  # type: Namespace
 
-    def __getattr__(self, name: Text) -> Callable[[], Any]:
-        if name not in self._namespace._tpl._root._block_statements.keys():
-            raise TemplateRenderError from KeyError("Unknown Block Name.")
-
+    def __getattr__(self, name: Text) -> Callable[[], Text]:
         if name in self._namespace._updated_block_fns.keys():
             block_fn = self._namespace._updated_block_fns[name]
+
+        elif name not in self._namespace._tpl._root._block_statements.keys():
+            raise TemplateRenderError from KeyError(
+                "Unknown Block Name {}.".format(name))
+
         else:
             block_fn = getattr(
                 self._namespace, "_render_block_{}_str".format(name))
@@ -154,6 +156,8 @@ class Namespace:
 
         for key in self._tpl._root._block_statements.keys():
             block_fns[key] = getattr(self, "_render_block_{}_str".format(key))
+
+        block_fns.update(**self._updated_block_fns)
 
         self._parent._update_blocks(**block_fns)
 
