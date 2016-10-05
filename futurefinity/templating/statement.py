@@ -159,7 +159,8 @@ class Statement:
         for SmtClass in (
             OutputStatement, IndentStatement, HalfIndentStatement,
             IncludeStatement, BlockStatement, UnindentStatement,
-                InlineStatement, InheritStatement):
+            InlineStatement, InheritStatement, CommentStatement,
+                CodeStatement):
 
             if keyword in SmtClass._keywords:
                 return SmtClass(
@@ -372,3 +373,17 @@ class StrStatement(Statement):
         code_printer.write_line(
             "__tpl_result__ += {}".format(repr(ensure_str(self._smt_str))),
             smt_at=self._smt_at)
+
+class CommentStatement(Statement):
+    _keywords = ("#", )
+
+    def print_code(self, code_printer: "printer.CodePrinter"):
+        pass  # Just Print Nothing.
+
+
+class CodeStatement(Statement):
+    _keywords = ("@", )
+    def print_code(self, code_printer: "printer.CodePrinter"):
+        code_printer.write_line(
+            "{}".format(self._rest), smt_at=self._smt_at)
+
