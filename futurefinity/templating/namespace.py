@@ -129,13 +129,13 @@ class Namespace:
 
         return sub_globals
 
-    async def _include_tpl(self, template_name: Text):
+    async def _include_tpl(self, template_name: Text) -> Text:
         tpl = await self._loader.load_template(template_name)
 
         tpl_namespace = tpl._get_namespace(tpl_globals=self._sub_globals)
 
         await tpl_namespace._render()
-        self.__tpl_result__ += tpl_namespace._tpl_result
+        return tpl_namespace._tpl_result
 
     def _update_blocks(self, **kwargs):
         self._updated_block_fns.update(**kwargs)

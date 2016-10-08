@@ -220,7 +220,7 @@ class IncludeStatement(Statement):
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
-            "await self._include_tpl({})".format(self._rest),
+            "__tpl_result__ += await self._include_tpl({})".format(self._rest),
             smt_at=self._smt_at)
 
 
