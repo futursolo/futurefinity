@@ -66,7 +66,7 @@ class FutureFinityError(Exception):
 
 def ensure_bytes(var: Any) -> bytes:
     """
-    Try to convert passed variable to a bytes object.
+    Try to convert the passed variable to a bytes object.
     """
     if isinstance(var, bytes):
         return var
@@ -83,7 +83,7 @@ def ensure_bytes(var: Any) -> bytes:
 
 def ensure_str(var: Any) -> Text:
     """
-    Try to convert passed variable to a str object.
+    Try to convert the passed variable to a str object.
     """
     if isinstance(var, str):
         return var
@@ -213,10 +213,10 @@ class TolerantMagicDict(MagicDict):
     """
     An implementation of case-insensitive one-to-many mapping.
 
-    Everything is the same as MagicDict,
+    Everything is the same as `MagicDict`,
     but Keys must be str and are case-insensitive.
 
-    **This doesn't mean that the normal MagicDict is mean.**
+    **This doesn't mean that the normal `MagicDict` is mean.**
     """
 
     def add(self, name: Text, value: Text):
@@ -284,6 +284,9 @@ class _DeprecatedAttr:
 
 
 def deprecated_attr(attr, mod_name, message):
+    """
+    Mark an attribute as deprecated in a module.
+    """
     mod = sys.modules[mod_name]
 
     class _ModWithDeprecatedAttrs:

@@ -258,8 +258,8 @@ class Dispatcher:
         If a `Rule` that matches the path cannot be found, the `DefaultHandler`
         will be returned.
 
-        It returns Tuple[
-            futurefinity.web.RequestHandler, Tuple[Any], Dict[Text, Any]].
+        It returns `Tuple[
+            futurefinity.web.RequestHandler, Tuple[Any], Dict[Text, Any]]`.
 
         For the path_args and path_kwargs, the ones defined in the `Rule`
         will have a higher priority.
@@ -285,6 +285,14 @@ class Dispatcher:
             path_kwargs: Dict[Text, Text]={}) -> Text:
         """
         Reverse a Rule in the dispatcher.
+
+        You can reverse by positional arguments,
+        or by keyword arguments if and only if `path_args` positional arguments
+        is not presented in the arguments and all the match group in the
+
+        `Rule` is named group.
+
+        Example:
 
         .. code-block:: python3
             >>> dispatcher = Dispatcher()

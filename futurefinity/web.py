@@ -19,7 +19,7 @@
 ``futurefinity.web`` contains Application and RequestHandler class, which are
 essential of building an web application based on futurefinity.
 
-To use futurefinity.web,you need to import it and asyncio,
+To use `futurefinity.web`,you need to import it and asyncio,
 and create an instance of Application class::
 
   import futurefinity.web
@@ -32,12 +32,12 @@ and override methods in the class named with HTTP methods with async def.
 After that, decorate the created class with the app.add_handler with link
 that this class will handle::
 
-  @app.add_handler("/")
+  @app.handlers.add("/")
   class RootHandler(futurefinity.web.RequestHandler):
       async def get(self, *args, **kwargs):
           return "Hello, World!"
 
-Finally, listen to the port you want, and start asyncio event loop::
+Finally, listen to the port you want, and start the event loop::
 
   app.listen(23333)
   asyncio.get_event_loop().run_forever()
@@ -107,6 +107,9 @@ access_log = log.get_child_logger("web_access")
 def print_access_log(
     request: protocol.HTTPIncomingRequest,
         status_code: int):
+    """
+    Print the access log.
+    """
     if status_code < 400:
         log_fn = access_log.info
 
@@ -161,10 +164,14 @@ class HTTPError(server.ServerError):
         return "HTTPError" + repr((self.status_code, ) + self.args)
 
     def __str__(self) -> Text:
-        return "HTTP {}: {}".format(self.status_code, self._err_str)
+        final_str = "HTTP {}".format(self.status_code)
+        if self._err_str:
+            final_str += ": {}".format(self._err_str)
+
+        return final_str
 
 
-class ApplicationHTTPServer(server.HTTPServer):
+class _ApplicationHTTPServer(server.HTTPServer):
     def __init__(self, app: "Application",
                  loop: Optional[asyncio.BaseEventLoop]=None,
                  *args, **kwargs):
@@ -285,8 +292,8 @@ class RequestHandler:
     """
     Basic Request Handler.
 
-    This class should not be used directly, subclass must inherit this class
-    and override functions that represents the HTTP method.
+    This class should not be used directly, all the request handlers must
+    inherit this class and override functions that represents the HTTP method.
     """
 
     allow_methods = ("GET", "POST", "HEAD")
@@ -298,7 +305,7 @@ class RequestHandler:
     stream_handler = False
 
     def __init__(self, app: "Application",
-                 server: ApplicationHTTPServer,
+                 server: _ApplicationHTTPServer,
                  request: protocol.HTTPIncomingRequest,
                  path_args: Mapping[Text, Text]=None,
                  path_kwargs: Mapping[Text, Text]=None):
@@ -641,6 +648,11 @@ class RequestHandler:
         return self.render_str
 
     def get_template_args(self) -> Dict[Text, Any]:
+        """
+        Get the default arguments for template rendering.
+
+        Override this function to return custom default template arguments.
+        """
         return {
             "handler": self,
             "csrf_form_html": self.csrf_form_html
@@ -652,7 +664,7 @@ class RequestHandler:
         """
         Render Template in template folder into string.
 
-        You can Specify Template Engine by override this function.
+        You can Specify Template Engine by overriding this function.
         """
 
         template_args = self.get_template_args()
@@ -661,8 +673,8 @@ class RequestHandler:
 
         if "template_path" not in self.settings.keys():
             raise ValueError(
-                "Cannot found template_path. "
-                "Please provide template_path through Application Settings.")
+                "Cannot found `template_path`. "
+                "Please provide `template_path` through Application Settings.")
 
         parsed_tpl = await self.app._tpl_loader.load_template(
             template_name)
@@ -706,18 +718,22 @@ class RequestHandler:
         """
         Set etag header of response_body.
         """
-        if not hasattr(self, "__body_etag"):
+        if not hasattr(self, "_prepared_body_etag"):
             sha1_hash_object = hashlib.sha1()
             sha1_hash_object.update(self._response_body)
 
-            self.__body_etag = '"{}"'.format(sha1_hash_object.hexdigest())
-            if self.__body_etag is not '""':
-                self.set_header("etag", self.__body_etag)
+            self._prepared_body_etag = '"{}"'.format(
+                sha1_hash_object.hexdigest())
+            if self._prepared_body_etag is not '""':
+                self.set_header("etag", self._prepared_body_etag)
 
     @property
     def _body_etag(self) -> Text:
+        """
+        Return the etag of the body.
+        """
         self.set_body_etag()
-        return self.__body_etag
+        return self._prepared_body_etag
 
     def check_body_etag(self) -> bool:
         """
@@ -746,6 +762,12 @@ class RequestHandler:
         return match
 
     def when_write_initial(self):
+        """
+        Triggered when writing the initial.
+
+        This can be a coroutine, however, if this is a coroutine, it will not
+        block writing the initial.
+        """
         pass
 
     def write_initial(self):
@@ -762,7 +784,7 @@ class RequestHandler:
         is called, FutureFinity is going to close the connection directly.
         """
         if self._initial_written:
-            raise HTTPError(500, "Cannot write initial twice.")
+            raise HTTPError(500, "Cannot write the initial twice.")
 
         when_write_initial_result = self.when_write_initial()
 
@@ -798,6 +820,9 @@ class RequestHandler:
         self._initial_written = True
 
     def flush(self):
+        """
+        Flush the request to the remote.
+        """
         if self._finished:
             raise HTTPError(
                 500, "Cannot Flush the request when it has already finished.")
@@ -811,6 +836,12 @@ class RequestHandler:
         self._response_body.clear()
 
     def when_finish(self):
+        """
+        Triggered when finishing the request.
+
+        This can be a coroutine, however, if this is a coroutine, it will not
+        block finishing the request.
+        """
         pass
 
     def finish(self, text: Optional[Union[Text, bytes]]=None):
@@ -856,9 +887,12 @@ class RequestHandler:
                           message: Optional[Union[Text, bytes]]=None,
                           exc_info: Optional[tuple]=None):
         """
-        Respond an error to client.
+        Write the error message to the client.
 
         You may override this page if you want to custom the error page.
+
+        However, if it raises an error again, the connection will be closed
+        immediately without write anything to the client.
         """
         self._status_code = error_code
         self.set_header("Content-Type", "text/html; charset=utf-8")
@@ -885,6 +919,12 @@ class RequestHandler:
         self.finish()
 
     async def before(self):
+        """
+        Triggered before the actual method function starts to
+        handle the request.
+
+        **This is a Coroutine.**
+        """
         pass
 
     async def head(self, *args, **kwargs):
@@ -961,6 +1001,15 @@ class RequestHandler:
     async def _handle_exception(
         self, exc_info: Optional[tuple]=None,
             status_code: Optional[int]=None):
+        """
+        Method to handle the exception.
+
+        It checks the connection status, write the traceback and web log, and
+        write the error pages.
+
+        **This is a Coroutine.**
+        """
+
         if self._initial_written:
             return
             # Cannot Write the exception the request because of the initial has
@@ -1007,7 +1056,7 @@ class RequestHandler:
         """
         Method to handle the request.
 
-        It checks the if request method is supported and allowed, and handles
+        It checks the if request method is supported and allowed, handles
         them to right class function, gets the return value, writes them to
         response body, and finishes the request.
 
@@ -1221,7 +1270,7 @@ class Application:
         Make a asyncio compatible server.
         """
         return functools.partial(
-            ApplicationHTTPServer, app=self, loop=self._loop,
+            _ApplicationHTTPServer, app=self, loop=self._loop,
             allow_keep_alive=self.settings.get("allow_keep_alive", True))
 
     def listen(
