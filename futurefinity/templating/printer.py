@@ -32,6 +32,9 @@ _END_OF_LINE = "\n"
 
 
 class CodePrinter:
+    """
+    Print Python code dealing with indent gracefully.
+    """
     def __init__(self, tpl: "template.Template"):
 
         self._indent_num = 0
@@ -43,6 +46,9 @@ class CodePrinter:
 
     def raise_code_gen_error(self, message: Text,
                              from_err: Optional[Exception]=None):
+        """
+        Raise a `CodeGenerationError` with error location.
+        """
         err_str = "{} in file {}.".format(
             message, self._tpl._template_path)
 
@@ -52,6 +58,18 @@ class CodePrinter:
             raise CodeGenerationError(err_str)
 
     def code_indent(self) -> "CodePrinter":
+        """
+        Indent the code with `with` statement.
+
+        Example:
+        ..code-block:: python3
+
+            printer.print_line("def a():")
+            with printer.code_indent():
+                printer.print_line("return \"Text from function a.\"")
+
+            printer.print_line("a()")
+        """
         if self._finished:
             raise CodeGenerationError(
                 "Code Generation has already been finished.")
@@ -65,6 +83,9 @@ class CodePrinter:
         self._dec_indent_num()
 
     def _inc_indent_num(self):
+        """
+        Increase the indent.
+        """
         if self._finished:
             raise CodeGenerationError(
                 "Code Generation has already been finished.")
@@ -72,6 +93,9 @@ class CodePrinter:
         self._indent_num += 1
 
     def _dec_indent_num(self):
+        """
+        Decrease the indent.
+        """
         if self._finished:
             raise CodeGenerationError(
                 "Code Generation has already been finished.")
@@ -79,6 +103,9 @@ class CodePrinter:
         self._indent_num -= 1
 
     def write_line(self, line_str: Text, smt_at: Union[Text, int]="<unknown>"):
+        """
+        Write a line with indent.
+        """
         if self._finished:
             raise CodeGenerationError(
                 "Code Generation has already been finished.")
@@ -98,11 +125,17 @@ class CodePrinter:
 
     @property
     def plain_code(self) -> Text:
+        """
+        Return the plain, printed code.
+        """
         self._finished = True
         return self._committed_code
 
     @property
     def compiled_code(self) -> types.CodeType:
+        """
+        Return the compiled code.
+        """
         if not hasattr(self, "_compiled_code"):
             self._compiled_code = compile(
                 self.plain_code,
@@ -112,6 +145,9 @@ class CodePrinter:
         return self._compiled_code
 
     def from_root(self, root: "statement.RootStatement"):
+        """
+        Print the code from the root statement.
+        """
         try:
             root.print_code(self)
         except Exception as e:

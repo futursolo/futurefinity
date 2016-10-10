@@ -31,6 +31,9 @@ _ESCAPE_MARK = "%"
 
 
 class TemplateParser:
+    """
+    The one-time non-reusable template parser.
+    """
     def __init__(self, tpl: "template.Template"):
         self._tpl = tpl
 
@@ -46,6 +49,9 @@ class TemplateParser:
     def raise_parse_error(self, message: Text,
                           line: Union[int, Text]="<unknown>",
                           from_err: Optional[Exception]=None):
+        """
+        Raise a `ParserError`.
+        """
         err_str = "{} in file {} at line {}.".format(
             message, self._tpl._template_path, line)
 
@@ -56,6 +62,9 @@ class TemplateParser:
 
     @property
     def root(self) -> statement.RootStatement:
+        """
+        Return the parsed Template Root.
+        """
         if not self._finished:
             self.raise_parse_error(
                 "Root is not Ready yet", self.current_at)
@@ -134,6 +143,9 @@ class TemplateParser:
 
     @property
     def current_at(self) -> int:
+        """
+        Return the current line no that the parser points to.
+        """
         if self._finished:
             raise ParseError("Parsing has already been finished.")
 
@@ -163,6 +175,32 @@ class TemplateParser:
             self.raise_parse_error(
                 "Redundant Unindent Statement", self.current_at)
 
+    def parse_statement(
+        self, smt_str: Text,
+            smt_at: int) -> "statement.Statement":
+        """
+        Parse a statement.
+        """
+        modifier, rest_str = statement.StatementModifier.parse_modifier(
+            smt_str)
+
+        splitted = rest_str.strip().split(" ", 1)
+
+        keyword = splitted[0].strip()
+
+        if len(splitted) > 1:
+            rest = splitted[1]
+        else:
+            rest = None
+
+        for SmtClass in statement.builtin_statements:
+            if keyword in SmtClass._keywords:
+                return SmtClass(
+                    keyword, rest, modifier, smt_at=smt_at)
+
+        else:
+            raise ParseError("Unknown Statement Keyword: {}.".format(keyword))
+
     def _find_next_statement(self) -> Union[statement.Statement, Text]:
         if self._finished:
             raise ParseError("Parsing has already been finished.")
@@ -179,7 +217,7 @@ class TemplateParser:
                     if begin_mark_line_no != -1:
                         self.raise_parse_error(
                             "Cannot find statement end mark "
-                            "for begin mark", begin_mark_at, from_err=e)
+                            "for begin mark", begin_mark_line_no, from_err=e)
 
                     elif smt_str:
                         return smt_str
@@ -220,7 +258,7 @@ class TemplateParser:
             self._current_line = self._current_line[end_mark_pos + 2:]
 
             try:
-                return statement.Statement.parse_statement(
+                return self.parse_statement(
                     smt_str, smt_at=self._current_at)
             except Exception as e:
                 self.raise_parse_error(

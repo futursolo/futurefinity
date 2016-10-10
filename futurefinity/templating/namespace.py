@@ -32,7 +32,10 @@ if TYPE_CHECKING:
     from . import loader
 
 
-class BlockAttrs:
+class _BlockAttrs:
+    """
+    Read all the blocks from the current namespace.
+    """
     _namespace = None  # type: Namespace
 
     def __getattr__(self, name: Text) -> Callable[[], Text]:
@@ -63,6 +66,9 @@ class BlockAttrs:
 
 
 class Namespace:
+    """
+    Current Namespace of the template.
+    """
     def __init__(self, tpl: "template.Template", tpl_globals: Dict[Text, Any]):
         self._tpl = tpl
         self._tpl_globals = tpl_globals
@@ -88,6 +94,9 @@ class Namespace:
 
     @property
     def child_body(self) -> Text:
+        """
+        Return the body from the child template.
+        """
         if self._child_body is None:
             raise TemplateRenderError("There's no child body.")
 
@@ -95,13 +104,19 @@ class Namespace:
 
     @property
     def blocks(self) -> Dict[Text, Any]:
-        class CurrentBlockAttrs(BlockAttrs):
+        """
+        Return the block selector.
+        """
+        class CurrentBlockAttrs(_BlockAttrs):
             _namespace = self
 
         return CurrentBlockAttrs()
 
     @property
     def parent(self) -> "Namespace":
+        """
+        Return the parent of the current template.
+        """
         if self._parent is None:
             raise TemplateRenderError("Parent is not set.")
 
@@ -188,10 +203,16 @@ class Namespace:
 
     @property
     def default_escape(self) -> Callable[[Text], Text]:
+        """
+        Return the default escape function.
+        """
         return self._default_escape
 
     @default_escape.setter
     def default_escape(self, default_type: Union[Text, Callable[[Text], Text]]):
+        """
+        Set the default escape function.
+        """
         if default_type in self._escape_types.keys():
             self._default_escape = self._escape_types[default_type]
 
@@ -217,22 +238,40 @@ class Namespace:
         self._escape_url_with_plus = value
 
     def no_escape(self, raw_str: Text) -> Text:
+        """
+        Return the string with no escape.
+        """
         return raw_str
 
     def escape_html(self, raw_str: Text) -> Text:
+        """
+        Escape the string in a html safe way.
+        """
         return html.escape(raw_str)
 
     def escape_json(self, raw_str: Text) -> Text:
+        """
+        Escape the string into a json safe string.
+        """
         return json.dumps(raw_str)
 
     def escape_url_plus(self, raw_str: Text) -> Text:
+        """
+        Escape the string in a url safe way with the plus mark.
+        """
         return urllib.parse.quote_plus(raw_str)
 
     def escape_url_no_plus(self, raw_str: Text) -> Text:
+        """
+        Escape the string in a url safe way without the plus mark.
+        """
         return urllib.parse.quote(raw_str)
 
     def escape_url(self, raw_str: Text) -> Text:
-        if self._escape_url_with_plus:
+        """
+        Escape the string in a url safe way with default url plus settings.
+        """
+        if self.escape_url_with_plus:
             return self.escape_url_plus(raw_str)
         else:
             return self.escape_url_no_plus(raw_str)

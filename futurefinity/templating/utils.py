@@ -24,30 +24,51 @@ _ALLOWED_NAME = re.compile(r"^[a-zA-Z]([a-zA-Z0-9\_]+)?$")
 
 
 class TemplateError(FutureFinityError):
+    """
+    FutureFinity Templating Error.
+    """
     pass
 
 
 class ParseError(TemplateError):
+    """
+    Error when parsing template.
+    """
     pass
 
 
 class InvalidStatementOperation(TemplateError):
+    """
+    Error when performing the statement operation.
+    """
     pass
 
 
 class CodeGenerationError(TemplateError):
+    """
+    Error when Generating the Python code.
+    """
     pass
 
 
 class TemplateNotFoundError(TemplateError, FileNotFoundError):
+    """
+    Error when trying to load a template but the loader cannot find it.
+    """
     pass
 
 
 class TemplateRenderError(TemplateError):
+    """
+    Error during renderring the template.
+    """
     pass
 
 
-class ReadFinished(TemplateError):  # Raised when read finished.
+class ReadFinished(TemplateError):
+    """
+    This error is raised when the read of a template is finished.
+    """
     pass
 
 
@@ -79,4 +100,7 @@ def render_template(template_name: str):
 
 
 def is_allowed_name(name: str) -> bool:
+    """
+    Check if this is a valid function name.
+    """
     return (re.fullmatch(_ALLOWED_NAME, name) is not None)

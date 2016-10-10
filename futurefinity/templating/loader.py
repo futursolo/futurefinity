@@ -29,6 +29,11 @@ import concurrent.futures
 
 
 class BaseLoader:
+    """
+    Base Template Loader.
+
+    All Loaders should be a subclass of this class.
+    """
     def __init__(
         self, loop: Optional[asyncio.BaseEventLoop]=None,
         cache_template: bool=True,
@@ -49,9 +54,9 @@ class BaseLoader:
 
 class TemplateLoader(BaseLoader):
     """
-    The TemplateLoader.
+    The async `TemplateLoader`.
 
-    The Default template loader of FutureFinity.
+    The Default template loader of `FutureFinity`.
     """
     def __init__(
         self,
@@ -66,7 +71,7 @@ class TemplateLoader(BaseLoader):
         else:
             raise ValueError("Unsupported template_path type.")
 
-        self._executor = concurrent.futures.ThreadPoolExecutor(100)
+        self._executor = concurrent.futures.ThreadPoolExecutor(10)
 
     def _find_abs_path(self, template_name: Text) -> Text:
         """
@@ -100,7 +105,7 @@ class TemplateLoader(BaseLoader):
 
     async def load_template(self, template_name: Text) -> template.Template:
         """
-        Load and parse the template.
+        Load and parse the template asynchronously.
         """
         if template_name in self._template_cache:
             return self._template_cache[template_name]

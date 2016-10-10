@@ -38,7 +38,7 @@ try:
     from typing import Awaitable
     from typing import TYPE_CHECKING
 
-except:
+except ImportError:
     from typing import TypeVar, Generic, T_co
 
     Text = str

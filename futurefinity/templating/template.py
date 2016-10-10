@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 
 
 class Template:
+    """
+    The FutureFinity Template.
+
+    This represents a compiled, resuable template string.
+    """
     def __init__(
         self, tpl_str: Text,
         template_name: Text="<string>",
@@ -88,6 +93,9 @@ class Template:
         return tpl_namespace
 
     async def render_str(self, **kwargs) -> Text:
+        """
+        Render the Template into string.
+        """
         tpl_globals = kwargs
         tpl_globals.update(self._tpl_globals)
 

@@ -27,6 +27,14 @@ if TYPE_CHECKING:
 
 
 class StatementModifier:
+    """
+    The Statement Modifier.
+
+    It supports two types of modifier `async` and `from`.
+
+    The `from` modifier will take 1 argument off from the statement, however
+    `async` modifier will not take any arguments off from the statement.
+    """
     _modifier_args = {
         "async": 0,
         "from": 1
@@ -38,6 +46,9 @@ class StatementModifier:
 
     @staticmethod
     def parse_modifier(smt_str: Text) -> (Optional["StatementModifier"], Text):
+        """
+        Parse the statement modifier from the statement string if it has one.
+        """
         _splitted = smt_str.strip().split(" ", maxsplit=1)
 
         if _splitted[0] not in StatementModifier._modifier_args.keys():
@@ -69,6 +80,11 @@ class StatementModifier:
 
 
 class Statement:
+    """
+    The base statement.
+
+    All the statements should be a sub class of this class.
+    """
     _keywords = ()
 
     def __init__(self,
@@ -101,17 +117,29 @@ class Statement:
 
     @property
     def should_indent(self) -> bool:
+        """
+        Check if this is a indent block.
+        """
         return self._should_indent
 
     @property
     def should_append(self) -> bool:
+        """
+        Check if this should be append to the current indent.
+        """
         return self._should_append
 
     @property
     def should_unindent(self) -> bool:
+        """
+        Check if this should be removed from the indents when finishing.
+        """
         return self._should_unindent
 
     def append_statement(self, smt: "Statement"):
+        """
+        Append a statement to the current statement.
+        """
         if self._finished:
             self.raise_invalid_operation(
                 "This statement has already been finished")
@@ -123,6 +151,9 @@ class Statement:
         self._statements.append(smt)
 
     def unindent(self):
+        """
+        Unindent a statement.
+        """
         if self._finished:
             self.raise_invalid_operation(
                 "This statement has already been finished")
@@ -134,43 +165,26 @@ class Statement:
         self._finished = True
 
     def print_code(self, code_printer: "printer.CodePrinter"):
+        """
+        Print the code to the printer.
+        """
         self.raise_invalid_operation(
             "Method print_code is not implemented",
             from_err=NotImplementedError())
 
     def gen_smt_code(self) -> Text:
+        """
+        Generate the statement string.
+        """
         modifier = self._modifier.gen_modifier() if self._modifier else ""
 
         return "{} {} {}".format(modifier, self._keyword, self._rest).strip()
 
-    @staticmethod
-    def parse_statement(smt_str: Text, smt_at: int) -> "Statement":
-        modifier, rest_str = StatementModifier.parse_modifier(smt_str)
-
-        splitted = rest_str.strip().split(" ", 1)
-
-        keyword = splitted[0].strip()
-
-        if len(splitted) > 1:
-            rest = splitted[1]
-        else:
-            rest = None
-
-        for SmtClass in (
-            OutputStatement, IndentStatement, HalfIndentStatement,
-            IncludeStatement, BlockStatement, UnindentStatement,
-            InlineStatement, InheritStatement, CommentStatement,
-                CodeStatement):
-
-            if keyword in SmtClass._keywords:
-                return SmtClass(
-                    keyword, rest, modifier, smt_at=smt_at)
-
-        else:
-            raise ParseError("Unknown Statement Keyword: {}.".format(keyword))
-
 
 class RootStatement(Statement):
+    """
+    The Root statement.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -184,6 +198,11 @@ class RootStatement(Statement):
             "RootStatement cannot be appended to other statements")
 
     def append_block_statement(self, smt: "BlockStatement"):
+        """
+        Append a block to the root.
+
+        The block should be appended to both the root and the current indent.
+        """
         if smt.block_name in self._block_statements.keys():
             raise InvalidStatementOperation(
                 "Block with name {} has already been defined."
@@ -216,6 +235,11 @@ class RootStatement(Statement):
 
 
 class IncludeStatement(Statement):
+    """
+    The Statement represents the include statement.
+
+    Keyowrd: `include`.
+    """
     _keywords = ("include", )
 
     def print_code(self, code_printer: "printer.CodePrinter"):
@@ -225,6 +249,11 @@ class IncludeStatement(Statement):
 
 
 class InheritStatement(Statement):
+    """
+    The Statement represents the inherit statement.
+
+    Keyword: `inherit`.
+    """
     _keywords = ("inherit", )
 
     def print_code(self, code_printer: "printer.CodePrinter"):
@@ -234,6 +263,9 @@ class InheritStatement(Statement):
 
 
 class BlockStatement(Statement):
+    """
+    The Statement represents the block statement.
+    """
     _keywords = ("block",)
 
     def __init__(self, *args, **kwargs):
@@ -250,9 +282,15 @@ class BlockStatement(Statement):
 
     @property
     def block_name(self):
+        """
+        Return the block name.
+        """
         return self._block_name
 
     def print_block_code(self, code_printer: "printer.CodePrinter"):
+        """
+        Print the actual block code.
+        """
         code_printer.write_line("@staticmethod", smt_at=self._smt_at)
         code_printer.write_line("async def _render_block_{}_str(self) -> str:"
                                 .format(self._block_name), smt_at=self._smt_at)
@@ -272,6 +310,11 @@ class BlockStatement(Statement):
 
 
 class IndentStatement(Statement):
+    """
+    The Statement represents the indent statement.
+
+    Keywords: `if`, `with`, `for`, `while`, and `try`.
+    """
     _keywords = ("if", "with", "for", "while", "try")
 
     def __init__(self, *args, **kwargs):
@@ -289,6 +332,13 @@ class IndentStatement(Statement):
 
 
 class UnindentStatement(Statement):
+    """
+    The Statement represents the unindent statement.
+
+    Unindent the last indent.
+
+    Keyword: `end`.
+    """
     _keywords = ("end",)
 
     def __init__(self, *args, **kwargs):
@@ -299,6 +349,13 @@ class UnindentStatement(Statement):
 
 
 class HalfIndentStatement(UnindentStatement, IndentStatement):
+    """
+    The Statement represents the half-indent statement.
+
+    Automatically unindent the last indent and establish a new indent.
+
+    Keywords: `else`, `elif`, `except`, and `finally`.
+    """
     _keywords = ("else", "elif", "except", "finally")
 
     def __init__(self, *args, **kwargs):
@@ -309,6 +366,11 @@ class HalfIndentStatement(UnindentStatement, IndentStatement):
 
 
 class InlineStatement(Statement):
+    """
+    The Statement represents the inline statement.
+
+    Keywords: `break`, `continue`, `import`, and `raise`.
+    """
     _keywords = ("break", "continue", "import", "raise")
 
     def print_code(self, code_printer: "printer.CodePrinter"):
@@ -316,6 +378,25 @@ class InlineStatement(Statement):
 
 
 class OutputStatement(Statement):
+    """
+    The Statement represents the inline statement.
+
+    Output the result to the result.
+
+    Keywords: `=`, `r=`, `raw=`, `u=`, `url=`, `j=`, `json=`, `h=`,
+    and `html=`.
+
+    `=` represents the default escape. The default escape preferred by the
+    templating system is html escape.
+
+    `r=` and `raw=` represent to output the raw string with no escape.
+
+    `h=` and `html=` represent to output the string with html escape.
+
+    `u=` and `url=` represent to output the string with url escape.
+
+    `j=` and `json=` represent to output the string with json escape.
+    """
     _keywords = ("=", "r=", "raw=", "u=", "url=", "j=", "json=", "h=", "html=")
 
     def print_code(self, code_printer: "printer.CodePrinter"):
@@ -364,6 +445,9 @@ class OutputStatement(Statement):
 
 
 class StrStatement(Statement):
+    """
+    The Statement represents the string in the template.
+    """
     def __init__(self, smt_str: Text, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -375,6 +459,11 @@ class StrStatement(Statement):
             smt_at=self._smt_at)
 
 class CommentStatement(Statement):
+    """
+    The statement represents the comment in the template.
+
+    Keyword: `#`.
+    """
     _keywords = ("#",)
 
     def print_code(self, code_printer: "printer.CodePrinter"):
@@ -382,9 +471,21 @@ class CommentStatement(Statement):
 
 
 class CodeStatement(Statement):
+    """
+    The statement represents the code in the template.
+
+    This allows you to execute arbitrary **inline** code in your template.
+
+    Keyword: `@`.
+    """
     _keywords = ("@",)
 
     def print_code(self, code_printer: "printer.CodePrinter"):
         code_printer.write_line(
             "{}".format(self._rest), smt_at=self._smt_at)
 
+builtin_statements = (
+    OutputStatement, IndentStatement, HalfIndentStatement,
+    IncludeStatement, BlockStatement, UnindentStatement,
+    InlineStatement, InheritStatement, CommentStatement,
+    CodeStatement)
