@@ -330,6 +330,9 @@ class IndentStatement(Statement):
             for smt in self._statements:
                 smt.print_code(code_printer)
 
+            code_printer.write_line("pass")
+            # In case there's nothing inside the indent.
+
 
 class UnindentStatement(Statement):
     """

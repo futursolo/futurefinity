@@ -108,13 +108,13 @@ This is body. The old title is Old Title.
         tpl = Template(
             "<%% is the begin mark, and <%r= \"%%> is the end mark. \" %>"
             "<%r= \"<% and\" %> %> only need to be escaped whenever they "
-            "have disambiguation of the templating system.")
+            "have ambiguity of the templating system.")
 
         result = await tpl.render_str(cond=True, sub_cond=True)
         assert result == (
             "<% is the begin mark, and %> is the end mark. "
             "<% and %> only need to be escaped whenever they "
-            "have disambiguation of the templating system.")
+            "have ambiguity of the templating system.")
 
     @run_until_complete
     async def test_statement_modifier(self):
