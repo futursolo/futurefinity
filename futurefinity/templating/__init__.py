@@ -277,7 +277,7 @@ them and FutureFinity Templating.
             </body>
         </html>
 
-8. Inline Statement
+8. Inline statement
     The Statement represents a Python inline keyword.
 
     Example:

@@ -22,7 +22,7 @@
 """
 
 from .utils import (
-    TolerantMagicDict, FutureFinityError, ensure_bytes, Text)
+    TolerantMagicDict, FutureFinityError, ensure_bytes, Text, PY351)
 from . import protocol
 
 from typing import Union, Optional, Mapping
@@ -73,6 +73,17 @@ class ResponseEntityTooLarge(ClientError):
     larger than the largest allowed size of entity from the server.
     """
     pass
+
+
+def _check_if_transport_closed(transport: asyncio.BaseTransport) -> bool:
+    if PY351:
+        return transport.is_closing()
+
+    try:
+        return transport._closing
+
+    except:
+        return transport._closed
 
 
 class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
@@ -145,7 +156,7 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
         if not (self.reader and self.writer and self.transport):
             await _create_new_stream_and_connection()
 
-        if self.writer.transport._closing:
+        if _check_if_transport_closed(self.writer.transport):
             await _create_new_stream_and_connection()
 
     def close_stream_and_connection(self):
@@ -198,7 +209,8 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
                 raise RequestTimeoutError("Request Timeout.")
 
             if not incoming_data:
-                if (not self.writer) or self.writer.transport._closing:
+                if (not self.writer) or _check_if_transport_closed(
+                 self.writer.transport):
                     self.close_stream_and_connection()
                     raise BadResponse("Unexpected Remote Close.")
 
