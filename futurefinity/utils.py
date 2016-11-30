@@ -19,7 +19,9 @@
 ``futurefinity.utils`` contains a series of utilities for common use.
 """
 
-from typing import Any, Optional, Union, List
+from typing import Any, Optional, Union, List, Callable
+from types import ModuleType
+from . import compat
 
 import sys
 import time
@@ -30,6 +32,7 @@ import numbers
 import calendar
 import datetime
 import warnings
+import functools
 import email.utils
 import collections.abc
 
@@ -103,7 +106,7 @@ def ensure_future(coro_or_future, *, loop=None):
 
     Behave like `asyncio.ensure_future` on Python 3.5.1 or higher.
     """
-    if PY351:
+    if compat.PY351:
         return asyncio.ensure_future(coro_or_future, loop=loop)
 
     if isinstance(
@@ -186,3 +189,27 @@ def deprecated_attr(attr, mod_name, message) -> _DeprecatedAttr:
         sys.modules[mod_name] = _ModWithDeprecatedAttrs(mod)
 
     return _DeprecatedAttr(attr, message)
+
+
+class _CachedPropertyWrapper:
+    def __init__(self, func: Callable[[Any], Any]):
+        self.func = func
+        functools.update_wrapper(self, func)
+
+    def __get__(self, obj: Any, *args, **kwargs) -> Any:
+        if obj is None:
+            return self
+        val = self.func(obj)
+        obj.__dict__[self.func.__name__] = val
+        return val
+
+
+def cached_property(func: Callable[[Any], Any]) -> _CachedPropertyWrapper:
+    """
+    A Cached Property Decorator.
+
+    References:
+    https://en.wikipedia.org/wiki/Lazy_evaluation
+    https://github.com/faif/python-patterns/blob/master/lazy_evaluation.py
+    """
+    return _CachedPropertyWrapper(func)

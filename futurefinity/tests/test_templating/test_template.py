@@ -15,9 +15,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import PY352
 from futurefinity.tests.utils import (
     TestCase, run_until_complete, get_tests_path)
+from futurefinity.compat import PY352
 
 from futurefinity.templating import Template, TemplateLoader
 
