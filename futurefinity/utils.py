@@ -48,12 +48,6 @@ except ImportError:
 
     TYPE_CHECKING = False
 
-default_mark = object()
-
-PY350 = sys.version_info[:3] >= (3, 5, 0)
-PY351 = sys.version_info[:3] >= (3, 5, 1)
-PY352 = sys.version_info[:3] >= (3, 5, 2)
-
 
 class Identifier:
     """
@@ -102,6 +96,7 @@ def ensure_str(var: Any) -> Text:
         strvar = var
     return str(strvar)
 
+
 def ensure_future(coro_or_future, *, loop=None):
     """
     Python 3.5.0 Compatibility Layer.
@@ -123,6 +118,7 @@ def ensure_future(coro_or_future, *, loop=None):
 
     else:
         raise TypeError('A Future, a coroutine or an awaitable is required')
+
 
 def _wrap_awaitable(awaitable):
     """
@@ -161,28 +157,32 @@ class _DeprecatedAttr:
         return self._attr
 
 
-def deprecated_attr(attr, mod_name, message):
+class _ModWithDeprecatedAttrs:
+    def __init__(self, mod: ModuleType):
+        self.__dict__["__module__"] = mod
+
+    def __getattr__(self, name: Text) -> Any:
+        mod_attr = getattr(self.__module__, name)
+
+        if isinstance(mod_attr, _DeprecatedAttr):
+            return mod_attr.get_attr()
+
+        return mod_attr
+
+    def __setattr__(self, name: Text, attr: Any):
+        return setattr(self.__module__, name, attr)
+
+    def __dir__(self) -> List[Text]:
+        return dir(mod)
+
+
+def deprecated_attr(attr, mod_name, message) -> _DeprecatedAttr:
     """
     Mark an attribute as deprecated in a module.
     """
     mod = sys.modules[mod_name]
 
-    class _ModWithDeprecatedAttrs:
-        def __getattr__(self, name: Text) -> Any:
-            mod_attr = getattr(mod, name)
-
-            if isinstance(mod_attr, _DeprecatedAttr):
-                return mod_attr.get_attr()
-
-            return mod_attr
-
-        def __setattr__(self, name: Text, attr: Any):
-            return setattr(mod, name, attr)
-
-        def __dir__(self) -> List[Text]:
-            return dir(mod)
-
     if not isinstance(mod, _ModWithDeprecatedAttrs):
-        sys.modules[mod_name] = _ModWithDeprecatedAttrs()
+        sys.modules[mod_name] = _ModWithDeprecatedAttrs(mod)
 
     return _DeprecatedAttr(attr, message)
