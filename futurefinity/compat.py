@@ -15,19 +15,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from ._version import __version__, version
+import sys
 
-from . import log
-from . import web
-from . import utils
-from . import client
-from . import compat
-from . import server
-from . import routing
-from . import protocol
-from . import security
-from . import magicdict
+__all__ = ["PY350", "PY351", "PY352"]
 
-__all__ = [
-    "__version__", "version", "log", "web", "utils", "client", "compat",
-    "server", "routing", "protocol", "security", "magicdict"]
+
+PY350 = sys.version_info[:3] >= (3, 5, 0)
+PY351 = sys.version_info[:3] >= (3, 5, 1)
+PY352 = sys.version_info[:3] >= (3, 5, 2)

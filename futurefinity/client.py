@@ -21,7 +21,8 @@
 
 """
 
-from .utils import (FutureFinityError, ensure_bytes, Text, PY351)
+from .utils import (FutureFinityError, ensure_bytes, Text)
+from . import compat
 from . import protocol
 from . import magicdict
 
@@ -76,7 +77,7 @@ class ResponseEntityTooLarge(ClientError):
 
 
 def _check_if_transport_closed(transport: asyncio.BaseTransport) -> bool:
-    if PY351:
+    if compat.PY351:
         return transport.is_closing()
 
     try:

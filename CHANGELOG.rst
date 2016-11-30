@@ -5,13 +5,14 @@ dev
 - Fixed a Set Cookie Expires Days Bug
 - Implemented HTTP 451(Unavailable For Legal Reasons)
 - Print Exceptions in Protocol in debug mode
-- Introduce FutureFinity Template
+- Introduce FutureFinity Templating
 - Removed Jinja2 from Full Requirements
 - Deprecated HAMCSecurityContext
 - Deprecated AESGCMSecurityContext by AESContext
 - Deprecation Tools
 - Introduce FutureFinity Logging Facility
-- Introduce New Routing Dispatcher.
+- Introduce New Routing Dispatcher
+- Better implementation of MagicDict and TolerantMagicDict
 
 v0.2.1
 ------

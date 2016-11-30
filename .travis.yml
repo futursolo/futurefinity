@@ -36,6 +36,7 @@ language: python
 
 install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew -v update              ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew -v upgrade             ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew -v install pyenv       ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv install $PYTHONVER -v ; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then pyenv global $PYTHONVER     ; fi
