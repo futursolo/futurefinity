@@ -16,7 +16,7 @@
 #   limitations under the License.
 
 from .utils import TemplateRenderError
-from futurefinity.utils import TYPE_CHECKING, Text
+from futurefinity import compat
 
 from typing import Dict, Any, Dict, Callable, Union
 
@@ -28,7 +28,7 @@ import json
 import functools
 import urllib.parse
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     from . import loader
 
 
@@ -38,7 +38,7 @@ class _BlockAttrs:
     """
     _namespace = None  # type: Namespace
 
-    def __getattr__(self, name: Text) -> Callable[[], Text]:
+    def __getattr__(self, name: compat.Text) -> Callable[[], compat.Text]:
         if name in self._namespace._updated_block_fns.keys():
             block_fn = self._namespace._updated_block_fns[name]
 
@@ -58,7 +58,7 @@ class _BlockAttrs:
 
         return wrapper
 
-    def __setattr__(self, name: Text, value: Any):
+    def __setattr__(self, name: compat.Text, value: Any):
         raise NotImplementedError
 
     __getitem__ = __getattr__
@@ -69,7 +69,9 @@ class Namespace:
     """
     Current Namespace of the template.
     """
-    def __init__(self, tpl: "template.Template", tpl_globals: Dict[Text, Any]):
+    def __init__(
+        self, tpl: "template.Template",
+            tpl_globals: Dict[compat.Text, Any]):
         self._tpl = tpl
         self._tpl_globals = tpl_globals
 
@@ -93,7 +95,7 @@ class Namespace:
         self._updated_block_fns = {}
 
     @property
-    def child_body(self) -> Text:
+    def child_body(self) -> compat.Text:
         """
         Return the body from the child template.
         """
@@ -103,7 +105,7 @@ class Namespace:
         return self._child_body
 
     @property
-    def blocks(self) -> Dict[Text, Any]:
+    def blocks(self) -> Dict[compat.Text, Any]:
         """
         Return the block selector.
         """
@@ -123,7 +125,7 @@ class Namespace:
         return self._parent
 
     @property
-    def _tpl_result(self) -> Text:
+    def _tpl_result(self) -> compat.Text:
         if not self._finished:
             raise TemplateRenderError("Renderring has already been finished.")
 
@@ -134,7 +136,7 @@ class Namespace:
         return self._tpl._loader
 
     @property
-    def _sub_globals(self) -> Dict[Text, Any]:
+    def _sub_globals(self) -> Dict[compat.Text, Any]:
         sub_globals = {}
 
         sub_globals.update(self._tpl_globals)
@@ -144,7 +146,7 @@ class Namespace:
 
         return sub_globals
 
-    async def _include_tpl(self, template_name: Text) -> Text:
+    async def _include_tpl(self, template_name: compat.Text) -> compat.Text:
         tpl = await self._loader.load_template(template_name)
 
         tpl_namespace = tpl._get_namespace(tpl_globals=self._sub_globals)
@@ -155,7 +157,7 @@ class Namespace:
     def _update_blocks(self, **kwargs):
         self._updated_block_fns.update(**kwargs)
 
-    def _update_child_body(self, child_body: Text):
+    def _update_child_body(self, child_body: compat.Text):
         if self._child_body is not None:
             raise TemplateRenderError("There's already a child body.")
 
@@ -180,7 +182,7 @@ class Namespace:
 
         self.__tpl_result__ = self._parent._tpl_result
 
-    async def _add_parent(self, template_name: Text):
+    async def _add_parent(self, template_name: compat.Text):
         if self._parent is not None:
             raise TemplateRenderError(
                 "A template can only inherit from one parent template.")
@@ -198,18 +200,20 @@ class Namespace:
         await self._inherit_tpl()
         self._finished = True
 
-    async def _render_body_str(self) -> Text:
+    async def _render_body_str(self) -> compat.Text:
         raise NotImplementedError
 
     @property
-    def default_escape(self) -> Callable[[Text], Text]:
+    def default_escape(self) -> Callable[[compat.Text], compat.Text]:
         """
         Return the default escape function.
         """
         return self._default_escape
 
     @default_escape.setter
-    def default_escape(self, default_type: Union[Text, Callable[[Text], Text]]):
+    def default_escape(
+        self, default_type: Union[
+            compat.Text, Callable[[compat.Text], compat.Text]]):
         """
         Set the default escape function.
         """
@@ -237,37 +241,37 @@ class Namespace:
 
         self._escape_url_with_plus = value
 
-    def no_escape(self, raw_str: Text) -> Text:
+    def no_escape(self, raw_str: compat.Text) -> compat.Text:
         """
         Return the string with no escape.
         """
         return raw_str
 
-    def escape_html(self, raw_str: Text) -> Text:
+    def escape_html(self, raw_str: compat.Text) -> compat.Text:
         """
         Escape the string in a html safe way.
         """
         return html.escape(raw_str)
 
-    def escape_json(self, raw_str: Text) -> Text:
+    def escape_json(self, raw_str: compat.Text) -> compat.Text:
         """
         Escape the string into a json safe string.
         """
         return json.dumps(raw_str)
 
-    def escape_url_plus(self, raw_str: Text) -> Text:
+    def escape_url_plus(self, raw_str: compat.Text) -> compat.Text:
         """
         Escape the string in a url safe way with the plus mark.
         """
         return urllib.parse.quote_plus(raw_str)
 
-    def escape_url_no_plus(self, raw_str: Text) -> Text:
+    def escape_url_no_plus(self, raw_str: compat.Text) -> compat.Text:
         """
         Escape the string in a url safe way without the plus mark.
         """
         return urllib.parse.quote(raw_str)
 
-    def escape_url(self, raw_str: Text) -> Text:
+    def escape_url(self, raw_str: compat.Text) -> compat.Text:
         """
         Escape the string in a url safe way with default url plus settings.
         """

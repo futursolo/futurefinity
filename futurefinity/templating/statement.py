@@ -16,13 +16,14 @@
 #   limitations under the License.
 
 from .utils import InvalidStatementOperation, ParseError, is_allowed_name
-from futurefinity.utils import ensure_str, TYPE_CHECKING, Text
+from futurefinity.utils import ensure_str
+from futurefinity import compat
 
 from typing import Optional, Union
 
 import typing
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     from . import printer
 
 
@@ -40,12 +41,14 @@ class StatementModifier:
         "from": 1
     }
 
-    def __init__(self, keyword: Text, rest: Optional[Text]=None):
+    def __init__(self, keyword: compat.Text, rest: Optional[compat.Text]=None):
         self._keyword = keyword
         self._rest = rest.strip() if rest else ""
 
     @staticmethod
-    def parse_modifier(smt_str: Text) -> (Optional["StatementModifier"], Text):
+    def parse_modifier(
+        smt_str: compat.Text) -> (
+            Optional["StatementModifier"], compat.Text):
         """
         Parse the statement modifier from the statement string if it has one.
         """
@@ -75,7 +78,7 @@ class StatementModifier:
 
         return (StatementModifier(modifier_keyword, modifier_rest), rest_str)
 
-    def gen_modifier(self) -> Text:
+    def gen_modifier(self) -> compat.Text:
         return "{} {}".format(self._keyword, self._rest).strip()
 
 
@@ -88,8 +91,8 @@ class Statement:
     _keywords = ()
 
     def __init__(self,
-                 keyword: Optional[Text]=None,
-                 rest: Optional[Text]=None,
+                 keyword: Optional[compat.Text]=None,
+                 rest: Optional[compat.Text]=None,
                  modifier: Optional[StatementModifier]=None,
                  smt_at: Union[int, str]="<unknown>"):
         self._statements = []
@@ -108,7 +111,7 @@ class Statement:
         self._should_unindent = False
 
     def raise_invalid_operation(
-     self, message: Text, from_err: Optional[Exception]=None):
+            self, message: compat.Text, from_err: Optional[Exception]=None):
         err_str = "{} at line {}.".format(message, self._smt_at)
         if from_err:
             raise InvalidStatementOperation(err_str) from from_err
@@ -172,7 +175,7 @@ class Statement:
             "Method print_code is not implemented",
             from_err=NotImplementedError())
 
-    def gen_smt_code(self) -> Text:
+    def gen_smt_code(self) -> compat.Text:
         """
         Generate the statement string.
         """
@@ -451,7 +454,7 @@ class StrStatement(Statement):
     """
     The Statement represents the string in the template.
     """
-    def __init__(self, smt_str: Text, *args, **kwargs):
+    def __init__(self, smt_str: compat.Text, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._smt_str = smt_str
@@ -460,6 +463,7 @@ class StrStatement(Statement):
         code_printer.write_line(
             "__tpl_result__ += {}".format(repr(ensure_str(self._smt_str))),
             smt_at=self._smt_at)
+
 
 class CommentStatement(Statement):
     """

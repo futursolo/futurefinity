@@ -15,16 +15,17 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import Text, Identifier
+from .utils import Identifier
+from . import compat
 from typing import Any, Iterator, List, Sequence, Mapping, Tuple, Hashable
-
-__all__ = ["MagicDictFrozenError", "MagicDict", "TolerantMagicDict"]
-
-_DEFAULT_MARK = Identifier()
 
 import threading
 import collections
 import collections.abc
+
+__all__ = ["MagicDictFrozenError", "MagicDict", "TolerantMagicDict"]
+
+_DEFAULT_MARK = Identifier()
 
 
 class MagicDictFrozenError(Exception):
@@ -229,7 +230,7 @@ class MagicDict(collections.abc.MutableMapping):
     def __ne__(self, obj: Mapping[Any, Any]) -> bool:
         return not self.__eq__(obj)
 
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         content_list = [(key, value) for (key, value) in self.items()]
 
         return "MagicDict({})".format(repr(content_list))
@@ -398,7 +399,7 @@ class TolerantMagicDict(MagicDict):
     **This doesn't mean that the normal `MagicDict` is mean.**
     """
 
-    def __setitem__(self, key: Text, value: Any):
+    def __setitem__(self, key: compat.Text, value: Any):
         if not isinstance(key, str):
             raise TypeError(
                 "Keys of a `TolerantMagicDict` should be str.")
@@ -410,13 +411,13 @@ class TolerantMagicDict(MagicDict):
 
         return "TolerantMagicDict({})".format(str(content_list))
 
-    def __getitem__(self, key: Text) -> Any:
+    def __getitem__(self, key: compat.Text) -> Any:
         return super().__getitem__(key.lower())
 
-    def __delitem__(self, key: Text):
+    def __delitem__(self, key: compat.Text):
         super().__delitem__(key.lower())
 
-    def __contains__(self, key: Text) -> bool:
+    def __contains__(self, key: compat.Text) -> bool:
         return key.lower() in self._pair_identifiers
 
     def __reversed__(self) -> "MagicDict":
@@ -430,34 +431,34 @@ class TolerantMagicDict(MagicDict):
 
         return tolerant_magic_dict
 
-    def add(self, key: Text, value: Any):
+    def add(self, key: compat.Text, value: Any):
         if not isinstance(key, str):
             raise TypeError(
                 "Keys of a `TolerantMagicDict` should be str.")
 
         return super().add(key.lower(), value)
 
-    def pop(self, key: Text) -> Any:
+    def pop(self, key: compat.Text) -> Any:
         return super().pop(key.lower())
 
-    def setdefault(self, key: Text, default: Any=None) -> Any:
+    def setdefault(self, key: compat.Text, default: Any=None) -> Any:
         return super().setdefault(key.lower(), default=default)
 
     @staticmethod
-    def fromkeys(seq: Sequence[Text], value: Any=None) -> "MagicDict":
+    def fromkeys(seq: Sequence[compat.Text], value: Any=None) -> "MagicDict":
         tolerant_magic_dict = TolerantMagicDict()
         for key in seq:
             tolerant_magic_dict[key] = value
 
         return tolerant_magic_dict
 
-    def get_first(self, key: Text, default: Any=None) -> Any:
+    def get_first(self, key: compat.Text, default: Any=None) -> Any:
         return super().get_first(key.lower(), default=default)
 
     def get_last(self, key: Hashable, default: Any=None) -> Any:
         return super().get_last(key.lower(), default=default)
 
-    def get_iter(self, key: Text) -> Iterator[Any]:
+    def get_iter(self, key: compat.Text) -> Iterator[Any]:
         return super().get_iter(key.lower())
 
     def copy(self):
@@ -466,4 +467,3 @@ class TolerantMagicDict(MagicDict):
     __copy__ = copy
     __repr__ = __str__
     get = get_first
-

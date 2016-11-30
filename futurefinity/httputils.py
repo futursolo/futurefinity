@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import Text, ensure_str
+from .utils import ensure_str
+from . import compat
 from typing import Optional, Union
 from http.cookies import SimpleCookie as HTTPCookies
 
@@ -34,7 +35,7 @@ status_code_descriptions.setdefault(451, "Unavailable For Legal Reasons")
 
 
 def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
-                                  datetime.datetime]]=None) -> Text:
+                                  datetime.datetime]]=None) -> compat.Text:
     """
     Make a HTTP Protocol timestamp.
     """
@@ -54,4 +55,3 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
         raise TypeError("unknown timestamp type: {}".format(ts))
 
     return ensure_str(email.utils.formatdate(ts, usegmt=True))
-

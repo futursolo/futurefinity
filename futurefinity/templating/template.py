@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import TYPE_CHECKING, Text, ensure_str
+from futurefinity.utils import ensure_str
+from futurefinity import compat
 
 from . import parser
 from . import printer
@@ -28,7 +29,7 @@ import asyncio
 
 import typing
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     from . import loader
 
 
@@ -39,11 +40,11 @@ class Template:
     This represents a compiled, resuable template string.
     """
     def __init__(
-        self, tpl_str: Text,
-        template_name: Text="<string>",
-        template_path: Text="<string>",
+        self, tpl_str: compat.Text,
+        template_name: compat.Text="<string>",
+        template_path: compat.Text="<string>",
         loader: Optional["loader.TemplateLoader"]=None,
-        default_escape: Text="html",
+        default_escape: compat.Text="html",
             escape_url_with_plus: bool=True):
         self._tpl_str = tpl_str
 
@@ -75,14 +76,15 @@ class Template:
         tpl_globals = {
             "asyncio": asyncio,
             "__TplNamespace__": namespace.Namespace,
-            "__tpl_ensure_str__":ensure_str
+            "__tpl_ensure_str__": ensure_str
         }
 
         return tpl_globals
 
     def _get_namespace(
-        self, tpl_globals: Optional[Dict[Text, Any]]=None,
-            namespace_args: List[Any]=(), namespace_kwargs: Dict[Text, Any]={}):
+        self, tpl_globals: Optional[Dict[compat.Text, Any]]=None,
+        namespace_args: List[Any]=(),
+            namespace_kwargs: Dict[compat.Text, Any]={}):
         tpl_globals = tpl_globals or self._tpl_globals
         exec(self._compiled_code, tpl_globals)
 
@@ -92,7 +94,7 @@ class Template:
 
         return tpl_namespace
 
-    async def render_str(self, **kwargs) -> Text:
+    async def render_str(self, **kwargs) -> compat.Text:
         """
         Render the Template into string.
         """

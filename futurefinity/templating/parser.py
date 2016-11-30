@@ -16,13 +16,13 @@
 #   limitations under the License.
 
 from .utils import ParseError, ReadFinished
-from futurefinity.utils import TYPE_CHECKING, Text
+from futurefinity import compat
 
 from . import statement
 
 from typing import Union, Optional
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     from . import template
 
 _BEGIN_MARK = "<%"
@@ -46,8 +46,8 @@ class TemplateParser:
 
         self._parse()
 
-    def raise_parse_error(self, message: Text,
-                          line: Union[int, Text]="<unknown>",
+    def raise_parse_error(self, message: compat.Text,
+                          line: Union[int, compat.Text]="<unknown>",
                           from_err: Optional[Exception]=None):
         """
         Raise a `ParserError`.
@@ -176,7 +176,7 @@ class TemplateParser:
                 "Redundant Unindent Statement", self.current_at)
 
     def parse_statement(
-        self, smt_str: Text,
+        self, smt_str: compat.Text,
             smt_at: int) -> "statement.Statement":
         """
         Parse a statement.
@@ -201,7 +201,7 @@ class TemplateParser:
         else:
             raise ParseError("Unknown Statement Keyword: {}.".format(keyword))
 
-    def _find_next_statement(self) -> Union[statement.Statement, Text]:
+    def _find_next_statement(self) -> Union[statement.Statement, compat.Text]:
         if self._finished:
             raise ParseError("Parsing has already been finished.")
 

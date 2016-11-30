@@ -20,9 +20,8 @@
 
 """
 
-from .utils import Text, TYPE_CHECKING
-
 from typing import Union, Callable
+from . import compat
 
 import sys
 import logging
@@ -41,9 +40,9 @@ try:
 except:
     _color_term_supported = False
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     T = Callable[[], logging.Logger]
-    T2 = Callable[[Text], logging.Logger]
+    T2 = Callable[[compat.Text], logging.Logger]
 
 get_logger = getattr(logging, "getLogger")  # type: T
 
@@ -73,7 +72,7 @@ class TermColors:
     default = 9
 
 
-def gen_color_code(color_num: int, is_bg: bool=False) -> Text:
+def gen_color_code(color_num: int, is_bg: bool=False) -> compat.Text:
     """
     Return proper color code based on `color_num` from :class:`.TermColors`.
     """
@@ -102,7 +101,7 @@ class _LoggingFmt(str):
 
         self._color_enabled = True
 
-    def _color_levelname(self, levelname: Text) -> Text:
+    def _color_levelname(self, levelname: compat.Text) -> compat.Text:
         if (self._color_enabled and _color_term_supported and
            levelname in self._colors.keys()):
 
@@ -111,7 +110,7 @@ class _LoggingFmt(str):
 
         return levelname
 
-    def set_level_color(self, levelname: Text, color: int):
+    def set_level_color(self, levelname: compat.Text, color: int):
         self._colors[levelname] = color
 
     def enable_color(self):
@@ -120,7 +119,7 @@ class _LoggingFmt(str):
     def disable_color(self):
         self._color_enabled = False
 
-    def format(self, *args, **kwargs) -> Text:
+    def format(self, *args, **kwargs) -> compat.Text:
         fmt_kwargs = {}
         fmt_kwargs.update(**kwargs)
 

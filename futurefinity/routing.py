@@ -21,16 +21,17 @@
 
 """
 
-from .utils import deprecated_attr, FutureFinityError, Text, TYPE_CHECKING
+from .utils import deprecated_attr, FutureFinityError
 
 from typing.re import Pattern
 from typing import Optional, Tuple, List, Any, Dict, Union
+from . import compat
 
 import re
 import warnings
 import collections
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     from futurefinity import web
 
 
@@ -53,12 +54,12 @@ class ReverseError(NotMatched):
 class _ReMatchGroup:
     _named_group_re = re.compile(r"\?P<(.*)>.*")
 
-    def __init__(self, group_str: Text, index: int):
+    def __init__(self, group_str: compat.Text, index: int):
         self._group_str = group_str
         self._index = index
 
     @property
-    def _name(self) -> Text:
+    def _name(self) -> compat.Text:
         if not hasattr(self, "_prepared_name"):
             matched = self._named_group_re.fullmatch(self._group_str)
 
@@ -83,9 +84,10 @@ class Rule:
     """
 
     def __init__(
-        self, path: Union[Text, "Pattern[Text]"],
+        self, path: Union[compat.Text, "Pattern[compat.Text]"],
         Handler: "web.RequestHandler", path_args: Tuple[Any]=(),
-        name: Optional[Text]=None, path_kwargs: Dict[Text, Any]={}):
+        name: Optional[compat.Text]=None,
+            path_kwargs: Dict[compat.Text, Any]={}):
         self.path = path
 
         if isinstance(self.path, str):
@@ -104,8 +106,8 @@ class Rule:
                     "use keyword arguments instead.", DeprecationWarning)
 
     def match(
-            self, path: Text) -> (
-                "web.RequestHandler", Tuple[Any], Dict[Text, Any]):
+            self, path: compat.Text) -> (
+                "web.RequestHandler", Tuple[Any], Dict[compat.Text, Any]):
         matched_obj = self.path.fullmatch(path)
 
         if not matched_obj:
@@ -124,7 +126,7 @@ class Rule:
         return self.Handler, path_args, path_kwargs
 
     @property
-    def _match_groups(self) -> List[Union[Text, _ReMatchGroup]]:
+    def _match_groups(self) -> List[Union[compat.Text, _ReMatchGroup]]:
         if not hasattr(self, "_prepared_match_groups"):
             groups = []
             rest_pattern_str = self.path.pattern
@@ -156,7 +158,7 @@ class Rule:
 
         return self._prepared_match_groups
 
-    def reverse(self, *args, **kwargs) -> Text:
+    def reverse(self, *args, **kwargs) -> compat.Text:
         result = ""
 
         if len(args) != 0 and len(kwargs) != 0:
@@ -197,9 +199,9 @@ class Dispatcher:
         self._DefaultHandler = DefaultHandler
 
     def add(
-        self, path: Union[Text, "Pattern[Text]"], *args,
+        self, path: Union[compat.Text, "Pattern[Text]"], *args,
             Handler: Optional["web.RequestHandler"]=None,
-            name: Optional[Text]=None, **kwargs):
+            name: Optional[compat.Text]=None, **kwargs):
         """
         Add a `futurefinity.web.RequestHandler` to the `Dispatcher`.
         If you specific a Handler in parameter, it will return nothing.
@@ -249,8 +251,8 @@ class Dispatcher:
             self._rules.append(rule)
 
     def find(
-        self, path: Text) -> Tuple[
-            "web.RequestHandler", Tuple[Any], Dict[Text, Any]]:
+        self, path: compat.Text) -> Tuple[
+            "web.RequestHandler", Tuple[Any], Dict[compat.Text, Any]]:
         """
         Find a `Rule` that matches the path and combine both arguments from
         `Rule` and the provided path together.
@@ -259,7 +261,8 @@ class Dispatcher:
         will be returned.
 
         It returns `Tuple[
-            futurefinity.web.RequestHandler, Tuple[Any], Dict[Text, Any]]`.
+            futurefinity.web.RequestHandler, Tuple[Any],
+            Dict[compat.Text, Any]]`.
 
         For the path_args and path_kwargs, the ones defined in the `Rule`
         will have a higher priority.
@@ -281,8 +284,8 @@ class Dispatcher:
             return self._DefaultHandler, [], {}
 
     def reverse(
-        self, name: Text, path_args: List[Text]=(),
-            path_kwargs: Dict[Text, Text]={}) -> Text:
+        self, name: compat.Text, path_args: List[compat.Text]=(),
+            path_kwargs: Dict[compat.Text, compat.Text]={}) -> compat.Text:
         """
         Reverse a Rule in the dispatcher.
 

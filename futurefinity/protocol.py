@@ -21,8 +21,9 @@ both client side and server side.
 
 """
 
-from .utils import (FutureFinityError, ensure_str, ensure_bytes, Text)
+from .utils import (FutureFinityError, ensure_str, ensure_bytes)
 from . import log
+from . import compat
 from . import security
 from . import httputils
 from . import magicdict
@@ -132,7 +133,7 @@ class CapitalizedHTTPv1Headers(dict):
             "proxy-authorization": "Proxy-Authorization",
         })
 
-    def __getitem__(self, key: Text) -> Text:
+    def __getitem__(self, key: compat.Text) -> compat.Text:
         if key not in self:
             self[key] = key.title()
 
@@ -149,7 +150,7 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
     It has not only all the features from TolerantMagicDict, but also
     can parse and make HTTP Headers.
     """
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         content_list = [(key, value) for (key, value) in self.items()]
         return "HTTPHeaders({})".format(str(content_list))
 
@@ -157,7 +158,7 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
         return HTTPHeaders(self)
 
     @staticmethod
-    def parse(data: Union[Text, bytes, list,
+    def parse(data: Union[compat.Text, bytes, list,
                           magicdict.TolerantMagicDict]) -> "HTTPHeaders":
         headers = HTTPHeaders()
         headers.load_headers(data)
@@ -175,7 +176,8 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
         return ensure_bytes(headers_str)
 
     def load_headers(
-            self, data: Union[Text, bytes, list, magicdict.TolerantMagicDict]):
+        self, data: Union[compat.Text, bytes, list,
+                          magicdict.TolerantMagicDict]):
         """
         Load HTTP Headers from another object.
 
@@ -235,11 +237,11 @@ class HTTPMultipartFileField:
     """
     Containing a file as a http form field.
     """
-    def __init__(self, fieldname: Text, filename: Text,
+    def __init__(self, fieldname: compat.Text, filename: compat.Text,
                  content: bytes,
-                 content_type: Text="application/octet-stream",
+                 content_type: compat.Text="application/octet-stream",
                  headers: Optional[HTTPHeaders]=None,
-                 encoding: Text="binary"):
+                 encoding: compat.Text="binary"):
         self.fieldname = fieldname
         self.filename = filename
         self.content = content
@@ -247,7 +249,7 @@ class HTTPMultipartFileField:
         self.headers = headers or HTTPHeaders()
         self.encoding = encoding
 
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         return ("HTTPMultipartFileField(filename={filename}, "
                 "content_type={content_type}, "
                 "headers={headers}, "
@@ -295,7 +297,7 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
         magicdict.TolerantMagicDict.__init__(self, *args, **kwargs)
 
     @staticmethod
-    def parse(content_type: Text, data: bytes) -> "HTTPMultipartBody":
+    def parse(content_type: compat.Text, data: bytes) -> "HTTPMultipartBody":
         """
         Parse HTTP v1 Multipart Body.
 
@@ -367,7 +369,7 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
 
         return body_args
 
-    def assemble(self) -> Tuple[bytes, Text]:
+    def assemble(self) -> Tuple[bytes, compat.Text]:
         """
         Generate HTTP v1 Body to bytes.
 
@@ -400,11 +402,11 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
         body += full_boundary + b"--" + _CRLF_BYTES_MARK
         return body, content_type
 
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         # Multipart Body is not printable.
         return object.__str__(self)
 
-    def __repr__(self) -> Text:
+    def __repr__(self) -> compat.Text:
         # Multipart Body is not printable.
         return object.__repr__(self)
 
@@ -442,7 +444,7 @@ class HTTPIncomingMessage:
         return self.__is_chunked_body
 
     @property
-    def scheme(self) -> Text:
+    def scheme(self) -> compat.Text:
         """
         Return the scheme that the connection used.
         """
@@ -500,8 +502,8 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     This class represents a Incoming HTTP Request.
     """
-    def __init__(self, method: Text,
-                 origin_path: Text,
+    def __init__(self, method: compat.Text,
+                 origin_path: compat.Text,
                  headers: HTTPHeaders,
                  connection: "HTTPv1Connection",
                  http_version: int=10,
@@ -539,7 +541,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._cookies
 
     @property
-    def path(self) -> Text:
+    def path(self) -> compat.Text:
         """
         Parse path and return the path in `str`.
         """
@@ -548,7 +550,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._path
 
     @property
-    def host(self) -> Text:
+    def host(self) -> compat.Text:
         """
         Parse host and return the host in `str`.
         """
@@ -601,7 +603,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
         return self._body_args
 
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         return ("HTTPIncomingRequest("
                 "method={method}, "
                 "path={path}, "
@@ -653,7 +655,7 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
             self._cookies = cookies
         return self._cookies
 
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         return ("HTTPIncomingResponse("
                 "status_code={status_code}, "
                 "http_version={http_version}, "
@@ -761,8 +763,9 @@ class HTTPv1Connection:
     """
     def __init__(self, controller: BaseHTTPConnectionController,
                  is_client: bool, http_version: int=10,
-                 use_tls: bool=False, sockname: Optional[Tuple[Text, int]]=None,
-                 peername: Optional[Tuple[Text, int]]=None,
+                 use_tls: bool=False,
+                 sockname: Optional[Tuple[compat.Text, int]]=None,
+                 peername: Optional[Tuple[compat.Text, int]]=None,
                  allow_keep_alive: bool=True):
         self.http_version = http_version
         self.is_client = is_client
@@ -1034,8 +1037,8 @@ class HTTPv1Connection:
             return
 
     def write_initial(
-        self, http_version: Optional[int]=None, method: Text="GET",
-            path: Text="/", status_code: int=200,
+        self, http_version: Optional[int]=None, method: compat.Text="GET",
+            path: compat.Text="/", status_code: int=200,
             headers: Optional[HTTPHeaders]=None):
         """
         Write the initial to remote.

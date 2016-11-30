@@ -44,10 +44,9 @@ Finally, listen to the port you want, and start the event loop::
 
 """
 
-from .utils import (
-    Identifier, ensure_str, ensure_bytes, ensure_future,
-    Awaitable, Text)
+from .utils import (Identifier, ensure_str, ensure_bytes)
 from . import log
+from . import compat
 from . import server
 from . import routing
 from . import protocol
@@ -84,7 +83,9 @@ _DEFAULT_ERROR_TPL = """
     <title>{error_code}: {status_code_description}</title>
 </head>
 <body>
-    <div><pre>{error_code}: {status_code_description}\n\n{content}\n</pre></div>
+    <div>
+        <pre>{error_code}: {status_code_description}\n\n{content}\n</pre>
+    </div>
 </body>
 </html>
 """.strip()
@@ -160,13 +161,13 @@ class HTTPError(server.ServerError):
         super().__init__(*args, **kwargs)
 
     @property
-    def _err_str(self) -> Text:
+    def _err_str(self) -> compat.Text:
         return super().__str__()
 
-    def __repr__(self) -> Text:
+    def __repr__(self) -> compat.Text:
         return "HTTPError" + repr((self.status_code, ) + self.args)
 
-    def __str__(self) -> Text:
+    def __str__(self) -> compat.Text:
         final_str = "HTTP {}".format(self.status_code)
         if self._err_str:
             final_str += ": {}".format(self._err_str)
@@ -233,7 +234,7 @@ class _ApplicationHTTPServer(server.HTTPServer):
                 self.transport.close()
                 self.connection.connection_lost()
 
-        ensure_future(_try_handle_exception(), loop=self._loop)
+        compat.ensure_future(_try_handle_exception(), loop=self._loop)
 
     def initial_received(self, incoming: protocol.HTTPIncomingRequest):
         Handler, matched_args, matched_kwargs = self.app.handlers.find(
@@ -274,7 +275,7 @@ class _ApplicationHTTPServer(server.HTTPServer):
                     del self._request_handlers[incoming]
                     del self._futures[incoming]
 
-        coro_future = ensure_future(
+        coro_future = compat.ensure_future(
             self._request_handlers[incoming]._handle_request(),
             loop=self._loop)
 
@@ -310,8 +311,8 @@ class RequestHandler:
     def __init__(self, app: "Application",
                  server: _ApplicationHTTPServer,
                  request: protocol.HTTPIncomingRequest,
-                 path_args: Mapping[Text, Text]=None,
-                 path_kwargs: Mapping[Text, Text]=None):
+                 path_args: Mapping[compat.Text, compat.Text]=None,
+                 path_kwargs: Mapping[compat.Text, compat.Text]=None):
         self.app = app
         self.server = server
         self.settings = self.app.settings
@@ -335,8 +336,9 @@ class RequestHandler:
         self._body_written = False
         self._finished = False
 
-    def get_link_arg(self, name: Text,
-                     default: Union[Text, object]=_DEFAULT_MARK) -> Text:
+    def get_link_arg(
+        self, name: compat.Text,
+            default: Union[compat.Text, object]=_DEFAULT_MARK) -> compat.Text:
         """
         Return first argument in the link with the name.
 
@@ -351,7 +353,7 @@ class RequestHandler:
                 "The name {} cannot be found in link args.".format(name))
         return arg_content
 
-    def get_all_link_args(self, name: Text) -> List[Text]:
+    def get_all_link_args(self, name: compat.Text) -> List[compat.Text]:
         """
         Return all link args with the name by list.
 
@@ -359,8 +361,9 @@ class RequestHandler:
         """
         return self.request.queries.get_list(name, [])
 
-    def get_body_arg(self, name: Text,
-                     default: Union[Text, object]=_DEFAULT_MARK) -> Text:
+    def get_body_arg(
+        self, name: compat.Text,
+            default: Union[compat.Text, object]=_DEFAULT_MARK) -> compat.Text:
         """
         Return first argument in the body with the name.
 
@@ -375,7 +378,7 @@ class RequestHandler:
                 "The name {} cannot be found in body args.".format(name))
         return arg_content
 
-    def get_all_body_args(self, name: Text) -> List[Text]:
+    def get_all_body_args(self, name: compat.Text) -> List[compat.Text]:
         """
         Return all body args with the name by list.
 
@@ -383,8 +386,9 @@ class RequestHandler:
         """
         return self.request.body_args.get_list(name, [])
 
-    def get_header(self, name: Text,
-                   default: Union[Text, object]=_DEFAULT_MARK) -> Text:
+    def get_header(
+        self, name: compat.Text,
+            default: Union[compat.Text, object]=_DEFAULT_MARK) -> compat.Text:
         """
         Return First Header with the name.
 
@@ -399,7 +403,7 @@ class RequestHandler:
                 "The name {} cannot be found in headers.".format(name))
         return header_content
 
-    def get_all_headers(self, name: Text) -> List[Text]:
+    def get_all_headers(self, name: compat.Text) -> List[compat.Text]:
         """
         Return all headers with the name by list.
 
@@ -407,7 +411,7 @@ class RequestHandler:
         """
         return self.request.headers.get_list(name, [])
 
-    def set_header(self, name: Text, value: Text):
+    def set_header(self, name: compat.Text, value: compat.Text):
         """
         Set a response header with the name and value, this will override any
         former value(s) with the same name.
@@ -417,7 +421,7 @@ class RequestHandler:
                                  "initial is written.")
         self._headers[name] = ensure_str(value)
 
-    def add_header(self, name: Text, value: Text):
+    def add_header(self, name: compat.Text, value: compat.Text):
         """
         Add a response header with the name and value, this will not override
         any former value(s) with the same name.
@@ -427,7 +431,7 @@ class RequestHandler:
                                  "initial is written.")
         self._headers.add(name, ensure_str(value))
 
-    def clear_header(self, name: Text):
+    def clear_header(self, name: compat.Text):
         """
         Clear response header(s) with the name.
         """
@@ -446,7 +450,9 @@ class RequestHandler:
                                  "initial is written.")
         self._headers = HTTPHeaders()
 
-    def get_cookie(self, name: Text, default: Optional[Text]=None) -> Text:
+    def get_cookie(
+        self, name: compat.Text,
+            default: Optional[compat.Text]=None) -> compat.Text:
         """
         Return first Cookie in the request header(s) with the name.
 
@@ -458,10 +464,10 @@ class RequestHandler:
             return default
         return cookie.value
 
-    def set_cookie(self, name: Text, value: Text,
-                   domain: Optional[Text]=None,
-                   expires: Optional[Text]=None,
-                   path: Text="/", expires_days: Optional[int]=None,
+    def set_cookie(self, name: compat.Text, value: compat.Text,
+                   domain: Optional[compat.Text]=None,
+                   expires: Optional[compat.Text]=None,
+                   path: compat.Text="/", expires_days: Optional[int]=None,
                    secure: bool=False, httponly: bool=False):
         """
         Set a cookie with attribute(s).
@@ -495,7 +501,7 @@ class RequestHandler:
         self._cookies[name]["secure"] = secure
         self._cookies[name]["httponly"] = httponly
 
-    def clear_cookie(self, name: Text):
+    def clear_cookie(self, name: compat.Text):
         """
         Clear a cookie with the name.
         """
@@ -516,8 +522,8 @@ class RequestHandler:
         for cookie_name in self.request.cookies.keys():
             self.clear_cookie(cookie_name)
 
-    def get_secure_cookie(self, name: Text, max_age_days: int=31,
-                          default=None) -> Text:
+    def get_secure_cookie(self, name: compat.Text, max_age_days: int=31,
+                          default=None) -> compat.Text:
         """
         Get a secure cookie with the name, if it is valid, or None.
 
@@ -549,7 +555,7 @@ class RequestHandler:
         except:
             return None
 
-    def set_secure_cookie(self, name: Text, value: Text,
+    def set_secure_cookie(self, name: compat.Text, value: compat.Text,
                           expires_days: int=30, **kwargs):
         """
         Set a secure cookie.
@@ -619,7 +625,7 @@ class RequestHandler:
         return self.__csrf_value
 
     @property
-    def csrf_form_html(self) -> Text:
+    def csrf_form_html(self) -> compat.Text:
         """
         Return a HTML form field contains _csrf value.
         """
@@ -627,7 +633,7 @@ class RequestHandler:
         return "<input type=\"hidden\" name=\"_csrf\" value=\"{}\">".format(
             value)
 
-    def write(self, text: Union[Text, bytes], clear_text: bool=False):
+    def write(self, text: Union[compat.Text, bytes], clear_text: bool=False):
         """
         Write response body.
 
@@ -645,14 +651,14 @@ class RequestHandler:
 
     @property
     def render_string(self) -> Callable[
-        [Text, Optional[Mapping[Text, Text]]],
-            Text]:
+        [compat.Text, Optional[Mapping[compat.Text, compat.Text]]],
+            compat.Text]:
         warnings.warn("RequestHandler.render_string is deprecated, \
             use RequestHandler.render_str instead.")
 
         return self.render_str
 
-    def get_template_args(self) -> Dict[Text, Any]:
+    def get_template_args(self) -> Dict[compat.Text, Any]:
         """
         Get the default arguments for template rendering.
 
@@ -664,8 +670,9 @@ class RequestHandler:
         }
 
     async def render_str(
-        self, template_name: Text,
-            template_dict: Optional[Mapping[Text, Text]]=None) -> Text:
+        self, template_name: compat.Text,
+        template_dict: Optional[
+            Mapping[compat.Text, compat.Text]]=None) -> compat.Text:
         """
         Render Template in template folder into string.
 
@@ -686,8 +693,8 @@ class RequestHandler:
         return await parsed_tpl.render_str(**template_args)
 
     async def render(
-        self, template_name: Text,
-            template_dict: Mapping[Text, Text]={}):
+        self, template_name: compat.Text,
+            template_dict: Mapping[compat.Text, compat.Text]={}):
         """
         Render the template with render_str, and write them into response
         body directly.
@@ -696,7 +703,7 @@ class RequestHandler:
             await self.render_str(
                 template_name, template_dict=template_dict))
 
-    def redirect(self, url: Text, permanent: bool=False,
+    def redirect(self, url: compat.Text, permanent: bool=False,
                  status: Optional[int]=None):
         """
         Rediect request to other location.
@@ -733,7 +740,7 @@ class RequestHandler:
                 self.set_header("etag", self._prepared_body_etag)
 
     @property
-    def _body_etag(self) -> Text:
+    def _body_etag(self) -> compat.Text:
         """
         Return the etag of the body.
         """
@@ -794,7 +801,7 @@ class RequestHandler:
         when_write_initial_result = self.when_write_initial()
 
         if inspect.isawaitable(when_write_initial_result):
-            ensure_future(when_write_initial_result, loop=self._loop)
+            compat.ensure_future(when_write_initial_result, loop=self._loop)
 
         if "content-type" not in self._headers.keys():
             self.set_header("content-type", "text/html; charset=utf-8;")
@@ -849,7 +856,7 @@ class RequestHandler:
         """
         pass
 
-    def finish(self, text: Optional[Union[Text, bytes]]=None):
+    def finish(self, text: Optional[Union[compat.Text, bytes]]=None):
         """
         Finish the request, send the response. If a text is passed, it will be
         write first, after that, the request will be finished.
@@ -863,7 +870,7 @@ class RequestHandler:
         when_finish_result = self.when_finish()
 
         if inspect.isawaitable(when_finish_result):
-            ensure_future(when_finish_result, loop=self._loop)
+            compat.ensure_future(when_finish_result, loop=self._loop)
 
         if text is not None:
             self.write(text)
@@ -889,7 +896,7 @@ class RequestHandler:
         self.connection.finish_writing()
 
     async def write_error(self, error_code: int,
-                          message: Optional[Union[Text, bytes]]=None,
+                          message: Optional[Union[compat.Text, bytes]]=None,
                           exc_info: Optional[tuple]=None):
         """
         Write the error message to the client.
@@ -1120,7 +1127,8 @@ class StaticFileHandler(RequestHandler):
 
     static_path = None  # Modify this to custom static path for this handler.
 
-    async def handle_static_file(self, file_uri_path: Text, *args, **kwargs):
+    async def handle_static_file(
+            self, file_uri_path: compat.Text, *args, **kwargs):
         """
         Get the file from the given file path. Override this function if you
         want to customize the way to get file.
@@ -1280,9 +1288,9 @@ class Application:
             allow_keep_alive=self.settings.get("allow_keep_alive", True))
 
     def listen(
-        self, port: int, address: Text="127.0.0.1",
+        self, port: int, address: compat.Text="127.0.0.1",
         context: Optional[Union[bool, ssl.SSLContext]]=None
-            ) -> Awaitable[asyncio.base_events.Server]:
+            ) -> compat.Awaitable[asyncio.base_events.Server]:
         """
         Make the server to listen to the specified port and address.
 
@@ -1297,7 +1305,7 @@ class Application:
             context = None
         f = self._loop.create_server(self.make_server(), address, port,
                                      ssl=context)
-        srv = ensure_future(f, loop=self._loop)
+        srv = compat.ensure_future(f, loop=self._loop)
         return srv
 
     @property

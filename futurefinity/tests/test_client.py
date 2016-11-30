@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_str, ensure_future
+from futurefinity.compat import ensure_future
+from futurefinity.utils import ensure_str
 from futurefinity.tests.utils import TestCase, run_until_complete
 
 from futurefinity.client import HTTPClient

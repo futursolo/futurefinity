@@ -21,7 +21,7 @@
 
 """
 
-from .utils import (FutureFinityError, ensure_bytes, Text)
+from .utils import (FutureFinityError, ensure_bytes)
 from . import compat
 from . import protocol
 from . import httputils
@@ -96,7 +96,7 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
 
     This is used to control a HTTP Connection from the client side.
     """
-    def __init__(self, host: Text, port: int, *args,
+    def __init__(self, host: compat.Text, port: int, *args,
                  allow_keep_alive: bool=True,
                  http_version: int=11,
                  loop: Optional[asyncio.BaseEventLoop]=None,
@@ -185,7 +185,7 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
             self._timeout_handler.cancel()
         self._timeout_handler = None
 
-    async def fetch(self, method: Text, path: Text,
+    async def fetch(self, method: compat.Text, path: compat.Text,
                     headers: protocol.HTTPHeaders, body: bytes):
         """
         Fetch the request.
@@ -260,8 +260,8 @@ class HTTPClient:
 
         self._connection_controllers = {}
 
-    def _makeup_url(self, url: Text,
-                    link_args: Optional[Mapping[Text, Text]]):
+    def _makeup_url(self, url: compat.Text,
+                    link_args: Optional[Mapping[compat.Text, compat.Text]]):
         parsed_url = urllib.parse.urlsplit(url)
 
         if parsed_url.query:
@@ -285,7 +285,8 @@ class HTTPClient:
             "path": path
         }
 
-    def _get_connection_controller(self, host: Text, port: Text, scheme: Text):
+    def _get_connection_controller(
+            self, host: compat.Text, port: compat.Text, scheme: compat.Text):
         controller_identifier = (host, port, scheme)
         if controller_identifier in self._connection_controllers.keys():
             return self._connection_controllers.pop(controller_identifier)
@@ -312,13 +313,16 @@ class HTTPClient:
         self._connection_controllers[controller_identifier] = controller
 
     async def fetch(
-        self, method: Text, url: Text,
+        self, method: compat.Text, url: compat.Text,
             headers: Optional[
-                Union[protocol.HTTPHeaders, Mapping[Text, Text]]]=None,
+                Union[protocol.HTTPHeaders, Mapping[
+                    compat.Text, compat.Text]]]=None,
             cookies: Optional[
-                Union[httputils.HTTPCookies, Mapping[Text, Text]]]=None,
+                Union[httputils.HTTPCookies, Mapping[
+                    compat.Text, compat.Text]]]=None,
             link_args: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
+                Union[magicdict.TolerantMagicDict, Mapping[
+                    compat.Text, compat.Text]]]=None,
             body: Optional[bytes]=None):
         """
         Fetch the request.
@@ -359,13 +363,16 @@ class HTTPClient:
         return response
 
     async def get(
-        self, url: Text,
+        self, url: compat.Text,
             headers: Optional[
-                Union[protocol.HTTPHeaders, Mapping[Text, Text]]]=None,
+                Union[protocol.HTTPHeaders, Mapping[
+                    compat.Text, compat.Text]]]=None,
             cookies:  Optional[
-                Union[httputils.HTTPCookies, Mapping[Text, Text]]]=None,
+                Union[httputils.HTTPCookies, Mapping[
+                    compat.Text, compat.Text]]]=None,
             link_args:  Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None):
+                Union[magicdict.TolerantMagicDict, Mapping[
+                    compat.Text, compat.Text]]]=None):
         """
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `GET` request.
@@ -375,17 +382,22 @@ class HTTPClient:
         return response
 
     async def post(
-        self, url: Text,
+        self, url: compat.Text,
             headers: Optional[
-                Union[protocol.HTTPHeaders, Mapping[Text, Text]]]=None,
+                Union[protocol.HTTPHeaders, Mapping[
+                    compat.Text, compat.Text]]]=None,
             cookies: Optional[
-                Union[httputils.HTTPCookies, Mapping[Text, Text]]]=None,
+                Union[httputils.HTTPCookies, Mapping[
+                    compat.Text, compat.Text]]]=None,
             link_args: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
+                Union[magicdict.TolerantMagicDict, Mapping[
+                    compat.Text, compat.Text]]]=None,
             body_args: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
+                Union[magicdict.TolerantMagicDict, Mapping[
+                    compat.Text, compat.Text]]]=None,
             files: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None):
+                Union[magicdict.TolerantMagicDict, Mapping[
+                    compat.Text, compat.Text]]]=None):
         """
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `POST` request.

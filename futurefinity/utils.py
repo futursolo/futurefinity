@@ -24,26 +24,8 @@ from types import ModuleType
 from . import compat
 
 import sys
-import asyncio
-import inspect
 import warnings
 import functools
-import collections.abc
-
-try:
-    from typing import Text
-    from typing import Awaitable
-    from typing import TYPE_CHECKING
-
-except ImportError:
-    from typing import TypeVar, Generic, T_co
-
-    Text = str
-
-    class Awaitable(Generic[T_co], extra=collections.abc.Awaitable):
-        __slots__ = ()
-
-    TYPE_CHECKING = False
 
 
 class Identifier:
@@ -79,7 +61,7 @@ def ensure_bytes(var: Any) -> bytes:
     return strvar.encode()
 
 
-def ensure_str(var: Any) -> Text:
+def ensure_str(var: Any) -> compat.Text:
     """
     Try to convert the passed variable to a str object.
     """
@@ -94,40 +76,8 @@ def ensure_str(var: Any) -> Text:
     return str(strvar)
 
 
-def ensure_future(coro_or_future, *, loop=None):
-    """
-    Python 3.5.0 Compatibility Layer.
-
-    Behave like `asyncio.ensure_future` on Python 3.5.1 or higher.
-    """
-    if compat.PY351:
-        return asyncio.ensure_future(coro_or_future, loop=loop)
-
-    if isinstance(
-        coro_or_future, asyncio.Future) or asyncio.iscoroutine(
-            coro_or_future):
-
-        return asyncio.ensure_future(coro_or_future, loop=loop)
-
-    if inspect.isawaitable(coro_or_future):
-        return asyncio.ensure_future(
-            _wrap_awaitable(coro_or_future), loop=loop)
-
-    else:
-        raise TypeError('A Future, a coroutine or an awaitable is required')
-
-
-def _wrap_awaitable(awaitable):
-    """
-    Python 3.5.0 Compatibility Layer.
-
-    from `asyncio.tasks` on Python 3.5.2.
-    """
-    return (yield from awaitable.__await__())
-
-
 class _DeprecatedAttr:
-    def __init__(self, attr: Any, message: Text):
+    def __init__(self, attr: Any, message: compat.Text):
         self._attr = attr
         self._message = message
 
@@ -140,7 +90,7 @@ class _ModWithDeprecatedAttrs:
     def __init__(self, mod: ModuleType):
         self.__dict__["__module__"] = mod
 
-    def __getattr__(self, name: Text) -> Any:
+    def __getattr__(self, name: compat.Text) -> Any:
         mod_attr = getattr(self.__module__, name)
 
         if isinstance(mod_attr, _DeprecatedAttr):
@@ -148,10 +98,10 @@ class _ModWithDeprecatedAttrs:
 
         return mod_attr
 
-    def __setattr__(self, name: Text, attr: Any):
+    def __setattr__(self, name: compat.Text, attr: Any):
         return setattr(self.__module__, name, attr)
 
-    def __dir__(self) -> List[Text]:
+    def __dir__(self) -> List[compat.Text]:
         return dir(mod)
 
 

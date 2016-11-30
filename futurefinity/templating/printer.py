@@ -16,14 +16,14 @@
 #   limitations under the License.
 
 from .utils import CodeGenerationError
-from futurefinity.utils import TYPE_CHECKING, Text
+from futurefinity import compat
 
 from typing import Optional, Union
 
 import types
 import typing
 
-if TYPE_CHECKING:
+if compat.TYPE_CHECKING:
     from . import template
     from . import statement
 
@@ -44,7 +44,7 @@ class CodePrinter:
 
         self._finished = False
 
-    def raise_code_gen_error(self, message: Text,
+    def raise_code_gen_error(self, message: compat.Text,
                              from_err: Optional[Exception]=None):
         """
         Raise a `CodeGenerationError` with error location.
@@ -102,7 +102,9 @@ class CodePrinter:
 
         self._indent_num -= 1
 
-    def write_line(self, line_str: Text, smt_at: Union[Text, int]="<unknown>"):
+    def write_line(
+        self, line_str: compat.Text,
+            smt_at: Union[compat.Text, int]="<unknown>"):
         """
         Write a line with indent.
         """
@@ -124,7 +126,7 @@ class CodePrinter:
         return self._finished
 
     @property
-    def plain_code(self) -> Text:
+    def plain_code(self) -> compat.Text:
         """
         Return the plain, printed code.
         """
