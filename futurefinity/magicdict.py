@@ -22,7 +22,6 @@ __all__ = ["MagicDictFrozenError", "MagicDict", "TolerantMagicDict"]
 
 _DEFAULT_MARK = Identifier()
 
-import inspect
 import threading
 import collections
 import collections.abc
