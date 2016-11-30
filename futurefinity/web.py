@@ -45,8 +45,8 @@ Finally, listen to the port you want, and start the event loop::
 """
 
 from .utils import (
-    ensure_str, ensure_bytes, ensure_future,
-    format_timestamp, default_mark, Awaitable, Text)
+    Identifier, ensure_str, ensure_bytes, ensure_future,
+    format_timestamp, Awaitable, Text)
 from . import log
 from . import server
 from . import routing
@@ -71,6 +71,8 @@ import warnings
 import functools
 import mimetypes
 import traceback
+
+_DEFAULT_MARK = Identifier()
 
 
 _DEFAULT_ERROR_TPL = """
@@ -333,7 +335,7 @@ class RequestHandler:
         self._finished = False
 
     def get_link_arg(self, name: Text,
-                     default: Union[Text, object]=default_mark) -> Text:
+                     default: Union[Text, object]=_DEFAULT_MARK) -> Text:
         """
         Return first argument in the link with the name.
 
@@ -343,7 +345,7 @@ class RequestHandler:
             will produce an error if the argument cannot be found.
         """
         arg_content = self.request.link_args.get_first(name, default)
-        if arg_content is default_mark:
+        if arg_content is _DEFAULT_MARK:
             raise KeyError(
                 "The name {} cannot be found in link args.".format(name))
         return arg_content
@@ -357,7 +359,7 @@ class RequestHandler:
         return self.request.queries.get_list(name, [])
 
     def get_body_arg(self, name: Text,
-                     default: Union[Text, object]=default_mark) -> Text:
+                     default: Union[Text, object]=_DEFAULT_MARK) -> Text:
         """
         Return first argument in the body with the name.
 
@@ -367,7 +369,7 @@ class RequestHandler:
             will produce an error if the argument cannot be found.
         """
         arg_content = self.request.body_args.get_first(name, default)
-        if arg_content is default_mark:
+        if arg_content is _DEFAULT_MARK:
             raise KeyError(
                 "The name {} cannot be found in body args.".format(name))
         return arg_content
@@ -381,7 +383,7 @@ class RequestHandler:
         return self.request.body_args.get_list(name, [])
 
     def get_header(self, name: Text,
-                   default: Union[Text, object]=default_mark) -> Text:
+                   default: Union[Text, object]=_DEFAULT_MARK) -> Text:
         """
         Return First Header with the name.
 
@@ -391,7 +393,7 @@ class RequestHandler:
             will produce an error if the header cannot be found.
         """
         header_content = self.request.headers.get_first(name, default)
-        if header_content is default_mark:
+        if header_content is _DEFAULT_MARK:
             raise KeyError(
                 "The name {} cannot be found in headers.".format(name))
         return header_content
