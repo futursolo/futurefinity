@@ -21,9 +21,9 @@
 
 """
 
-from .utils import (
-    TolerantMagicDict, FutureFinityError, ensure_bytes, Text, PY351)
+from .utils import (FutureFinityError, ensure_bytes, Text, PY351)
 from . import protocol
+from . import magicdict
 
 from typing import Union, Optional, Mapping
 
@@ -264,7 +264,7 @@ class HTTPClient:
 
         if parsed_url.query:
             if link_args is None:
-                link_args = TolerantMagicDict()
+                link_args = magicdict.TolerantMagicDict()
             link_args.update(urllib.parse.parse_qsl(parsed_url.query))
 
         if link_args is not None:
@@ -316,14 +316,14 @@ class HTTPClient:
             cookies: Optional[
                 Union[protocol.HTTPCookies, Mapping[Text, Text]]]=None,
             link_args: Optional[
-                Union[TolerantMagicDict, Mapping[Text, Text]]]=None,
+                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
             body: Optional[bytes]=None):
         """
         Fetch the request.
         """
-        if link_args is not None and not isinstance(link_args,
-                                                    TolerantMagicDict):
-            link_args = TolerantMagicDict(link_args)
+        if link_args is not None and not isinstance(
+                link_args, magicdict.TolerantMagicDict):
+            link_args = magicdict.TolerantMagicDict(link_args)
 
         url_info = self._makeup_url(url, link_args)
         if not isinstance(headers, protocol.HTTPHeaders):
@@ -363,7 +363,7 @@ class HTTPClient:
             cookies:  Optional[
                 Union[protocol.HTTPCookies, Mapping[Text, Text]]]=None,
             link_args:  Optional[
-                Union[TolerantMagicDict, Mapping[Text, Text]]]=None):
+                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None):
         """
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `GET` request.
@@ -379,11 +379,11 @@ class HTTPClient:
             cookies: Optional[
                 Union[protocol.HTTPCookies, Mapping[Text, Text]]]=None,
             link_args: Optional[
-                Union[TolerantMagicDict, Mapping[Text, Text]]]=None,
+                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
             body_args: Optional[
-                Union[TolerantMagicDict, Mapping[Text, Text]]]=None,
+                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
             files: Optional[
-                Union[TolerantMagicDict, Mapping[Text, Text]]]=None):
+                Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None):
         """
         This is a friendly wrapper of `client.HTTPClient.fetch` for
         `POST` request.

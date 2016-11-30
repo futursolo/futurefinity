@@ -21,10 +21,10 @@ both client side and server side.
 
 """
 
-from .utils import (MagicDict, TolerantMagicDict,
-                    FutureFinityError, ensure_str, ensure_bytes, Text)
+from .utils import (FutureFinityError, ensure_str, ensure_bytes, Text)
 from . import log
 from . import security
+from . import magicdict
 from ._version import version as futurefinity_version
 
 from collections import namedtuple
@@ -147,7 +147,7 @@ class CapitalizedHTTPv1Headers(dict):
 _capitalize_header = CapitalizedHTTPv1Headers()
 
 
-class HTTPHeaders(TolerantMagicDict):
+class HTTPHeaders(magicdict.TolerantMagicDict):
     """
     HTTPHeaders class, based on TolerantMagicDict.
 
@@ -163,7 +163,7 @@ class HTTPHeaders(TolerantMagicDict):
 
     @staticmethod
     def parse(data: Union[Text, bytes, list,
-                          TolerantMagicDict]) -> "HTTPHeaders":
+                          magicdict.TolerantMagicDict]) -> "HTTPHeaders":
         headers = HTTPHeaders()
         headers.load_headers(data)
         return headers
@@ -179,7 +179,8 @@ class HTTPHeaders(TolerantMagicDict):
 
         return ensure_bytes(headers_str)
 
-    def load_headers(self, data: Union[Text, bytes, list, TolerantMagicDict]):
+    def load_headers(
+            self, data: Union[Text, bytes, list, magicdict.TolerantMagicDict]):
         """
         Load HTTP Headers from another object.
 
@@ -287,7 +288,7 @@ class HTTPMultipartFileField:
     __copy__ = copy
 
 
-class HTTPMultipartBody(TolerantMagicDict):
+class HTTPMultipartBody(magicdict.TolerantMagicDict):
     """
     HTTPBody class, based on TolerantMagicDict.
 
@@ -295,8 +296,8 @@ class HTTPMultipartBody(TolerantMagicDict):
     can parse and make HTTP Body.
     """
     def __init__(self, *args, **kwargs):
-        self.files = TolerantMagicDict()
-        TolerantMagicDict.__init__(self, *args, **kwargs)
+        self.files = magicdict.TolerantMagicDict()
+        magicdict.TolerantMagicDict.__init__(self, *args, **kwargs)
 
     @staticmethod
     def parse(content_type: Text, data: bytes) -> "HTTPMultipartBody":
@@ -333,7 +334,7 @@ class HTTPMultipartBody(TolerantMagicDict):
 
             disposition = headers.get_first("content-disposition")
             disposition_list = []
-            disposition_dict = TolerantMagicDict()
+            disposition_dict = magicdict.TolerantMagicDict()
 
             for field in disposition.split(";"):  # Split Disposition
                 field = field.strip()  # Remove Useless Spaces.
@@ -522,7 +523,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
         self._path = parsed_url.path
 
-        link_args = TolerantMagicDict()
+        link_args = magicdict.TolerantMagicDict()
         for (query_name, query_value) in urllib.parse.parse_qsl(
          parsed_url.query):
             link_args.add(query_name, query_value)
@@ -561,7 +562,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._host
 
     @property
-    def link_args(self) -> TolerantMagicDict:
+    def link_args(self) -> magicdict.TolerantMagicDict:
         """
         Parse link arguments and return link arguments in a
         `TolerantMagicDict` instance.
@@ -571,7 +572,8 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         return self._link_args
 
     @property
-    def body_args(self) -> Union[TolerantMagicDict, HTTPMultipartBody,
+    def body_args(self) -> Union[magicdict.TolerantMagicDict,
+                                 HTTPMultipartBody,
                                  Mapping[Any, Any],
                                  List[Any]]:
         """
@@ -583,7 +585,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
             if content_type.lower().strip() in (
              "application/x-www-form-urlencoded", "application/x-url-encoded"):
-                self._body_args = TolerantMagicDict(
+                self._body_args = magicdict.TolerantMagicDict(
                     urllib.parse.parse_qsl(
                         ensure_str(self.body),
                         keep_blank_values=True,
@@ -596,7 +598,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
                     data=self.body)
 
             elif content_type.lower().strip() == "application/json":
-                self._body_args = TolerantMagicDict(
+                self._body_args = magicdict.TolerantMagicDict(
                     json.loads(ensure_str(self.body)))
 
             else:  # Unknown Content Type.

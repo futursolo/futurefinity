@@ -16,7 +16,7 @@
 #   limitations under the License.
 
 from futurefinity.tests.utils import TestCase
-from futurefinity.utils import TolerantMagicDict
+from futurefinity.magicdict import TolerantMagicDict
 
 from typing import Optional
 
