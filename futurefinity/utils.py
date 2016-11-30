@@ -24,16 +24,10 @@ from types import ModuleType
 from . import compat
 
 import sys
-import time
-import struct
 import asyncio
 import inspect
-import numbers
-import calendar
-import datetime
 import warnings
 import functools
-import email.utils
 import collections.abc
 
 try:
@@ -130,24 +124,6 @@ def _wrap_awaitable(awaitable):
     from `asyncio.tasks` on Python 3.5.2.
     """
     return (yield from awaitable.__await__())
-
-
-def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
-                                  datetime.datetime]]=None) -> Text:
-    """
-    Make a HTTP Protocol timestamp.
-    """
-    if ts is None:
-        ts = time.time()
-    if isinstance(ts, numbers.Real):
-        pass
-    elif isinstance(ts, (tuple, time.struct_time)):
-        ts = calendar.timegm(ts)
-    elif isinstance(ts, datetime.datetime):
-        ts = calendar.timegm(ts.utctimetuple())
-    else:
-        raise TypeError("unknown timestamp type: {}".format(ts))
-    return ensure_str(email.utils.formatdate(ts, usegmt=True))
 
 
 class _DeprecatedAttr:

@@ -42,4 +42,9 @@ def run_until_complete(f) -> Callable[[Callable[[Any], Any]], Any]:
 
 
 class TestCase:  # Base TestCase.
-    _loop = asyncio.get_event_loop()  # type: asyncio.BaseEventLoop
+    @property
+    def _loop(self) -> asyncio.AbstractEventLoop:
+        loop = asyncio.get_event_loop()
+        loop.set_debug(True)
+
+        return loop

@@ -24,6 +24,7 @@
 from .utils import (FutureFinityError, ensure_bytes, Text)
 from . import compat
 from . import protocol
+from . import httputils
 from . import magicdict
 
 from typing import Union, Optional, Mapping
@@ -315,7 +316,7 @@ class HTTPClient:
             headers: Optional[
                 Union[protocol.HTTPHeaders, Mapping[Text, Text]]]=None,
             cookies: Optional[
-                Union[protocol.HTTPCookies, Mapping[Text, Text]]]=None,
+                Union[httputils.HTTPCookies, Mapping[Text, Text]]]=None,
             link_args: Optional[
                 Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
             body: Optional[bytes]=None):
@@ -333,8 +334,8 @@ class HTTPClient:
             else:
                 headers = protocol.HTTPHeaders(headers)
         if cookies:
-            if not isinstance(cookies, protocol.HTTPCookies):
-                cookies = protocol.HTTPCookies(cookies)
+            if not isinstance(cookies, httputils.HTTPCookies):
+                cookies = httputils.HTTPCookies(cookies)
             headers.accept_cookies_for_request(cookies)
 
         if url_info["scheme"] not in ("http", "https"):
@@ -362,7 +363,7 @@ class HTTPClient:
             headers: Optional[
                 Union[protocol.HTTPHeaders, Mapping[Text, Text]]]=None,
             cookies:  Optional[
-                Union[protocol.HTTPCookies, Mapping[Text, Text]]]=None,
+                Union[httputils.HTTPCookies, Mapping[Text, Text]]]=None,
             link_args:  Optional[
                 Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None):
         """
@@ -378,7 +379,7 @@ class HTTPClient:
             headers: Optional[
                 Union[protocol.HTTPHeaders, Mapping[Text, Text]]]=None,
             cookies: Optional[
-                Union[protocol.HTTPCookies, Mapping[Text, Text]]]=None,
+                Union[httputils.HTTPCookies, Mapping[Text, Text]]]=None,
             link_args: Optional[
                 Union[magicdict.TolerantMagicDict, Mapping[Text, Text]]]=None,
             body_args: Optional[

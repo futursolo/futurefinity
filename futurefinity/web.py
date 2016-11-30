@@ -46,12 +46,13 @@ Finally, listen to the port you want, and start the event loop::
 
 from .utils import (
     Identifier, ensure_str, ensure_bytes, ensure_future,
-    format_timestamp, Awaitable, Text)
+    Awaitable, Text)
 from . import log
 from . import server
 from . import routing
 from . import protocol
 from . import security
+from . import httputils
 from . import templating
 
 from typing import Optional, Union, Mapping, List, Dict, Any, Callable
@@ -80,10 +81,10 @@ _DEFAULT_ERROR_TPL = """
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{error_code}: {status_code_detail}</title>
+    <title>{error_code}: {status_code_description}</title>
 </head>
 <body>
-    <div><pre>{error_code}: {status_code_detail}\n\n{content}\n</pre></div>
+    <div><pre>{error_code}: {status_code_description}\n\n{content}\n</pre></div>
 </body>
 </html>
 """.strip()
@@ -93,10 +94,10 @@ _DEFAULT_REDIRECT_TPL = """
 <html>
 <head>
     <meta charset="utf-8">
-    <title>{status_code} {status_code_detail}</title>
+    <title>{status_code} {status_code_description}</title>
 </head>
 <body>
-    <h1>{status_code} {status_code_detail}</h1>
+    <h1>{status_code} {status_code_description}</h1>
     The document has moved <a href="{url}">here</a>.
 </body>
 </html>
@@ -131,12 +132,12 @@ def print_access_log(
         raise ValueError("Unknown HTTP Version.")
 
     log_msg = ("{method} {path} {http_version_text} - "
-               "{status_code} {status_code_text}").format(
+               "{status_code} {status_code_description}").format(
         method=request.method,
         path=request.origin_path,
         http_version_text=http_version_text,
         status_code=status_code,
-        status_code_text=protocol.status_code_text[status_code]
+        status_code_description=httputils.status_code_descriptions[status_code]
     )
 
     log_fn(log_msg)
@@ -323,7 +324,7 @@ class RequestHandler:
 
         self._status_code = 200
         self._headers = protocol.HTTPHeaders()
-        self._cookies = protocol.HTTPCookies()
+        self._cookies = httputils.HTTPCookies()
         self._response_body = bytearray()
 
         self.transport = None
@@ -501,7 +502,9 @@ class RequestHandler:
         if self._initial_written:
             raise HTTPError(500, "You cannot clear a cookie after the "
                                  "initial is written.")
-        self.set_cookie(name=name, value="", expires=format_timestamp(0))
+        self.set_cookie(
+            name=name, value="",
+            expires=httputils.format_timestamp(0))
 
     def clear_all_cookies(self):
         """
@@ -713,7 +716,7 @@ class RequestHandler:
         self.set_header("location", url)
         self.finish(_DEFAULT_REDIRECT_TPL.format(
             status_code=status,
-            status_code_detail=protocol.status_code_text[status],
+            status_code_description=httputils.status_code_descriptions[status],
             url=url))
 
     def set_body_etag(self):
@@ -808,7 +811,7 @@ class RequestHandler:
                 del self._headers["content-length"]
 
         if "date" not in self._headers.keys():
-            self.set_header("date", format_timestamp())
+            self.set_header("date", httputils.format_timestamp())
 
         self._headers.accept_cookies_for_response(self._cookies)
 
@@ -914,7 +917,8 @@ class RequestHandler:
         self.write(
             _DEFAULT_ERROR_TPL.format(
                 error_code=error_code,
-                status_code_detail=protocol.status_code_text[error_code],
+                status_code_description=httputils.status_code_descriptions[
+                    error_code],
                 content=content),
             clear_text=True)
 

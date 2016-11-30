@@ -18,16 +18,11 @@
 from futurefinity.tests.utils import TestCase
 from futurefinity.security import get_random_str
 
-from futurefinity.utils import (
-    ensure_bytes, ensure_str, format_timestamp)
+from futurefinity.utils import (ensure_bytes, ensure_str)
 
 import os
-import time
 import pytest
 import random
-import calendar
-import datetime
-import email.utils
 
 
 class EnsureBytesTestCase(TestCase):
@@ -79,49 +74,3 @@ class EnsureStrTestCase(TestCase):
         encoded_bytes = random_str.encode()
 
         assert random_str == ensure_str(encoded_bytes)
-
-
-class FormatTimestampTestCase(TestCase):
-    def test_format_timestamp_with_real_number(self):
-        timestamp = time.time()
-        formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
-
-        assert formatted_timestamp == format_timestamp(timestamp)
-
-    def test_format_timestamp_with_none(self):
-        timestamp = time.time()
-        timestamp_future = timestamp + 1
-
-        formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
-        formatted_timestamp_future = email.utils.formatdate(timestamp,
-                                                            usegmt=True)
-        assert format_timestamp() in [
-            formatted_timestamp, formatted_timestamp_future]
-
-    def test_format_timestamp_with_struct_time(self):
-        struct_time = time.gmtime()
-        timestamp = calendar.timegm(struct_time)
-
-        formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
-
-        assert formatted_timestamp == format_timestamp(struct_time)
-
-    def test_format_timestamp_with_tuple(self):
-        time_tuple = tuple(time.gmtime())
-        timestamp = calendar.timegm(time_tuple)
-
-        formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
-
-        assert formatted_timestamp == format_timestamp(time_tuple)
-
-    def test_format_timestamp_with_datetime(self):
-        datetime_time = datetime.datetime.utcnow()
-        timestamp = calendar.timegm(datetime_time.utctimetuple())
-
-        formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
-
-        assert formatted_timestamp == format_timestamp(datetime_time)
-
-    def test_format_timestamp_with_other(self):
-        with pytest.raises(TypeError):
-            format_timestamp(object())

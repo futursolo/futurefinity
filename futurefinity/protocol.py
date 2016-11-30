@@ -24,12 +24,11 @@ both client side and server side.
 from .utils import (FutureFinityError, ensure_str, ensure_bytes, Text)
 from . import log
 from . import security
+from . import httputils
 from . import magicdict
 from ._version import version as futurefinity_version
 
 from collections import namedtuple
-from http.cookies import SimpleCookie as HTTPCookies
-from http.client import responses as status_code_text
 from typing import Union, Optional, Any, List, Mapping, Tuple
 
 import sys
@@ -59,10 +58,6 @@ _CONN_INITIAL_WRITTEN = object()
 _CONN_BODY_WRITTEN = object()
 
 _CONN_CLOSED = object()
-
-if 451 not in status_code_text.keys():
-    status_code_text[451] = "Unavailable For Legal Reasons"
-
 
 protocol_log = log.get_child_logger("protocol")
 
@@ -212,7 +207,7 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
 
         raise ValueError("Unknown Type of input data.")
 
-    def accept_cookies_for_request(self, cookies: HTTPCookies):
+    def accept_cookies_for_request(self, cookies: httputils.HTTPCookies):
         """
         Insert all the cookies as a request cookie header.
         """
@@ -225,7 +220,7 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
         if cookie_string:
             self["cookie"] = cookie_string
 
-    def accept_cookies_for_response(self, cookies: HTTPCookies):
+    def accept_cookies_for_response(self, cookies: httputils.HTTPCookies):
         """
         Insert all the cookies as response set cookie headers.
         """
@@ -531,12 +526,12 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
         self._link_args = link_args
 
     @property
-    def cookies(self) -> HTTPCookies:
+    def cookies(self) -> httputils.HTTPCookies:
         """
-        Parse cookies and return cookies in a `HTTPCookies` instance.
+        Parse cookies and return cookies in a `httputils.HTTPCookies` instance.
         """
         if not hasattr(self, "_cookies"):
-            cookies = HTTPCookies()
+            cookies = httputils.HTTPCookies()
             if "cookie" in self.headers:
                 for cookie_header in self.headers.get_list("cookie"):
                     cookies.load(cookie_header)
@@ -646,12 +641,12 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
         self.connection = connection
 
     @property
-    def cookies(self) -> HTTPCookies:
+    def cookies(self) -> httputils.HTTPCookies:
         """
-        Parse cookies and return cookies in a `HTTPCookies` instance.
+        Parse cookies and return cookies in a `httputils.HTTPCookies` instance.
         """
         if not hasattr(self, "_cookies"):
-            cookies = HTTPCookies()
+            cookies = httputils.HTTPCookies()
             if "set-cookie" in self.headers:
                 for cookie_header in self.headers.get_list("set-cookie"):
                     cookies.load(cookie_header)
@@ -1071,7 +1066,8 @@ class HTTPv1Connection:
                 raise ProtocolError("Unacceptable Function Access.")
 
             basic_info = ensure_bytes(basic_info_template.format(
-                http_version_text, status_code, status_code_text[status_code]))
+                http_version_text, status_code,
+                httputils.status_code_descriptions[status_code]))
 
         initial += basic_info
 
