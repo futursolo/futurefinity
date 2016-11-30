@@ -21,10 +21,10 @@
 
 """
 
-from .utils import deprecated_attr, FutureFinityError
+from .utils import deprecated_attr, cached_property, FutureFinityError
 
 from typing.re import Pattern
-from typing import Optional, Tuple, List, Any, Dict, Union
+from typing import Optional, Tuple, List, Any, Dict, Union, Sequence
 from . import compat
 
 import re
@@ -33,6 +33,15 @@ import collections
 
 if compat.TYPE_CHECKING:
     from futurefinity import web
+
+if compat.PY351:
+    TextPattern = typing_re.Pattern[Text]
+
+else:
+    TextPattern = Any
+
+__all__ = ["RoutingError", "NotMatched", "NoMatchesFound",
+           "ReverseError", "Rule", "Dispatcher", "RoutingLocator"]
 
 
 class RoutingError(FutureFinityError):
@@ -58,17 +67,15 @@ class _ReMatchGroup:
         self._group_str = group_str
         self._index = index
 
-    @property
+    @cached_property
     def _name(self) -> compat.Text:
-        if not hasattr(self, "_prepared_name"):
-            matched = self._named_group_re.fullmatch(self._group_str)
+        matched = self._named_group_re.fullmatch(self._group_str)
 
-            if matched:
-                self._prepared_name = matched.groups()[0]
-            else:
-                raise ReverseError("Cannot reverse positional group by name.")
+        if matched:
+            return matched.groups()[0]
 
-        return self._prepared_name
+        else:
+            raise ReverseError("Cannot reverse positional group by name.")
 
 
 class Rule:
@@ -84,8 +91,8 @@ class Rule:
     """
 
     def __init__(
-        self, path: Union[compat.Text, "Pattern[compat.Text]"],
-        Handler: "web.RequestHandler", path_args: Tuple[Any]=(),
+        self, path: Union[compat.Text, TextPattern],
+        Handler: "web.RequestHandler", path_args: Sequence[Any]=[],
         name: Optional[compat.Text]=None,
             path_kwargs: Dict[compat.Text, Any]={}):
         self.path = path
@@ -102,12 +109,11 @@ class Rule:
 
         if len(self.path_args) != 0:
             warnings.warn(
-                    "Arguments without a name are deprecated, "
-                    "use keyword arguments instead.", DeprecationWarning)
+                    ("Arguments without a name are deprecated, "
+                     "use keyword arguments instead."), DeprecationWarning)
 
-    def match(
-            self, path: compat.Text) -> (
-                "web.RequestHandler", Tuple[Any], Dict[compat.Text, Any]):
+    def match(self, path: compat.Text) -> (
+            "web.RequestHandler", Tuple[Any], Dict[compat.Text, Any]):
         matched_obj = self.path.fullmatch(path)
 
         if not matched_obj:
@@ -125,38 +131,35 @@ class Rule:
 
         return self.Handler, path_args, path_kwargs
 
-    @property
+    @cached_property
     def _match_groups(self) -> List[Union[compat.Text, _ReMatchGroup]]:
-        if not hasattr(self, "_prepared_match_groups"):
-            groups = []
-            rest_pattern_str = self.path.pattern
+        groups = []
+        rest_pattern_str = self.path.pattern
 
-            index_count = 0
+        index_count = 0
 
-            inside_group = False
+        inside_group = False
 
-            while True:
-                begin_pos = rest_pattern_str.find("(")
+        while True:
+            begin_pos = rest_pattern_str.find("(")
 
-                if begin_pos == -1:
-                    groups.append(rest_pattern_str)
-                    rest_pattern_str = ""
-                    break
-                groups.append(rest_pattern_str[:begin_pos])
+            if begin_pos == -1:
+                groups.append(rest_pattern_str)
+                rest_pattern_str = ""
+                break
+            groups.append(rest_pattern_str[:begin_pos])
 
-                rest_pattern_str = rest_pattern_str[begin_pos + 1:]
+            rest_pattern_str = rest_pattern_str[begin_pos + 1:]
 
-                end_pos = rest_pattern_str.find(")")
-                groups.append(
-                    _ReMatchGroup(rest_pattern_str[:end_pos], index_count))
+            end_pos = rest_pattern_str.find(")")
+            groups.append(
+                _ReMatchGroup(rest_pattern_str[:end_pos], index_count))
 
-                index_count += 1
+            index_count += 1
 
-                rest_pattern_str = rest_pattern_str[end_pos + 1:]
+            rest_pattern_str = rest_pattern_str[end_pos + 1:]
 
-            self._prepared_match_groups = groups
-
-        return self._prepared_match_groups
+        return groups
 
     def reverse(self, *args, **kwargs) -> compat.Text:
         result = ""
@@ -199,8 +202,8 @@ class Dispatcher:
         self._DefaultHandler = DefaultHandler
 
     def add(
-        self, path: Union[compat.Text, "Pattern[Text]"], *args,
-            Handler: Optional["web.RequestHandler"]=None,
+        self, path: Union[compat.Text, TextPattern], *args,
+        Handler: Optional["web.RequestHandler"]=None,
             name: Optional[compat.Text]=None, **kwargs):
         """
         Add a `futurefinity.web.RequestHandler` to the `Dispatcher`.
