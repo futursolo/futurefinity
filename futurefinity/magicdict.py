@@ -280,7 +280,8 @@ class MagicDict(collections.abc.MutableMapping):
 
         with self._mutex_lock:
             identifier, pair = self._key_value_pairs.popitem()
-            self._pair_identifiers[key].pop()
+            key, _ = pair
+            self._pair_identifiers[key].remove(identifier)
 
             if len(self._pair_identifiers[key]) == 0:
                 del self._pair_identifiers[key]
@@ -378,7 +379,7 @@ class MagicDict(collections.abc.MutableMapping):
     def freeze(self):
         self._frozen = True
 
-    def is_frozen(self) -> bool:
+    def frozen(self) -> bool:
         return self._frozen
 
     def copy(self) -> "MagicDict":
@@ -406,11 +407,6 @@ class TolerantMagicDict(MagicDict):
 
         return super().__setitem__(key.lower(), value)
 
-    def __str__(self):
-        content_list = [(key, value) for (key, value) in self.items()]
-
-        return "TolerantMagicDict({})".format(str(content_list))
-
     def __getitem__(self, key: compat.Text) -> Any:
         return super().__getitem__(key.lower())
 
@@ -420,7 +416,12 @@ class TolerantMagicDict(MagicDict):
     def __contains__(self, key: compat.Text) -> bool:
         return key.lower() in self._pair_identifiers
 
-    def __reversed__(self) -> "MagicDict":
+    def __str__(self):
+        content_list = [(key, value) for (key, value) in self.items()]
+
+        return "TolerantMagicDict({})".format(str(content_list))
+
+    def __reversed__(self) -> "TolerantMagicDict":
         tolerant_magic_dict = TolerantMagicDict()
         reversed_values = []
         with self._mutex_lock:
