@@ -35,7 +35,7 @@ if compat.TYPE_CHECKING:
     from futurefinity import web
 
 if compat.PY351:
-    TextPattern = typing_re.Pattern[Text]
+    TextPattern = Pattern[compat.Text]
 
 else:
     TextPattern = Any
