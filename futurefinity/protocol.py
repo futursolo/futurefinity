@@ -387,7 +387,8 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
 
             if isinstance(field_value, str):
                 body += b"Content-Disposition: form-data; "
-                body += encoding.ensure_bytes("name=\"{}\"\r\n".format(field_name))
+                body += encoding.ensure_bytes("name=\"{}\"\r\n".format(
+                    field_name))
                 body += _CRLF_BYTES_MARK
 
                 body += encoding.ensure_bytes(field_value)
@@ -827,7 +828,8 @@ class HTTPv1Connection:
                 "Initial Exceed its Maximum Length.")
             return
 
-        pending_initial = encoding.ensure_bytes(self._pending_bytes[:initial_end])
+        pending_initial = encoding.ensure_bytes(
+            self._pending_bytes[:initial_end])
         del self._pending_bytes[:initial_end + 2]
 
         basic_info, origin_headers = encoding.ensure_str(
@@ -1019,8 +1021,8 @@ class HTTPv1Connection:
                             "but we cannot find a way to detect body length.")
 
         if self.stage is _CONN_STREAMED:
-            self.controller.stream_received(self.incoming,
-                                            encoding.ensure_bytes(self._pending_bytes))
+            self.controller.stream_received(
+                self.incoming, encoding.ensure_bytes(self._pending_bytes))
             self._pending_bytes.clear()
             return
 
@@ -1143,7 +1145,8 @@ class HTTPv1Connection:
         chunk_bytes = b""
 
         body_chunk_length = len(body_chunk)
-        chunk_bytes += encoding.ensure_bytes(hex(body_chunk_length)[2:].upper())
+        chunk_bytes += encoding.ensure_bytes(
+            hex(body_chunk_length)[2:].upper())
         chunk_bytes += _CRLF_BYTES_MARK
 
         chunk_bytes += body_chunk

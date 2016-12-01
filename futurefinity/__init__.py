@@ -30,8 +30,9 @@ from . import protocol
 from . import security
 from . import httputils
 from . import magicdict
+from . import templating
 
 __all__ = [
     "__version__", "version", "log", "web", "utils", "client", "compat",
     "server", "ioutils", "routing", "encoding", "protocol", "security",
-    "httputils", "magicdict"]
+    "httputils", "magicdict", "templating"]
