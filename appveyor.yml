@@ -30,6 +30,8 @@ environment:
       PYTHON_VERSION: "3.5.2"
       PYTHON_ARCH: "64"
 
+build: off
+
 install:
   # If there is a newer build queued for the same PR, cancel this one.
   # The AppVeyor 'rollout builds' option is supposed to serve the same
@@ -74,4 +76,8 @@ install:
 test_script:
   # Run the project tests
   - "%CMD_IN_ENV% python -m coverage run --source=futurefinity setup.py test"
+
+on_success:
+  - "coveralls"
+
 
