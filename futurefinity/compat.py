@@ -15,7 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Optional, Any
+from typing import Optional, Any, Union, Tuple
+from types import TracebackType
 
 import sys
 import typing
@@ -41,6 +42,11 @@ else:
     class Awaitable(
             typing.Generic[typing.T_co], extra=collections.abc.Awaitable):
         __slots__ = ()
+
+ExcType = Union[Tuple[Any, BaseException, TracebackType],
+                Tuple[None, None, None]]
+# Do not use Type[BaseException] for the first argument,
+# or a TypeError will be raised.
 
 if PY351:
     ensure_future = asyncio.ensure_future

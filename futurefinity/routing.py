@@ -21,7 +21,7 @@
 
 """
 
-from .utils import deprecated_attr, cached_property, FutureFinityError
+from .utils import deprecated_attr, cached_property
 
 from typing.re import Pattern
 from typing import Optional, Tuple, List, Any, Dict, Union, Sequence
@@ -44,7 +44,7 @@ __all__ = ["RoutingError", "NotMatched", "NoMatchesFound",
            "ReverseError", "Rule", "Dispatcher", "RoutingLocator"]
 
 
-class RoutingError(FutureFinityError):
+class RoutingError(Exception):
     pass
 
 

@@ -21,7 +21,6 @@
 
 """
 
-from .utils import FutureFinityError
 from . import protocol
 
 from typing import Optional
@@ -31,7 +30,7 @@ import asyncio
 import ssl
 
 
-class ServerError(FutureFinityError):
+class ServerError(Exception):
     """
     FutureFinity Server Error.
 

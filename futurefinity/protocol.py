@@ -21,7 +21,6 @@ both client side and server side.
 
 """
 
-from .utils import FutureFinityError
 from . import log
 from . import compat
 from . import encoding
@@ -64,7 +63,7 @@ _CONN_CLOSED = object()
 protocol_log = log.get_child_logger("protocol")
 
 
-class ProtocolError(FutureFinityError):
+class ProtocolError(Exception):
     """
     FutureFinity Protocol Error.
 

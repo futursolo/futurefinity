@@ -21,7 +21,6 @@
 
 """
 
-from .utils import FutureFinityError
 from . import compat
 from . import encoding
 from . import protocol
@@ -40,7 +39,7 @@ import traceback
 import urllib.parse
 
 
-class ClientError(FutureFinityError):
+class ClientError(Exception):
     """
     FutureFinity Client Error.
 

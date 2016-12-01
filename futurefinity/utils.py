@@ -27,19 +27,12 @@ import sys
 import warnings
 import functools
 
+__all__ = ["Identifier", "deprecated_attr", "cached_property"]
+
 
 class Identifier:
     """
     Generic Unique Identifier.
-    """
-    pass
-
-
-class FutureFinityError(Exception):
-    """
-    Basic FutureFinity Error Class.
-
-    All Errors from FutureFinity are based on this class.
     """
     pass
 
