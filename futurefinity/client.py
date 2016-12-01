@@ -21,8 +21,9 @@
 
 """
 
-from .utils import (FutureFinityError, ensure_bytes)
+from .utils import FutureFinityError
 from . import compat
+from . import encoding
 from . import protocol
 from . import httputils
 from . import magicdict
@@ -420,10 +421,10 @@ class HTTPClient:
                 content_type = "multipart/form-data"
 
         if content_type.lower() == "application/x-www-form-urlencoded":
-            body = ensure_bytes(urllib.parse.urlencode(body_args))
+            body = encoding.ensure_bytes(urllib.parse.urlencode(body_args))
 
         elif content_type.lower() == "application/json":
-            body = ensure_bytes(json.dumps(body_args))
+            body = encoding.ensure_bytes(json.dumps(body_args))
 
         elif content_type.lower().startswith("multipart/form-data"):
             multipart_body = protocol.HTTPMultipartBody()

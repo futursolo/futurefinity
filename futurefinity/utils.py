@@ -19,9 +19,9 @@
 ``futurefinity.utils`` contains a series of utilities for common use.
 """
 
+from . import compat
 from typing import Any, Optional, Union, List, Callable
 from types import ModuleType
-from . import compat
 
 import sys
 import warnings
@@ -42,38 +42,6 @@ class FutureFinityError(Exception):
     All Errors from FutureFinity are based on this class.
     """
     pass
-
-
-def ensure_bytes(var: Any) -> bytes:
-    """
-    Try to convert the passed variable to a bytes object.
-    """
-    if isinstance(var, bytes):
-        return var
-    if isinstance(var, bytearray):
-        return bytes(var)
-    if var is None:
-        return b""
-    if not isinstance(var, str):
-        strvar = str(var)
-    else:
-        strvar = var
-    return strvar.encode()
-
-
-def ensure_str(var: Any) -> compat.Text:
-    """
-    Try to convert the passed variable to a str object.
-    """
-    if isinstance(var, str):
-        return var
-    if var is None:
-        return ""
-    if isinstance(var, (bytes, bytearray)):
-        strvar = var.decode("utf-8")
-    else:
-        strvar = var
-    return str(strvar)
 
 
 class _DeprecatedAttr:

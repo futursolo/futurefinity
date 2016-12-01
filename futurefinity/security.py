@@ -15,9 +15,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import (
-    ensure_str, ensure_bytes, deprecated_attr, FutureFinityError)
+from .utils import deprecated_attr, FutureFinityError
 from . import compat
+from . import encoding
 
 from typing import Optional
 
@@ -65,7 +65,7 @@ def get_random_str(length: int) -> compat.Text:
 class BaseContext:
     def __init__(self, security_secret: compat.Text):
         self._security_secret = hashlib.sha256(
-            ensure_bytes(security_secret)).digest()
+            encoding.ensure_bytes(security_secret)).digest()
 
     def lookup_origin_text(
         self, secure_text: compat.Text,
@@ -143,7 +143,7 @@ class _HMACSecurityContext(BaseContext):
         if valid_length and int(time.time()) - timestamp > valid_length:
             return None  # Data Expired
 
-        return ensure_str(text)
+        return encoding.ensure_str(text)
 
     def generate_secure_text(self, origin_text: compat.Text) -> compat.Text:
         if not isinstance(origin_text, str):
@@ -152,7 +152,7 @@ class _HMACSecurityContext(BaseContext):
         iv = os.urandom(16)
 
         content = struct.pack("l", int(time.time()))
-        content += ensure_bytes(origin_text)
+        content += encoding.ensure_bytes(origin_text)
         hash = hmac.new(iv + self._security_secret, digestmod=hashlib.sha256)
         hash.update(content)
         signature = hash.digest()
@@ -162,7 +162,7 @@ class _HMACSecurityContext(BaseContext):
         final_signed_text += content
         final_signed_text += signature
 
-        return ensure_str(base64.b64encode(final_signed_text))
+        return encoding.ensure_str(base64.b64encode(final_signed_text))
 
 
 HMACSecurityContext = deprecated_attr(
@@ -229,7 +229,7 @@ class AESContext(BaseContext):
         if valid_length and int(time.time()) - timestamp > valid_length:
             return None  # Data Expired.
 
-        return ensure_str(text)
+        return encoding.ensure_str(text)
 
     def generate_secure_text(self, origin_text: compat.Text) -> compat.Text:
         if not isinstance(origin_text, str):
@@ -238,7 +238,7 @@ class AESContext(BaseContext):
         iv = os.urandom(16)
 
         content = struct.pack("l", int(time.time()))
-        content += ensure_bytes(origin_text)
+        content += encoding.ensure_bytes(origin_text)
 
         encryptor = AESCipher(
             aes_algorithms.AES(self._security_secret),
@@ -253,7 +253,7 @@ class AESContext(BaseContext):
         final_encrypted_text += ciphertext
         final_encrypted_text += encryptor.tag
 
-        return ensure_str(base64.b64encode(final_encrypted_text))
+        return encoding.ensure_str(base64.b64encode(final_encrypted_text))
 
 AESGCMSecurityContext = deprecated_attr(
     AESContext, __name__,

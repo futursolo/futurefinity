@@ -15,8 +15,8 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import ensure_str
 from . import compat
+from . import encoding
 from typing import Optional, Union
 from http.cookies import SimpleCookie as HTTPCookies
 
@@ -54,4 +54,4 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
     else:
         raise TypeError("unknown timestamp type: {}".format(ts))
 
-    return ensure_str(email.utils.formatdate(ts, usegmt=True))
+    return encoding.ensure_str(email.utils.formatdate(ts, usegmt=True))

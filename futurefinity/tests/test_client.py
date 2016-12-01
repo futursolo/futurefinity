@@ -16,7 +16,7 @@
 #   limitations under the License.
 
 from futurefinity.compat import ensure_future
-from futurefinity.utils import ensure_str
+from futurefinity.encoding import ensure_str
 from futurefinity.tests.utils import TestCase, run_until_complete
 
 from futurefinity.client import HTTPClient

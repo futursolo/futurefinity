@@ -21,9 +21,10 @@ both client side and server side.
 
 """
 
-from .utils import (FutureFinityError, ensure_str, ensure_bytes)
+from .utils import FutureFinityError
 from . import log
 from . import compat
+from . import encoding
 from . import security
 from . import httputils
 from . import magicdict
@@ -173,7 +174,7 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
             headers_str += "{}: {}".format(_capitalize_header[name], value)
             headers_str += _CRLF_MARK
 
-        return ensure_bytes(headers_str)
+        return encoding.ensure_bytes(headers_str)
 
     def load_headers(
         self, data: Union[compat.Text, bytes, list,
@@ -192,7 +193,7 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
 
         if isinstance(data, (str, bytes)):
             # For string-like object.
-            splitted_data = ensure_str(data).split(_CRLF_MARK)
+            splitted_data = encoding.ensure_str(data).split(_CRLF_MARK)
 
             for header in splitted_data:
                 if not header:
@@ -274,7 +275,7 @@ class HTTPMultipartFileField:
 
         field = self.headers.assemble()
         field += _CRLF_BYTES_MARK
-        field += ensure_bytes(self.content)
+        field += encoding.ensure_bytes(self.content)
         field += _CRLF_BYTES_MARK
 
         return field
@@ -310,7 +311,7 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
         for field in content_type.split(";"):  # Search Boundary
             if field.find("boundary=") == -1:
                 continue
-            boundary = ensure_bytes(field.split("=")[1])
+            boundary = encoding.ensure_bytes(field.split("=")[1])
             if boundary.startswith(b'"') and boundary.endswith(b'"'):
                 boundary = boundary[1:-1]
             break
@@ -377,20 +378,20 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
         """
         body = b""
         boundary = "----------FutureFinityFormBoundary"
-        boundary += ensure_str(security.get_random_str(8)).lower()
+        boundary += encoding.ensure_str(security.get_random_str(8)).lower()
         content_type = "multipart/form-data; boundary=" + boundary
 
-        full_boundary = b"--" + ensure_bytes(boundary)
+        full_boundary = b"--" + encoding.ensure_bytes(boundary)
 
         for field_name, field_value in self.items():
             body += full_boundary + _CRLF_BYTES_MARK
 
             if isinstance(field_value, str):
                 body += b"Content-Disposition: form-data; "
-                body += ensure_bytes("name=\"{}\"\r\n".format(field_name))
+                body += encoding.ensure_bytes("name=\"{}\"\r\n".format(field_name))
                 body += _CRLF_BYTES_MARK
 
-                body += ensure_bytes(field_value)
+                body += encoding.ensure_bytes(field_value)
                 body += _CRLF_BYTES_MARK
             else:
                 raise ProtocolError("Unknown Field Type")
@@ -584,7 +585,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
              "application/x-www-form-urlencoded", "application/x-url-encoded"):
                 self._body_args = magicdict.TolerantMagicDict(
                     urllib.parse.parse_qsl(
-                        ensure_str(self.body),
+                        encoding.ensure_str(self.body),
                         keep_blank_values=True,
                         strict_parsing=True))
 
@@ -596,7 +597,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
             elif content_type.lower().strip() == "application/json":
                 self._body_args = magicdict.TolerantMagicDict(
-                    json.loads(ensure_str(self.body)))
+                    json.loads(encoding.ensure_str(self.body)))
 
             else:  # Unknown Content Type.
                 raise ProtocolError("Unknown Body Type.")
@@ -827,11 +828,11 @@ class HTTPv1Connection:
                 "Initial Exceed its Maximum Length.")
             return
 
-        pending_initial = ensure_bytes(self._pending_bytes[:initial_end])
+        pending_initial = encoding.ensure_bytes(self._pending_bytes[:initial_end])
         del self._pending_bytes[:initial_end + 2]
 
-        basic_info, origin_headers = ensure_str(pending_initial).split(
-            _CRLF_MARK, 1)
+        basic_info, origin_headers = encoding.ensure_str(
+            pending_initial).split(_CRLF_MARK, 1)
 
         basic_info = basic_info.split(" ")
 
@@ -955,7 +956,7 @@ class HTTPv1Connection:
         if len(self._pending_bytes) < self._body_length:
             return  # Data not enough, waiting.
 
-        self._pending_body = ensure_bytes(
+        self._pending_body = encoding.ensure_bytes(
             self._pending_bytes[:self._body_length])
 
         del self._pending_bytes[:self._body_length]
@@ -1020,7 +1021,7 @@ class HTTPv1Connection:
 
         if self.stage is _CONN_STREAMED:
             self.controller.stream_received(self.incoming,
-                                            ensure_bytes(self._pending_bytes))
+                                            encoding.ensure_bytes(self._pending_bytes))
             self._pending_bytes.clear()
             return
 
@@ -1061,14 +1062,14 @@ class HTTPv1Connection:
                 raise ProtocolError(
                     "Cannot write when connection stage is not _CONN_INIT.")
 
-            basic_info = ensure_bytes(
+            basic_info = encoding.ensure_bytes(
                 basic_info_template.format(method, path, http_version_text))
 
         else:
             if self.stage is not _CONN_MESSAGE_PARSED:
                 raise ProtocolError("Unacceptable Function Access.")
 
-            basic_info = ensure_bytes(basic_info_template.format(
+            basic_info = encoding.ensure_bytes(basic_info_template.format(
                 http_version_text, status_code,
                 httputils.status_code_descriptions[status_code]))
 
@@ -1143,7 +1144,7 @@ class HTTPv1Connection:
         chunk_bytes = b""
 
         body_chunk_length = len(body_chunk)
-        chunk_bytes += ensure_bytes(hex(body_chunk_length)[2:].upper())
+        chunk_bytes += encoding.ensure_bytes(hex(body_chunk_length)[2:].upper())
         chunk_bytes += _CRLF_BYTES_MARK
 
         chunk_bytes += body_chunk
@@ -1183,7 +1184,7 @@ class HTTPv1Connection:
 
         if self.is_client:
             if self.stage is _CONN_BODY_WAITING:
-                self._pending_body = ensure_bytes(self._pending_bytes)
+                self._pending_body = encoding.ensure_bytes(self._pending_bytes)
 
                 self._pending_bytes.clear()
 

@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.utils import ensure_bytes
+from futurefinity.encoding import ensure_bytes
 from futurefinity.tests.utils import TestCase
 
 from futurefinity.security import (

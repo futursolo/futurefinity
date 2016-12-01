@@ -24,7 +24,7 @@ import random
 
 class MagicDictTestCase(TestCase):
     def test_init_magic_dict(self):
-        test_data = {"a": "b", "c": b"d", "e": random.random()}
+        test_data = {"a": "b", "c": b"d", "e": random.choice(range(0, 100))}
 
         assert MagicDict(test_data) == test_data
         assert MagicDict(**test_data) == test_data

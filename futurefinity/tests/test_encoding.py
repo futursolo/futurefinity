@@ -18,7 +18,7 @@
 from futurefinity.tests.utils import TestCase
 from futurefinity.security import get_random_str
 
-from futurefinity.utils import (ensure_bytes, ensure_str)
+from futurefinity.encoding import ensure_bytes, ensure_str
 
 import os
 import pytest

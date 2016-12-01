@@ -44,11 +44,12 @@ Finally, listen to the port you want, and start the event loop::
 
 """
 
-from .utils import (Identifier, ensure_str, ensure_bytes)
+from .utils import Identifier
 from . import log
 from . import compat
 from . import server
 from . import routing
+from . import encoding
 from . import protocol
 from . import security
 from . import httputils
@@ -419,7 +420,7 @@ class RequestHandler:
         if self._initial_written:
             raise HTTPError(500, "You cannot set a new header after the "
                                  "initial is written.")
-        self._headers[name] = ensure_str(value)
+        self._headers[name] = encoding.ensure_str(value)
 
     def add_header(self, name: compat.Text, value: compat.Text):
         """
@@ -429,7 +430,7 @@ class RequestHandler:
         if self._initial_written:
             raise HTTPError(500, "You cannot add a new header after the "
                                  "initial is written.")
-        self._headers.add(name, ensure_str(value))
+        self._headers.add(name, encoding.ensure_str(value))
 
     def clear_header(self, name: compat.Text):
         """
@@ -585,8 +586,9 @@ class RequestHandler:
 
         content = self.app._sec_context.generate_secure_text(value)
 
-        self.set_cookie(ensure_str(name), ensure_str(content),
-                        expires_days=expires_days, **kwargs)
+        self.set_cookie(
+            encoding.ensure_str(name),
+            encoding.ensure_str(content), expires_days=expires_days, **kwargs)
 
     def check_csrf_value(self):
         """
@@ -647,7 +649,7 @@ class RequestHandler:
         self._body_written = True
         if clear_text:
             self._response_body.clear()
-        self._response_body += ensure_bytes(text)
+        self._response_body += encoding.ensure_bytes(text)
 
     @property
     def render_string(self) -> Callable[
@@ -688,7 +690,7 @@ class RequestHandler:
                 "Cannot found `template_path`. "
                 "Please provide `template_path` through Application Settings.")
 
-        parsed_tpl = await self.app._tpl_loader.load_template(
+        parsed_tpl = await self.app._tpl_loader.load_tpl(
             template_name)
         return await parsed_tpl.render_str(**template_args)
 
@@ -751,10 +753,10 @@ class RequestHandler:
         """
         Check etag header of response_body.
         """
-        computed_etag = ensure_bytes(self._body_etag)
+        computed_etag = encoding.ensure_bytes(self._body_etag)
         etags = re.findall(
             br'\*|(?:W/)?"[^"]*"',
-            ensure_bytes(self.get_header("if-none-match", ""))
+            encoding.ensure_bytes(self.get_header("if-none-match", ""))
         )
         if not computed_etag or not etags:
             return False
@@ -915,7 +917,7 @@ class RequestHandler:
         content = ""
 
         if message:
-            content += html.escape(ensure_str(message)) + "\n\n"
+            content += html.escape(encoding.ensure_str(message)) + "\n\n"
 
         if self.settings.get("debug", False) and exc_info:
             content += html.escape(
@@ -1216,15 +1218,17 @@ class Application:
         self._sec_context = None
 
         if "template_path" in self.settings.keys():
-            cache_template = self.settings.get(
-                "cache_template", (not self.settings.get("debug", False)))
-            self._tpl_loader = templating.TemplateLoader(
-                self.settings["template_path"],
-                cache_template=cache_template,
-                default_escape=self.settings.get("default_escape", "html"),
-                escape_url_with_plus=self.settings.get(
-                    "escape_url_with_plus", True),
+            tpl_context = templating.TemplateContext(
+                cache_tpls=self.settings.get(
+                    "cache_template", (not self.settings.get("debug", False))),
+                default_escape="html",
+                input_encoding="utf-8", output_encoding="utf-8",
+                escape_url_with_plus=True,
                 loop=self._loop)
+
+            self._tpl_loader = templating.AsyncFileSystemLoader(
+                self.settings["template_path"],
+                tpl_context)
 
         if "security_secret" in self.settings.keys():
             if "aes_security" in self.settings.keys():
@@ -1252,7 +1256,7 @@ class Application:
             self.handlers.add(static_handler_path, Handler=StaticFileHandler)
 
     @property
-    def template_loader(self) -> templating.TemplateLoader:
+    def template_loader(self) -> templating.AsyncFileSystemLoader:
         """
         .. deprecated:: 0.3
             For direct access to `TemplateLoader`.

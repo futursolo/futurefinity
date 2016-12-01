@@ -17,12 +17,16 @@
 
 from futurefinity.tests.utils import (
     TestCase, run_until_complete, get_tests_path)
+
 from futurefinity.compat import PY352
 
-from futurefinity.templating import Template, TemplateLoader
+from futurefinity.templating import (
+    BaseLoader, AsyncFileSystemLoader, TemplateContext, TemplateNotFoundError,
+    Template)
 
 import sys
 import time
+import pytest
 import random
 import asyncio
 
@@ -58,12 +62,60 @@ class _AsyncTimeIterator:
             raise StopAsyncIteration
 
 
+class BaseLoaderTestCase(TestCase):
+    @run_until_complete
+    async def test_load_template(self):
+        loader = BaseLoader()
+
+        with pytest.raises(NotImplementedError):
+            await loader.load_tpl("phantasm.html")
+
+
+class AsyncFileSystemLoaderTestCase(TestCase):
+    def test_init(self):
+        loader = AsyncFileSystemLoader(get_tests_path("tpls"))
+        assert loader._root_path == get_tests_path("tpls") + "/"
+
+        with pytest.raises(AssertionError):
+            AsyncFileSystemLoader(-1)
+
+    @run_until_complete
+    async def test_load_tpl(self):
+        loader = AsyncFileSystemLoader(get_tests_path("tpls"))
+
+        with pytest.raises(TemplateNotFoundError):
+            await loader.load_tpl("phantasm.html")
+        loaded_tpl = await loader.load_tpl("index.html")
+
+        with open(get_tests_path("tpls/index.html")) as f:
+            tpl_content = f.read()
+        assert loaded_tpl._tpl_content == tpl_content  # Test Correctness.
+
+        sec_loaded_tpl = await loader.load_tpl("index.html")
+        assert loaded_tpl is sec_loaded_tpl  # Test Template Cache.
+
+    @run_until_complete
+    async def test_load_tpl_no_cache(self):
+        context = TemplateContext(cache_tpls=False)
+        loader = AsyncFileSystemLoader(get_tests_path("tpls"), context=context)
+
+        loaded_tpl = await loader.load_tpl("index.html")
+        sec_loaded_tpl = await loader.load_tpl("index.html")
+
+        # Test they have the same content.
+        assert loaded_tpl._tpl_content == sec_loaded_tpl._tpl_content
+
+        # Test Template Cache Disabled.
+        assert loaded_tpl is not sec_loaded_tpl
+
+
 class TemplateTestCase(TestCase):
-    loader = TemplateLoader(get_tests_path("tpls"), cache_template=False)
+    context = TemplateContext(cache_tpls=False)
+    loader = AsyncFileSystemLoader(get_tests_path("tpls"), context=context)
 
     @run_until_complete
     async def test_inherit(self):
-        tpl = await self.loader.load_template("index.html")
+        tpl = await self.loader.load_tpl("index.html")
 
         result = await tpl.render_str()
 
@@ -117,7 +169,7 @@ This is body. The old title is Old Title.
             "have ambiguity of the templating system.")
 
     @run_until_complete
-    async def test_statement_modifier(self):
+    async def test_async_for(self):
         time_iterator = _AsyncTimeIterator()
         tpl = Template(
             "<% async for i in time_iterator %><%r= str(i) %>, <% end %>")

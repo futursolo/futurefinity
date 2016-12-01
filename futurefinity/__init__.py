@@ -25,6 +25,7 @@ from . import compat
 from . import server
 from . import ioutils
 from . import routing
+from . import encoding
 from . import protocol
 from . import security
 from . import httputils
@@ -32,5 +33,5 @@ from . import magicdict
 
 __all__ = [
     "__version__", "version", "log", "web", "utils", "client", "compat",
-    "server", "ioutils", "routing", "protocol", "security", "httputils",
-    "magicdict"]
+    "server", "ioutils", "routing", "encoding", "protocol", "security",
+    "httputils", "magicdict"]

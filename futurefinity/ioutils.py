@@ -174,7 +174,8 @@ class AsyncStringIO(_AsyncIOBase):
 
 class AsyncFileSystemOperations:
     def __init__(
-        self, *, executor: Optional[concurrent.futures.ThreadPoolExecutor]=None,
+        self, *, executor: Optional[
+            concurrent.futures.ThreadPoolExecutor]=None,
             loop: Optional[asyncio.AbstractEventLoop]=None):
         self._loop = loop or asyncio.get_event_loop()
         self._executor = executor or get_default_executor()
