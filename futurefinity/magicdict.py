@@ -62,7 +62,12 @@ class _MagicItemsView(collections.abc.ItemsView):
         return set(self) < set(obj)
 
     def __eq__(self, obj: collections.abc.Iterable) -> bool:
-        return list(self) == list(obj)
+        if hasattr(obj, "__reversed__") and callable(obj.__reversed__):
+            # If an object can be reversed, then it should have an order.
+            return list(self) == list(obj)
+
+        else:
+            return set(self) == set(obj)
 
     def __ne__(self, obj: collections.abc.Iterable) -> bool:
         return not self.__eq__(obj)
@@ -111,7 +116,12 @@ class _MagicKeysView(collections.abc.KeysView):
         return set(self) < set(obj)
 
     def __eq__(self, obj: collections.abc.Iterable) -> bool:
-        return list(self) == list(obj)
+        if hasattr(obj, "__reversed__") and callable(obj.__reversed__):
+            # If an object can be reversed, then it should have an order.
+            return list(self) == list(obj)
+
+        else:
+            return set(self) == set(obj)
 
     def __ne__(self, obj: collections.abc.Iterable) -> bool:
         return not self.__eq__(obj)
@@ -164,7 +174,12 @@ class _MagicValuesView(collections.abc.ValuesView):
         return reversed(self._mapping).values()
 
     def __eq__(self, obj: collections.abc.Iterable) -> bool:
-        return list(self) == list(obj)
+        if hasattr(obj, "__reversed__") and callable(obj.__reversed__):
+            # If an object can be reversed, then it should have an order.
+            return list(self) == list(obj)
+
+        else:
+            return set(self) == set(obj)
 
     def __ne__(self, obj: collections.abc.Iterable) -> bool:
         return not self.__eq__(obj)
