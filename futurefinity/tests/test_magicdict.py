@@ -17,11 +17,412 @@
 
 from futurefinity.tests.utils import TestCase
 
+from futurefinity.security import get_random_str
 from futurefinity.magicdict import (
     MagicDict, TolerantMagicDict, MagicDictFrozenError)
 
 import pytest
 import random
+
+
+class MagicItemsViewTestCase(TestCase):
+    def test_len_method_magic_items_view(self):
+        magic_dict = MagicDict()
+        dict_len = random.choice(range(10, 90))
+        for i in range(0, dict_len):
+            magic_dict.add(get_random_str(5), get_random_str(5))
+
+        assert len(magic_dict.items()) == dict_len
+
+    def test_iter_method_magic_items_view(self):
+        items_list = []
+        for i in range(0, random.choice(range(10, 90))):
+            items_list.append((get_random_str(5), get_random_str(5)))
+
+        magic_dict = MagicDict(items_list)
+
+        assert list(magic_dict.items()) == items_list
+
+    def test_contains_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        assert ("a", "b") in magic_dict.items()
+        assert ("a", "c") in magic_dict.items()
+
+    def test_le_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.items() <= magic_dict2.items()
+
+    def test_lt_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.items() < magic_dict2.items()
+
+    def test_eq_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.items() == magic_dict2.items()
+
+    def test_ne_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "d")
+
+        assert magic_dict.items() != magic_dict2.items()
+
+    def test_gt_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert magic_dict.items() > magic_dict2.items()
+
+    def test_ge_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.items() >= magic_dict2.items()
+
+    def test_and_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert (magic_dict.items() & magic_dict2.items()) == set([("a", "b")])
+
+    def test_or_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert (magic_dict.items() | magic_dict2.items()) == set(
+            [("a", "b"), ("a", "c")])
+
+    def test_sub_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert (magic_dict.items() - magic_dict2.items()) == set([("a", "c")])
+
+    def test_xor_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert (magic_dict.items() ^ magic_dict2.items()) == set([("a", "c")])
+
+    def test_reversed_method_magic_items_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "c")
+        magic_dict2.add("a", "b")
+
+        assert reversed(magic_dict.items()) == magic_dict2.items()
+
+
+class MagicKeysViewTestCase(TestCase):
+    def test_len_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+        dict_len = random.choice(range(10, 90))
+        for i in range(0, dict_len):
+            magic_dict.add(get_random_str(5), get_random_str(5))
+
+        assert len(magic_dict.keys()) == dict_len
+
+    def test_iter_method_magic_keys_view(self):
+        items_list = []
+        for i in range(0, random.choice(range(10, 90))):
+            items_list.append((get_random_str(5), get_random_str(5)))
+
+        magic_dict = MagicDict(items_list)
+
+        assert list(magic_dict.keys()) == [i for i, _ in items_list]
+
+    def test_contains_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        assert "a" in magic_dict.keys()
+
+    def test_le_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.keys() <= magic_dict2.keys()
+
+    def test_lt_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("c", "d")
+
+        assert magic_dict.keys() < magic_dict2.keys()
+
+    def test_eq_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.keys() == magic_dict2.keys()
+
+    def test_ne_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("c", "d")
+
+        assert magic_dict.keys() != magic_dict2.keys()
+
+    def test_gt_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("c", "d")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert magic_dict.keys() > magic_dict2.keys()
+
+    def test_ge_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.keys() >= magic_dict2.keys()
+
+    def test_and_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("c", "d")
+
+        assert (magic_dict.keys() & magic_dict2.keys()) == set(["a"])
+
+    def test_or_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "c")
+        magic_dict.add("b", "d")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("c", "d")
+
+        assert (magic_dict.keys() | magic_dict2.keys()) == set(
+            ["a", "b", "c"])
+
+    def test_sub_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("c", "d")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("c", "d")
+
+        assert (magic_dict.keys() - magic_dict2.keys()) == set(["a"])
+
+    def test_xor_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("c", "d")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+
+        assert (magic_dict.keys() ^ magic_dict2.keys()) == set(["c"])
+
+    def test_reversed_method_magic_keys_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("c", "d")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("c", "d")
+        magic_dict2.add("a", "b")
+
+        assert reversed(magic_dict.keys()) == magic_dict2.keys()
+
+
+class MagicValuesViewTestCase(TestCase):
+    def test_len_method_magic_values_view(self):
+        magic_dict = MagicDict()
+        dict_len = random.choice(range(10, 90))
+        for i in range(0, dict_len):
+            magic_dict.add(get_random_str(5), get_random_str(5))
+
+        assert len(magic_dict.values()) == dict_len
+
+    def test_iter_method_magic_values_view(self):
+        items_list = []
+        for i in range(0, random.choice(range(10, 90))):
+            items_list.append((get_random_str(5), get_random_str(5)))
+
+        magic_dict = MagicDict(items_list)
+
+        assert list(magic_dict.values()) == [i for _, i in items_list]
+
+    def test_contains_method_magic_values_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        assert "b" in magic_dict.values()
+        assert "c" in magic_dict.values()
+
+    def test_eq_method_magic_values_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("a", "c")
+
+        assert magic_dict.values() == magic_dict2.values()
+
+    def test_ne_method_magic_values_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("a", "c")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("a", "b")
+        magic_dict2.add("c", "d")
+
+        assert magic_dict.values() != magic_dict2.values()
+
+    def test_reversed_method_magic_values_view(self):
+        magic_dict = MagicDict()
+
+        magic_dict.add("a", "b")
+        magic_dict.add("c", "d")
+
+        magic_dict2 = MagicDict()
+
+        magic_dict2.add("c", "d")
+        magic_dict2.add("a", "b")
+
+        assert reversed(magic_dict.values()) == magic_dict2.values()
 
 
 class MagicDictTestCase(TestCase):

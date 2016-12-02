@@ -53,7 +53,7 @@ class _MagicItemsView(collections.abc.ItemsView):
 
     def __contains__(self, pair: Tuple[Hashable, Any]) -> bool:
         with self._mapping._mutex_lock:
-            return pair in self._mapping_key_value_pairs.values()
+            return pair in self._mapping._key_value_pairs.values()
 
     def __le__(self, obj: collections.abc.Iterable) -> bool:
         return set(self) <= set(obj)
@@ -170,9 +170,6 @@ class _MagicValuesView(collections.abc.ValuesView):
         else:
             return False
 
-    def __reversed__(self) -> "_MagicValuesView":
-        return reversed(self._mapping).values()
-
     def __eq__(self, obj: collections.abc.Iterable) -> bool:
         if hasattr(obj, "__reversed__") and callable(obj.__reversed__):
             # If an object can be reversed, then it should have an order.
@@ -183,6 +180,9 @@ class _MagicValuesView(collections.abc.ValuesView):
 
     def __ne__(self, obj: collections.abc.Iterable) -> bool:
         return not self.__eq__(obj)
+
+    def __reversed__(self) -> "_MagicValuesView":
+        return reversed(self._mapping).values()
 
 
 class MagicDict(collections.abc.MutableMapping):
