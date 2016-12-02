@@ -630,9 +630,9 @@ class Namespace:
             tpl_globals=self._get_globals())
 
     async def _include_tpl(self, path: compat.Text) -> compat.Text:
-        tpl = await self._loader.load_tpl(path)
+        tpl = await self._loader.load_tpl(path, origin_path=self._tpl._path)
 
-        tpl_namespace = tpl._get_namespace(tpl_globals=self._tpl._path)
+        tpl_namespace = tpl._get_namespace(self._get_globals())
 
         await tpl_namespace._render()
         return tpl_namespace._tpl_result

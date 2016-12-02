@@ -134,6 +134,27 @@ This is body. The old title is Old Title.
 """ == result
 
     @run_until_complete
+    async def test_include(self):
+        tpl = await self.loader.load_tpl("main.html")
+
+        result = await tpl.render_str()
+
+        assert """\
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Main Page</title>
+    </head>
+
+    <body>
+
+        \n<nav>This will be included into other files.</nav>
+
+    </body>
+</html>
+""" == result
+
+    @run_until_complete
     async def test_output(self):
         tpl = Template(
             "Hello, <%= name %>!")
