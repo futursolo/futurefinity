@@ -20,6 +20,7 @@ from . import compat
 
 from typing import Iterable, Optional
 
+import abc
 import asyncio
 import collections.abc
 
@@ -44,7 +45,6 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
     """
     The abstract base class of the stream reader(read only stream).
     """
-    @property
     def buflen(self) -> int:
         """
         Return the length of the internal buffer.
@@ -54,6 +54,7 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def read(self, n: int=-1) -> bytes:
         """
         Read at most n bytes data.
@@ -62,9 +63,19 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def readexactly(self, n: int=-1) -> bytes:
+        """
+        Read exactly n bytes data.
+
+        If the eof reached before found the separator it will issue
+        an `asyncio.IncompleteReadError`.
+
+        When at_eof() is True, the method will issue a `StreamEOFError`.
+        """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def readuntil(
         self, separator: bytes=b"\n",
             *, keep_separator: bool=True) -> bytes:
@@ -80,18 +91,21 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def at_eof(self) -> bool:
         """
         Return True if eof has been appended and the internal buffer is empty.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def has_eof(self) -> bool:
         """
         Return True if eof has been appended.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def wait_eof(self):
         """
         Wait for the eof has been appended.
@@ -101,6 +115,7 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_extra_info(
             self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
         """
@@ -112,6 +127,7 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
         raise NotImplementedError
 
     if compat.PY352:
+        @abc.abstractmethod
         def __aiter__(self) -> "AbstractStreamReader":
             """
             The `AbstractStreamReader` is an `AsyncIterator`,
@@ -120,6 +136,7 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
             raise NotImplementedError
 
     else:
+        @abc.abstractmethod
         async def __aiter__(self) -> "AbstractStreamReader":
             """
             In Python 3.5.1 and before,
@@ -127,6 +144,7 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
             """
             raise NotImplementedError
 
+    @abc.abstractmethod
     async def __anext__(self) -> bytes:
         """
         Return the next line.
@@ -140,12 +158,14 @@ class AbstractStreamWriter:
     """
     The abstract base class of the stream writer(write only stream).
     """
+    @abc.abstractmethod
     def write(self, data: bytes):
         """
         Write the data.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def writelines(self, data: Iterable[bytes]):
         """
         Write a list (or any iterable) of data bytes.
@@ -155,6 +175,7 @@ class AbstractStreamWriter:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def flush(self):
         """
         Give the underlying implementation a chance to flush the pending data
@@ -162,6 +183,7 @@ class AbstractStreamWriter:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def can_write_eof(self) -> bool:
         """
         Return `True` if an eof can be written to the writer.
@@ -177,6 +199,7 @@ class AbstractStreamWriter:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def eof_written(self) -> bool:
         """
         Return `True` if the eof has been written or
@@ -184,30 +207,35 @@ class AbstractStreamWriter:
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def closed(self) -> bool:
         """
         Return `True` if the writer has been closed.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def close(self):
         """
         Close the writer.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def wait_closed(self):
         """
         Wait the writer to close.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def abort(self):
         """
         Abort the writer without flush out all the pending buffer.
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def get_extra_info(
             self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
         """
