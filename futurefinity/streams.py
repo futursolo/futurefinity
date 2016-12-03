@@ -44,16 +44,10 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
     """
     The abstract base class of the stream reader(read only stream).
     """
-    def prepend_data(self, data: bytes):
-        """
-        Prepend the data to the beginning of the internal buffer.
-        """
-        raise NotImplementedError
-
     @property
-    def buffer_length(self) -> int:
+    def buflen(self) -> int:
         """
-        Prepend the data to the beginning of the internal buffer.
+        Return the length of the internal buffer.
 
         If the reader has no internal buffer, it should issue a
         `NotImplementedError`.

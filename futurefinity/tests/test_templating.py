@@ -197,3 +197,24 @@ This is body. The old title is Old Title.
 
         result = await tpl.render_str(time_iterator=time_iterator)
         assert result == str(time_iterator._iterated_time)[1:-1] + ", "
+
+    @run_until_complete
+    async def test_html_escape(self):
+        tpl = Template("Hello, <%h= name %>!")
+        assert await tpl.render_str(
+            name="<tag></tag>") == "Hello, &lt;tag&gt;&lt;/tag&gt;!"
+
+    @run_until_complete
+    async def test_json_escape(self):
+        tpl = Template("{\"name\": <%j= name %>}")
+        assert await tpl.render_str(
+            name="{\"name\": \"admin\"}"
+            ) == '{\"name\": \"{\\"name\\": \\"admin\\"}\"}'
+
+    @run_until_complete
+    async def test_url_escape(self):
+        tpl = Template("https://www.example.com/?user=<%u= name %>")
+        assert await tpl.render_str(
+            name="a&redirect=https://www.example2.com/"
+            ) == ("https://www.example.com/?user=a%26redirect%3Dhttps%3A%2F%2F"
+                  "www.example2.com%2F")
