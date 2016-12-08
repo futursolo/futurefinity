@@ -1429,7 +1429,8 @@ class BaseLoader:
             if tpl_path in self._tpl_cache.keys():
                 return self._tpl_cache[tpl_path]
 
-            abs_tpl_path = await self._find_abs_path(tpl_path)
+            abs_tpl_path = await self._find_abs_path(
+                tpl_path, origin_path=origin_path)
 
             tpl_content = await self._load_tpl_content(abs_tpl_path)
 
