@@ -536,9 +536,8 @@ class Namespace:
 
     @escape_url_with_plus.setter
     def escape_url_with_plus(self, value: bool):
-        if not isinstance(value, bool):
-            raise TemplateRenderError(
-                "escape_url_with_plus property can only take boolean value.")
+        assert isinstance(value, bool), \
+            "escape_url_with_plus property can only take boolean value."
 
         self._escape_url_with_plus = value
 
@@ -547,9 +546,7 @@ class Namespace:
         """
         Return the body from the child template.
         """
-        if self._child_body is None:
-            raise TemplateRenderError("There's no child body.")
-
+        assert self._child_body is not None, "There's no child body."
         return self._child_body
 
     @property
@@ -564,16 +561,12 @@ class Namespace:
         """
         Return the parent of the current template.
         """
-        if self._parent is None:
-            raise TemplateRenderError("Parent is not set.")
-
+        assert self._parent is not None, "Parent is not set."
         return self._parent
 
     @property
     def _tpl_result(self) -> compat.Text:
-        if not self._finished:
-            raise TemplateRenderError("Renderring has already been finished.")
-
+        assert self._finished, "Renderring has not been finished."
         return self.__tpl_result__
 
     @property
@@ -594,9 +587,7 @@ class Namespace:
         self._updated_block_fns.update(**kwargs)
 
     def _update_child_body(self, child_body: compat.Text):
-        if self._child_body is not None:
-            raise TemplateRenderError("There's already a child body.")
-
+        assert self._child_body is None, "There's already a child body."
         self._child_body = child_body
 
     async def _inherit_tpl(self):  # Need to be Changed.
@@ -619,9 +610,8 @@ class Namespace:
         self.__tpl_result__ = self._parent._tpl_result
 
     async def _add_parent(self, path: compat.Text):
-        if self._parent is not None:
-            raise TemplateRenderError(
-                "A template can only inherit from one parent template.")
+        assert self._parent is None, \
+            "A template can only inherit from one parent template."
 
         parent_tpl = await self._loader.load_tpl(
             path, origin_path=self._tpl._path)
@@ -641,9 +631,7 @@ class Namespace:
         raise NotImplementedError
 
     async def _render(self):
-        if self._finished:
-            raise TemplateRenderError("Renderring has already been finished.")
-
+        assert not self._finished, "Renderring has already been finished."
         self.__tpl_result__ = await self._render_body_str()
 
         await self._inherit_tpl()
@@ -670,9 +658,7 @@ class CodePrinter:
         """
         Write a line with indent.
         """
-        if self._finished:
-            raise PrinterError(
-                "Code Generation has already been finished.")
+        assert not self._finished, "Code Generation has already been finished."
 
         final_line = self._indent_mark * self._indent_num + line + self._end
         self._committed_code += final_line
@@ -694,24 +680,15 @@ class CodePrinter:
 
             printer.print_line("a()")
         """
-        if self._finished:
-            raise PrinterError(
-                "Code Generation has already been finished.")
-
+        assert not self._finished, "Code Generation has already been finished."
         return self
 
     def _inc_indent_num(self):
-        if self._finished:
-            raise PrinterError(
-                "Code Generation has already been finished.")
-
+        assert not self._finished, "Code Generation has already been finished."
         self._indent_num += 1
 
     def _dec_indent_num(self):
-        if self._finished:
-            raise PrinterError(
-                "Code Generation has already been finished.")
-
+        assert not self._finished, "Code Generation has already been finished."
         self._indent_num -= 1
 
     def __enter__(self):
@@ -764,13 +741,9 @@ class _Statement:
         """
         Append a statement to the current statement.
         """
-        if self._finished:
-            self._raise_invalid_operation(
-                "This statement has already been finished")
-
-        if not self.should_indent:
-            self._raise_invalid_operation(
-                "This statement is not an indent statement")
+        assert not self._finished, "This statement has already been finished."
+        assert self.should_indent, \
+            "This statement is not an indent statement."
 
         self._statements.append(statement)
 
@@ -778,13 +751,9 @@ class _Statement:
         """
         Unindent a statement.
         """
-        if self._finished:
-            self._raise_invalid_operation(
-                "This statement has already been finished")
-
-        if not self.should_indent:
-            self._raise_invalid_operation(
-                "This statement is not an indent statement")
+        assert not self._finished, "This statement has already been finished."
+        assert self.should_indent, \
+            "This statement is not an indent statement."
 
         self._finished = True
 
@@ -1122,8 +1091,7 @@ class _Parser:
         self._finished = False
 
     def _move_to_next_line(self):
-        if self._finished:
-            raise ParseError("Parsing has already been finished.")
+        assert not self._finished, "Parsing has already been finished."
 
         if self._current_line:
             self._raise_parse_error(
@@ -1148,7 +1116,7 @@ class _Parser:
         self, message: compat.Text, line: Union[int, compat.Text]="<unknown>",
             from_err: Optional[BaseException]=None):
         """
-        Raise a `ParserError`.
+        Raise a `ParseError`.
         """
         err_str = "{} in file {} at line {}.".format(
             message.strip(), self._tpl._path, line)
@@ -1171,8 +1139,7 @@ class _Parser:
             self._tpl._path, self._current_at)
 
     def _find_next_begin_mark(self) -> int:
-        if self._finished:
-            raise ParseError("Parsing has already been finished.")
+        assert not self._finished, "Parsing has already been finished."
 
         start_pos = 0
 
@@ -1197,8 +1164,7 @@ class _Parser:
                 return pos
 
     def _find_next_end_mark(self) -> int:
-        if self._finished:
-            raise ParseError("Parsing has already been finished.")
+        assert not self._finished, "Parsing has already been finished."
 
         start_pos = 0
 
@@ -1240,8 +1206,7 @@ class _Parser:
             raise ParseError("Unknown Statement Keyword: {}.".format(keyword))
 
     def _find_next_statement(self) -> _Statement:
-        if self._finished:
-            raise ParseError("Parsing has already been finished.")
+        assert not self._finished, "Parsing has already been finished."
 
         statement_str = ""
         begin_mark_line_no = -1
@@ -1305,8 +1270,7 @@ class _Parser:
                     from_err=e)
 
     def _append_to_current(self, statement: _Statement):
-        if self._finished:
-            raise ParseError("Parsing has already been finished.")
+        assert not self._finished, "Parsing has already been finished."
 
         if not statement:
             return
@@ -1318,8 +1282,7 @@ class _Parser:
             self._root.append_statement(statement)
 
     def _unindent_current(self):
-        if self._finished:
-            raise ParseError("Parsing has already been finished.")
+        assert not self._finished, "Parsing has already been finished."
 
         if self._indents:
             self._indents.pop().unindent()
