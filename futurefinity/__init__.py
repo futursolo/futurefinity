@@ -25,6 +25,7 @@ from . import compat
 from . import server
 from . import ioutils
 from . import routing
+from . import streams
 from . import encoding
 from . import protocol
 from . import security
@@ -34,5 +35,5 @@ from . import templating
 
 __all__ = [
     "__version__", "version", "log", "web", "utils", "client", "compat",
-    "server", "ioutils", "routing", "encoding", "protocol", "security",
-    "httputils", "magicdict", "templating"]
+    "server", "ioutils", "routing", "streams", "encoding", "protocol",
+    "security", "httputils", "magicdict", "templating"]

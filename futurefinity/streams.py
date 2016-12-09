@@ -15,17 +15,22 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from .utils import Identifier
+from .utils import Identifier, cached_property
+from . import log
 from . import compat
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Any, Callable
 
 import abc
+import enum
 import asyncio
+import collections
 import collections.abc
 
 _DEFAULT_LIMIT = 2 ** 16
 _DEFUALT_MARK = Identifier()
+
+_log = log.get_child_logger("streams")
 
 
 class StreamEOFError(EOFError):
@@ -42,7 +47,7 @@ class StreamClosedError(StreamEOFError, OSError):
     pass
 
 
-class AbstractStreamReader(collections.abc.AsyncIterator):
+class AbstractStreamReader(abc.ABC, collections.abc.AsyncIterator):
     """
     The abstract base class of the stream reader(read only stream).
     """
@@ -155,7 +160,7 @@ class AbstractStreamReader(collections.abc.AsyncIterator):
         raise NotImplementedError
 
 
-class AbstractStreamWriter:
+class AbstractStreamWriter(abc.ABC):
     """
     The abstract base class of the stream writer(write only stream).
     """
@@ -292,7 +297,7 @@ class BaseStreamReader(AbstractStreamReader):
         raise NotImplementedError
 
     def __try_raise_exc(self):
-        if not self.__eof:
+        if not self.has_eof():
             return
 
         if self.__exc is not None:
@@ -477,7 +482,7 @@ class BaseStreamReader(AbstractStreamReader):
             return bytes(data)
 
     def at_eof(self) -> bool:
-        return (self.__buflen == 0) and self.__eof
+        return (self.__buflen == 0) and self.has_eof()
 
     def has_eof(self) -> bool:
         return self.__eof
@@ -497,7 +502,7 @@ class BaseStreamReader(AbstractStreamReader):
                 except StreamEOFError:
                     return
 
-                if self.__eof:
+                if self.has_eof():
                     return
 
                 if self.__limit is not None:
@@ -575,7 +580,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         raise NotImplementedError
 
     def write_eof(self):
-        if self.__eof_written:
+        if self.eof_written():
             return
 
         self._write_eof_impl()
@@ -599,7 +604,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         raise NotImplementedError
 
     def close(self):
-        if self.__closed:
+        if self.closed():
             return
 
         self._close_impl()
@@ -612,7 +617,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         This is the most compatible implementation.
 
         The subclasses should override it
-        if more efficient implementation available.
+        if more efficient implementation is available.
         """
         if self._closed:
             return
@@ -636,6 +641,9 @@ class BaseStreamWriter(AbstractStreamWriter):
         """
         Abort the writer without flush out all the pending buffer.
         """
+        if self.closed():
+            return
+
         self._abort_impl()
         self.__closed = True
 
@@ -657,3 +665,344 @@ class BaseStream(AbstractStream, BaseStreamReader, BaseStreamWriter):
             loop: Optional[asyncio.AbstractEventLoop]=None):
         super(BaseStreamReader, self).__init__(limit=limit, loop=loop)
         super(BaseStreamWriter, self).__init__()
+
+
+class Stream(BaseStream):
+    def __init__(
+        self, transport: asyncio.Transport, protocol: "_StreamHelperProtocol",
+        *, limit: int=_DEFAULT_LIMIT,
+            loop: Optional[asyncio.AbstractEventLoop]=None):
+        assert isinstance(limit, int) and limit > 0
+
+        self._limit = limit
+        self._loop = loop or asyncio.get_event_loop()
+        self._transport = transport
+        self._protocol = protocol
+
+        super(BaseStream, self).__init__(limit=self._limit, loop=self._loop)
+
+        self._wait_closed_lock = asyncio.Lock()
+
+        self._wait_closed_fur = None
+
+    @property
+    def transport(self) -> asyncio.Transport:
+        return self._transport
+
+    async def _fetch_data(self) -> bytes:
+        """
+        Fetch data, the data will be appended to the internal buffer.
+
+        If the EOF has been reached, it should issue an EOFError, so the
+        reader will collect the eof and stop reading from it.
+
+        This method must be overriden to support functionality of
+        `BaseStreamReader`.
+
+        For other exceptions, it will be treated as a normal exception, and
+        will also append an EOF to the stream.
+        """
+        raise NotImplementedError
+
+    def _write_impl(self, data: bytes):
+        if self.eof_written():
+            raise StreamEOFError("EOF written.")
+
+        if self.closed():
+            raise StreamClosedError
+
+        self.transport.write(data)
+
+    def can_write_eof(self) -> bool:
+        return self.transport.can_write_eof()
+
+    def _write_eof_impl(self):
+        self.transport.write_eof()
+
+    async def flush(self):
+        await self._protocol._flush_impl()
+
+    @cached_property
+    def _check_if_closed_impl(self) -> Callable[[], bool]:
+        if compat.PY351:
+            return self.transport.is_closing
+
+        # Python 3.5.0 Compatibility Layer.
+        if hasattr(self.transport, "is_closing"):
+            return self.transport.is_closing
+
+        if hasattr(self.transport, "_closing"):
+            def check_fn():
+                return self.transport._closing
+
+            return check_fn
+
+        if hasattr(self.transport, "_closed"):
+            def check_fn():
+                return self.transport._closed
+
+            return check_fn
+
+        else:
+            raise NotImplementedError(
+                "This method is not implemented for a transport that "
+                "has no _closing or _closed attribute. "
+                "Consider override this method to custom the check method.")
+
+    def _close_impl(self):
+        self.transport.close()
+
+        if (self._wait_closed_fur is not None and
+                not self._wait_closed_fur.done()):
+            self._wait_closed_fur.set_result(None)
+
+    async def wait_closed(self):
+        """
+        Wait the writer to close.
+
+        This is the most compatible implementation.
+
+        The subclasses should override it
+        if more efficient implementation available.
+        """
+        async with self._wait_closed_lock:
+            if self.closed():
+                return
+
+            while True:
+                assert self._wait_closed_fur is None or \
+                    self._wait_closed_fur.done()
+
+                self._wait_closed_fur = self._loop.create_future()
+
+                try:
+                    done, pending = await asyncio.wait(
+                        [
+                            self._protocol._wait_closed_impl(),
+                            self._wait_closed_fur
+                        ], loop=self._loop,
+                        return_when=asyncio.FIRST_COMPLETED)
+
+                    for fur in pending:
+                        fur.cancel()
+
+                finally:
+                    self._wait_closed_fur.cancel()
+
+                await asyncio.sleep(0)  # Touch the event loop.
+                if self.closed():
+                    return
+
+    def _abort_impl(self):
+        """
+        The default implementation of abort is the same as close a connection
+
+        The subclass should override if abort can be implemented
+        in a different way.
+        """
+        self.transport.abort()
+
+        if (self._wait_closed_fur is not None and
+                not self._wait_closed_fur.done()):
+            self._wait_closed_fur.set_result(None)
+
+    def get_extra_info(
+            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+        val = self.transport.get_extra_info(name, default)
+        if val is _DEFUALT_MARK:
+            raise KeyError(name)
+
+        return val
+
+
+class _StreamHelperProtocol(asyncio.Protocol):
+    def __init__(
+        self, fur: asyncio.Future, *, limit: int=_DEFAULT_LIMIT,
+            loop: Optional[asyncio.BaseEventLoop]=None):
+        self._loop = loop or asyncio.get_event_loop()
+        self._limit = limit
+
+        self._fur = fur
+
+        self._stream = None
+
+        self._allow_open_after_eof = True
+
+        self._fetch_data_impl_lock = asyncio.Lock()
+        self._flush_impl_lock = asyncio.Lock()
+        self._wait_closed_impl_lock = asyncio.Lock()
+
+        self._fetch_data_impl_fur = None
+        self._flush_impl_fur = None
+        self._wait_closed_impl_fur = None
+
+        self._pending_buffer = []
+
+        self._writing_paused = False
+        self._eof_received = False
+        self._closed = False
+
+        self._exc = None
+
+    def connection_made(self, transport: asyncio.Transport):
+        self._stream = Stream(
+            transport=transport, protocol=self, limit=self._limit,
+            loop=self._loop)
+
+        self._allow_open_after_eof = transport.get_extra_info(
+            "sslcontext") is not None
+
+        if not self._fur.done():
+            return self._fur.set_result(self._stream)
+
+        else:
+            self._stream.close()
+
+    def resume_writing(self):
+        self._writing_paused = False
+
+        if (self._flush_impl_fur is not None and
+                not self._flush_impl_fur.done()):
+            self._flush_impl_fur.set_result(None)
+
+    def pause_writing(self):
+        self._writing_paused = True
+
+    def data_received(self, data: bytes):
+        self._pending_buffer.append(data)
+
+        if (self._fetch_data_impl_fur is not None and
+                not self._fetch_data_impl_fur.done()):
+            self._fetch_data_impl_fur.set_result(None)
+
+    def eof_received(self) -> bool:
+        self._eof_received = True
+
+        if (self._fetch_data_impl_fur is not None and
+                not self._fetch_data_impl_fur.done()):
+            self._fetch_data_impl_fur.set_result(None)
+
+        return self._allow_open_after_eof
+
+    def connection_lost(self, exc: BaseException):
+        self._eof_received = True
+        self._closed = True
+
+        if (self._fetch_data_impl_fur is not None and
+                not self._fetch_data_impl_fur.done()):
+            self._fetch_data_impl_fur.set_result(None)
+
+        if (self._flush_impl_fur is not None and
+                not self._flush_impl_fur.done()):
+            self._flush_impl_fur.set_result(None)
+
+        if (self._wait_closed_impl_fur is not None and
+                not self._wait_closed_impl_fur.done()):
+            self._wait_closed_impl_fur.set_result(None)
+
+    async def _fetch_data_impl(self) -> bytes:
+        async with self._fetch_data_impl_lock:
+            while True:
+                if self._pending_buffer:
+                    data = b"".join(self._pending_buffer)
+                    self._pending_buffer.clear()
+
+                    return data
+
+                if self._eof_received or self._closed:
+                    if self._exc:
+                        raise self._exc
+
+                    raise StreamEOFError
+
+                assert self._fetch_data_impl_fur is None or \
+                    self._fetch_data_impl_fur.done()
+
+                self._fetch_data_impl_fur = self._loop.create_future()
+
+                try:
+                    await self._fetch_data_impl_fur
+
+                finally:
+                    self._fetch_data_impl_fur.cancel()
+
+    async def _flush_impl(self) -> bytes:
+        async with self._flush_impl_lock:
+            while True:
+                if not self._writing_paused:
+                    return
+
+                if self._closed:
+                    return
+
+                assert self._flush_impl_fur is None or \
+                    self._flush_impl_fur.done()
+
+                self._flush_impl_fur = self._loop.create_future()
+
+                try:
+                    await self._fetch_data_impl_fur
+
+                finally:
+                    self._fetch_data_impl_fur.cancel()
+
+    async def _wait_closed_impl(self) -> bytes:
+        async with self._wait_closed_impl_lock:
+            while True:
+                if self._closed:
+                    return
+
+                assert self._wait_closed_impl_fur is None or \
+                    self._wait_closed_impl_fur.done()
+
+                self._wait_closed_impl_fur = self._loop.create_future()
+
+                try:
+                    await self._wait_closed_impl_fur
+
+                finally:
+                    self._wait_closed_impl_fur.cancel()
+
+
+async def open_connection(
+    host: Optional[compat.Text]=None, port: Optional[int]=None, *,
+    loop: Optional[asyncio.AbstractEventLoop]=None,
+        limit: int=_DEFAULT_LIMIT, **kwargs) -> Stream:
+    assert isinstance(limit, int) and limit > 0
+
+    loop = loop or asyncio.get_event_loop()
+    fur = compat.create_future(loop=loop)
+
+    def factory():
+        return _StreamHelperProtocol(fur=fur, limit=limit, loop=loop)
+
+    await loop.create_connection(factory, host, port, **kwargs)
+
+    return await fur
+
+
+async def start_server(
+    callback: Callable[[Stream], Optional[compat.Awaitable[None]]],
+    host: Optional[compat.Text]=None, port: Optional[int]=None, *,
+    loop: Optional[asyncio.AbstractEventLoop]=None,
+        limit: int=_DEFAULT_LIMIT, **kwargs) -> asyncio.AbstractServer:
+    assert isinstance(limit, int) and limit > 0
+
+    loop = loop or asyncio.get_event_loop()
+
+    def after_connected(fur: asyncio.Future):
+        if fur.cancelled():
+            return
+
+        stream = fur.result()
+        result = callback(stream)
+
+        if iscoroutine(result):
+            compat.ensure_future(result, loop=loop)
+
+    def factory():
+        fur = compat.create_future(loop=loop)  # asyncio.Future
+        fur.add_done_callback(after_connected)
+        return _StreamHelperProtocol(fur=fur, limit=limit, loop=loop)
+
+    return await loop.create_server(factory, host, port, **kwds)
