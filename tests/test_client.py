@@ -15,18 +15,25 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.compat import ensure_future
-from futurefinity.encoding import ensure_str
-from futurefinity.tests.utils import TestCase, run_until_complete
-
-from futurefinity.client import HTTPClient
+import futurefinity
+import futurefinity.testutils
 
 import cgi
 import json
-import asyncio
 import http.server
 
+helper = futurefinity.testutils.TestHelper(__file__)
+
 received_body = None
+
+
+def get_v10_client():
+    return futurefinity.client.HTTPClient(
+        http_version=10, allow_keep_alive=False)
+
+
+def get_v11_client():
+    return futurefinity.client.HTTPClient()
 
 
 def make_server_handler(http_version="HTTP/1.0", method="GET",
@@ -83,7 +90,8 @@ def make_server_handler(http_version="HTTP/1.0", method="GET",
 
             else:
                 body = json.loads(
-                    ensure_str(self.rfile.read(int(content_length))))
+                    futurefinity.encoding.ensure_str(
+                        self.rfile.read(int(content_length))))
 
             global received_body
             received_body = body
@@ -101,25 +109,17 @@ def make_server_handler(http_version="HTTP/1.0", method="GET",
     return ServerHandler
 
 
-def get_v10_client():
-    return HTTPClient(http_version=10, allow_keep_alive=False)
-
-
-def get_v11_client():
-    return HTTPClient()
-
-
-class ClientGetTestCase(TestCase):
-    @run_until_complete
+class ClientGetTestCase:
+    @helper.run_until_complete
     async def test_v10_get_request(self):
         ServerHandler = make_server_handler()
 
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v10_client()
 
@@ -133,7 +133,7 @@ class ClientGetTestCase(TestCase):
         assert response.status_code == 200, "Wrong Status Code"
         assert response.body == b"Hello, World!"
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_v11_get_request(self):
         ServerHandler = make_server_handler(
             http_version="HTTP/1.1")
@@ -141,9 +141,9 @@ class ClientGetTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v11_client()
 
@@ -157,7 +157,7 @@ class ClientGetTestCase(TestCase):
         assert response.status_code == 200, "Wrong Status Code"
         assert response.body == b"Hello, World!"
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_v11_get_link_args(self):
         ServerHandler = make_server_handler(
             http_version="HTTP/1.1", path="/get_test/?a=b")
@@ -165,9 +165,9 @@ class ClientGetTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v11_client()
 
@@ -182,16 +182,16 @@ class ClientGetTestCase(TestCase):
         assert response.status_code == 200, "Wrong Status Code"
         assert response.body == b"Hello, World!"
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_v11_get_chunked_response(self):
         ServerHandler = make_server_handler("HTTP/1.1", response_by_chunk=True)
 
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v11_client()
 
@@ -206,8 +206,8 @@ class ClientGetTestCase(TestCase):
         assert response.body == b"Hello, World!"
 
 
-class ClientPostTestCase(TestCase):
-    @run_until_complete
+class ClientPostTestCase:
+    @helper.run_until_complete
     async def test_post_urlencoded_request(self):
         ServerHandler = make_server_handler(
             http_version="HTTP/1.1", method="POST", path="/post_test/")
@@ -215,9 +215,9 @@ class ClientPostTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v11_client()
 
@@ -239,7 +239,7 @@ class ClientPostTestCase(TestCase):
 
         received_body = None
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_post_multipart_request(self):
         ServerHandler = make_server_handler(
             http_version="HTTP/1.1", method="POST", path="/post_test/")
@@ -247,9 +247,9 @@ class ClientPostTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v11_client()
 
@@ -273,7 +273,7 @@ class ClientPostTestCase(TestCase):
 
         received_body = None
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_post_json_request(self):
         ServerHandler = make_server_handler(
             http_version="HTTP/1.1", method="POST", path="/post_test/")
@@ -281,9 +281,9 @@ class ClientPostTestCase(TestCase):
         server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
 
         try:
-            ensure_future(
-                self._loop.run_in_executor(None, server.serve_forever),
-                loop=self._loop)
+            futurefinity.compat.ensure_future(
+                helper.loop.run_in_executor(None, server.serve_forever),
+                loop=helper.loop)
 
             client = get_v11_client()
 

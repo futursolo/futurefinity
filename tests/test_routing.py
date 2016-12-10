@@ -15,21 +15,19 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import TestCase
-
-from futurefinity.routing import Dispatcher, NoMatchesFound
-from futurefinity.web import RequestHandler
+import futurefinity
 
 import re
 import pytest
 
 
-class RoutingTestCase(TestCase):
+class RoutingTestCase:
     def test_dispatcher_add(self):
-        dispatcher = Dispatcher()
+        dispatcher = futurefinity.routing.Dispatcher()
 
         dispatcher.add(
-            r"/", "a", "b", "c", Handler=RequestHandler, name="root", d="e")
+            r"/", "a", "b", "c", Handler=futurefinity.web.RequestHandler,
+            name="root", d="e")
 
         assert "root" in dispatcher._name_dict.keys()
 
@@ -38,61 +36,62 @@ class RoutingTestCase(TestCase):
         assert "root" in dispatcher._name_dict.keys()
         assert rule.path == re.compile(r"/")
 
-        assert rule.Handler is RequestHandler
+        assert rule.Handler is futurefinity.web.RequestHandler
         assert rule.path_args == ["a", "b", "c"]
         assert rule.path_kwargs == {"d": "e"}
 
     def test_dispatcher_find(self):
-        dispatcher = Dispatcher()
+        dispatcher = futurefinity.routing.Dispatcher()
 
         dispatcher.add(r"/(.*?)/(?P<d>.*?)/(?P<f>.*?)", "a", "b", "c",
-                    Handler=RequestHandler, d="e")
+                       Handler=futurefinity.web.RequestHandler, d="e")
 
         Handler, args, kwargs = dispatcher.find("/asdf/ghjk/qwerty")
 
-        assert Handler is RequestHandler
+        assert Handler is futurefinity.web.RequestHandler
         assert args == ["a", "b", "c", "asdf", "ghjk", "qwerty"]
         assert kwargs == {"d": "e", "f": "qwerty"}
 
     def test_dispatcher_find_default(self):
-        dispatcher = Dispatcher(DefaultHandler=RequestHandler)
+        dispatcher = futurefinity.routing.Dispatcher(
+            DefaultHandler=futurefinity.web.RequestHandler)
 
-        class SubHandler(RequestHandler):
+        class SubHandler(futurefinity.web.RequestHandler):
             pass
 
         dispatcher.add(path=r"/a", Handler=SubHandler)
 
         Handler, args, kwargs = dispatcher.find("/b")
 
-        assert Handler is RequestHandler
+        assert Handler is futurefinity.web.RequestHandler
         assert args == []
         assert kwargs == {}
 
     def test_dispatcher_find_no_default_raised(self):
-        dispatcher = Dispatcher()
+        dispatcher = futurefinity.routing.Dispatcher()
 
-        class SubHandler(RequestHandler):
+        class SubHandler(futurefinity.web.RequestHandler):
             pass
 
         dispatcher.add(path=r"/a", Handler=SubHandler)
 
-        with pytest.raises(NoMatchesFound):
+        with pytest.raises(futurefinity.routing.NoMatchesFound):
             dispatcher.find("/b")
 
     def test_dispatcher_reverse_positional(self):
-        dispatcher = Dispatcher()
+        dispatcher = futurefinity.routing.Dispatcher()
 
         dispatcher.add(r"/(.*?)/(?P<d>.*?)/(?P<f>.*?)",
-                    Handler=RequestHandler, name="test")
+                       Handler=futurefinity.web.RequestHandler, name="test")
 
         assert "/asdf/ghjk/qwerty" == dispatcher.reverse(
             name="test", path_args=["asdf", "ghjk", "qwerty"])
 
     def test_dispatcher_reverse_positional(self):
-        dispatcher = Dispatcher()
+        dispatcher = futurefinity.routing.Dispatcher()
 
         dispatcher.add(r"/(?P<a>.*?)/(?P<b>.*?)/(?P<c>.*?)",
-                    Handler=RequestHandler, name="test")
+                       Handler=futurefinity.web.RequestHandler, name="test")
 
         assert "/asdf/ghjk/qwerty" == dispatcher.reverse(
             name="test", path_kwargs={"a": "asdf", "b": "ghjk", "c": "qwerty"})

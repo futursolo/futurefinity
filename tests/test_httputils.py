@@ -15,8 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import TestCase
-from futurefinity.httputils import format_timestamp
+import futurefinity.httputils
 
 import time
 import pytest
@@ -25,12 +24,13 @@ import datetime
 import email.utils
 
 
-class FormatTimestampTestCase(TestCase):
+class FormatTimestampTestCase:
     def test_format_timestamp_with_real_number(self):
         timestamp = time.time()
         formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
 
-        assert formatted_timestamp == format_timestamp(timestamp)
+        assert formatted_timestamp == futurefinity.httputils.format_timestamp(
+            timestamp)
 
     def test_format_timestamp_with_none(self):
         timestamp = time.time()
@@ -39,7 +39,7 @@ class FormatTimestampTestCase(TestCase):
         formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
         formatted_timestamp_future = email.utils.formatdate(timestamp,
                                                             usegmt=True)
-        assert format_timestamp() in [
+        assert futurefinity.httputils.format_timestamp() in [
             formatted_timestamp, formatted_timestamp_future]
 
     def test_format_timestamp_with_struct_time(self):
@@ -48,7 +48,8 @@ class FormatTimestampTestCase(TestCase):
 
         formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
 
-        assert formatted_timestamp == format_timestamp(struct_time)
+        assert formatted_timestamp == futurefinity.httputils.format_timestamp(
+            struct_time)
 
     def test_format_timestamp_with_tuple(self):
         time_tuple = tuple(time.gmtime())
@@ -56,7 +57,8 @@ class FormatTimestampTestCase(TestCase):
 
         formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
 
-        assert formatted_timestamp == format_timestamp(time_tuple)
+        assert formatted_timestamp == futurefinity.httputils.format_timestamp(
+            time_tuple)
 
     def test_format_timestamp_with_datetime(self):
         datetime_time = datetime.datetime.utcnow()
@@ -64,8 +66,9 @@ class FormatTimestampTestCase(TestCase):
 
         formatted_timestamp = email.utils.formatdate(timestamp, usegmt=True)
 
-        assert formatted_timestamp == format_timestamp(datetime_time)
+        assert formatted_timestamp == futurefinity.httputils.format_timestamp(
+            datetime_time)
 
     def test_format_timestamp_with_other(self):
         with pytest.raises(TypeError):
-            format_timestamp(object())
+            futurefinity.httputils.format_timestamp(object())

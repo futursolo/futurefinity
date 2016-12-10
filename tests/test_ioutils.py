@@ -15,28 +15,26 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import (
-    TestCase, run_until_complete, get_tests_path)
-
-from futurefinity.security import get_random_str
-from futurefinity.ioutils import (
-    run_on_executor, get_default_executor, AsyncBytesIO, AsyncStringIO,
-    AsyncFileSystemOperations, aopen)
+import futurefinity
+import futurefinity.ioutils
 
 import io
 import os
 import time
 import asyncio
 
+helper = futurefinity.testutils.TestHelper(__file__)
 
-class ExecutorTestCase(TestCase):
-    @run_until_complete
+
+class ExecutorTestCase:
+    @helper.run_until_complete
     async def test_run_on_executor(self):
-        @run_on_executor
+        @futurefinity.ioutils.run_on_executor
         def sync_fn1():
             time.sleep(.1)
 
-        @run_on_executor(executor=get_default_executor())
+        @futurefinity.ioutils.run_on_executor(
+            executor=futurefinity.ioutils.get_default_executor())
         def sync_fn2():
             time.sleep(.1)
 
@@ -52,24 +50,24 @@ class ExecutorTestCase(TestCase):
 
         assert time.time() - start_time < .5
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_get_default_executor(self):
-        default_executor = get_default_executor()
+        default_executor = futurefinity.ioutils.get_default_executor()
 
-        assert default_executor is get_default_executor()
+        assert default_executor is futurefinity.ioutils.get_default_executor()
 
-        @run_on_executor
+        @futurefinity.ioutils.run_on_executor
         def child_thread():
-            return id(get_default_executor())
+            return id(futurefinity.ioutils.get_default_executor())
 
         assert id(default_executor) != (await child_thread())
 
 
-class AsyncIOBaseTestCase(TestCase):
-    @run_until_complete
+class AsyncIOBaseTestCase:
+    @helper.run_until_complete
     async def test_async_bytes_io(self):
         content = os.urandom(10)
-        bytes_io = await AsyncBytesIO(content)
+        bytes_io = await futurefinity.ioutils.AsyncBytesIO(content)
 
         async with bytes_io as asyncfp:
             new_content = os.urandom(5)
@@ -83,13 +81,13 @@ class AsyncIOBaseTestCase(TestCase):
 
         assert bytes_io.closed
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_async_string_io(self):
-        content = get_random_str(10)
-        string_io = await AsyncStringIO(content)
+        content = futurefinity.security.get_random_str(10)
+        string_io = await futurefinity.ioutils.AsyncStringIO(content)
 
         async with string_io as asyncfp:
-            new_content = get_random_str(5)
+            new_content = futurefinity.security.get_random_str(5)
             await asyncfp.seek(0, io.SEEK_END)
 
             await asyncfp.write(new_content)
@@ -101,18 +99,20 @@ class AsyncIOBaseTestCase(TestCase):
         assert string_io.closed
 
 
-class AsyncFileSystemOperationsTestCase(TestCase):
-    @run_until_complete
+class AsyncFileSystemOperationsTestCase:
+    @helper.run_until_complete
     async def test_aope_async_with(self):
-        async with aopen(get_tests_path("tpls/index.html")) as asyncfp:
-            with open(get_tests_path("tpls/index.html")) as f:
+        async with futurefinity.ioutils.aopen(
+                helper.get_tests_path("tpls/index.html")) as asyncfp:
+            with open(helper.get_tests_path("tpls/index.html")) as f:
                 assert f.read() == await asyncfp.read()
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_aope_await(self):
-        asyncfp = await aopen(get_tests_path("tpls/index.html"))
+        asyncfp = await futurefinity.ioutils.aopen(
+            helper.get_tests_path("tpls/index.html"))
         try:
-            with open(get_tests_path("tpls/index.html")) as f:
+            with open(helper.get_tests_path("tpls/index.html")) as f:
                 assert f.read() == await asyncfp.read()
 
         finally:

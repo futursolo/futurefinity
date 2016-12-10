@@ -15,11 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.encoding import ensure_bytes
-from futurefinity.tests.utils import TestCase
-
-from futurefinity.security import (
-    get_random_str, AESContext, HMACSecurityContext)
+import futurefinity
 
 import os
 import base64
@@ -31,28 +27,28 @@ _undecodable_bytes = \
 
 
 def get_security_secret():
-    return get_random_str(32)
+    return futurefinity.security.get_random_str(32)
 
 
 def get_aes_context():
-    return AESContext(get_security_secret())
+    return futurefinity.security.AESContext(get_security_secret())
 
 
 def get_hmac_context():
-    return HMACSecurityContext(get_security_secret())
+    return futurefinity.security.HMACSecurityContext(get_security_secret())
 
 
-class GetRandomStrFnTestCase(TestCase):
+class GetRandomStrFnTestCase:
     def test_get_random_str(self):
         random_str_length = random.SystemRandom().choice(range(1, 1000))
 
-        random_str = get_random_str(random_str_length)
+        random_str = futurefinity.security.get_random_str(random_str_length)
 
         assert isinstance(random_str, str)
         assert len(random_str) == random_str_length
 
 
-class AESContextTestCase(TestCase):
+class AESContextTestCase:
     def test_aes_not_allowed_type(self):
         context = get_aes_context()
 
@@ -63,7 +59,7 @@ class AESContextTestCase(TestCase):
     def test_aes_encrypt_and_decrypt(self):
         context = get_aes_context()
 
-        origin_text = get_random_str(100)
+        origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
 
         assert origin_text == context.lookup_origin_text(secure_text)
@@ -82,27 +78,28 @@ class AESContextTestCase(TestCase):
     def test_aes_verify_data(self):
         context = get_aes_context()
 
-        origin_text = get_random_str(100)
+        origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
         failed_secure_text = bytearray(base64.b64decode(secure_text))
 
         del failed_secure_text[-10:]
 
         failed_secure_text += os.urandom(10)
-        failed_secure_text = base64.b64encode(ensure_bytes(failed_secure_text))
+        failed_secure_text = base64.b64encode(
+            futurefinity.encoding.ensure_bytes(failed_secure_text))
 
         assert context.lookup_origin_text(failed_secure_text) is None
 
     def test_aes_gcm_data_expire(self):
         context = get_aes_context()
 
-        origin_text = get_random_str(100)
+        origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
 
         assert context.lookup_origin_text(secure_text, -1) is None
 
 
-class HMACSecurityContextTestCase(TestCase):
+class HMACSecurityContextTestCase:
     def test_hmac_not_allowed_type(self):
         context = get_hmac_context()
 
@@ -113,7 +110,7 @@ class HMACSecurityContextTestCase(TestCase):
     def test_hmac_sign_and_verify(self):
         context = get_hmac_context()
 
-        origin_text = get_random_str(100)
+        origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
 
         assert origin_text == context.lookup_origin_text(secure_text)
@@ -132,21 +129,22 @@ class HMACSecurityContextTestCase(TestCase):
     def test_hmac_signature_mismatch(self):
         context = get_hmac_context()
 
-        origin_text = get_random_str(100)
+        origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
         failed_secure_text = bytearray(base64.b64decode(secure_text))
 
         del failed_secure_text[-10:]
 
         failed_secure_text += os.urandom(10)
-        failed_secure_text = base64.b64encode(ensure_bytes(failed_secure_text))
+        failed_secure_text = base64.b64encode(
+            futurefinity.encoding.ensure_bytes(failed_secure_text))
 
         assert context.lookup_origin_text(failed_secure_text) is None
 
     def test_hmac_data_expire(self):
         context = get_hmac_context()
 
-        origin_text = get_random_str(100)
+        origin_text = futurefinity.security.get_random_str(100)
         secure_text = context.generate_secure_text(origin_text)
 
         assert context.lookup_origin_text(secure_text, -1) is None

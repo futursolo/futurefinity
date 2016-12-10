@@ -15,20 +15,16 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import (
-    TestCase, run_until_complete, get_tests_path)
-
-from futurefinity.compat import PY352
-
-from futurefinity.templating import (
-    BaseLoader, AsyncFileSystemLoader, TemplateContext, TemplateNotFoundError,
-    Template)
+import futurefinity
+import futurefinity.testutils
 
 import sys
 import time
 import pytest
 import random
 import asyncio
+
+helper = futurefinity.testutils.TestHelper(__file__)
 
 
 class _AsyncTimeIterator:
@@ -40,7 +36,7 @@ class _AsyncTimeIterator:
         self._iterated_time = []
 
     def __aiter__(self):
-        if not PY352:
+        if not futurefinity.compat.PY352:
             fur = asyncio.Future()
             fur.set_result(self)
             return fur
@@ -62,42 +58,45 @@ class _AsyncTimeIterator:
             raise StopAsyncIteration
 
 
-class BaseLoaderTestCase(TestCase):
-    @run_until_complete
+class BaseLoaderTestCase:
+    @helper.run_until_complete
     async def test_load_template(self):
-        loader = BaseLoader()
+        loader = futurefinity.templating.BaseLoader()
 
         with pytest.raises(NotImplementedError):
             await loader.load_tpl("phantasm.html")
 
 
-class AsyncFileSystemLoaderTestCase(TestCase):
+class AsyncFileSystemLoaderTestCase:
     def test_init(self):
-        loader = AsyncFileSystemLoader(get_tests_path("tpls"))
-        assert loader._root_path == get_tests_path("tpls") + "/"
+        loader = futurefinity.templating.AsyncFileSystemLoader(
+            helper.get_tests_path("tpls"))
+        assert loader._root_path == helper.get_tests_path("tpls") + "/"
 
         with pytest.raises(AssertionError):
-            AsyncFileSystemLoader(-1)
+            futurefinity.templating.AsyncFileSystemLoader(-1)
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_load_tpl(self):
-        loader = AsyncFileSystemLoader(get_tests_path("tpls"))
+        loader = futurefinity.templating.AsyncFileSystemLoader(
+            helper.get_tests_path("tpls"))
 
-        with pytest.raises(TemplateNotFoundError):
+        with pytest.raises(futurefinity.templating.TemplateNotFoundError):
             await loader.load_tpl("phantasm.html")
         loaded_tpl = await loader.load_tpl("index.html")
 
-        with open(get_tests_path("tpls/index.html")) as f:
+        with open(helper.get_tests_path("tpls/index.html")) as f:
             tpl_content = f.read()
         assert loaded_tpl._tpl_content == tpl_content  # Test Correctness.
 
         sec_loaded_tpl = await loader.load_tpl("index.html")
         assert loaded_tpl is sec_loaded_tpl  # Test Template Cache.
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_load_tpl_no_cache(self):
-        context = TemplateContext(cache_tpls=False)
-        loader = AsyncFileSystemLoader(get_tests_path("tpls"), context=context)
+        context = futurefinity.templating.TemplateContext(cache_tpls=False)
+        loader = futurefinity.templating.AsyncFileSystemLoader(
+            helper.get_tests_path("tpls"), context=context)
 
         loaded_tpl = await loader.load_tpl("index.html")
         sec_loaded_tpl = await loader.load_tpl("index.html")
@@ -109,11 +108,12 @@ class AsyncFileSystemLoaderTestCase(TestCase):
         assert loaded_tpl is not sec_loaded_tpl
 
 
-class TemplateTestCase(TestCase):
-    context = TemplateContext(cache_tpls=False)
-    loader = AsyncFileSystemLoader(get_tests_path("tpls"), context=context)
+class TemplateTestCase:
+    context = futurefinity.templating.TemplateContext(cache_tpls=False)
+    loader = futurefinity.templating.AsyncFileSystemLoader(
+        helper.get_tests_path("tpls"), context=context)
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_inherit(self):
         tpl = await self.loader.load_tpl("index.html")
 
@@ -133,7 +133,7 @@ This is body. The old title is Old Title.
 </html>
 """ == result
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_include(self):
         tpl = await self.loader.load_tpl("main.html")
 
@@ -154,16 +154,16 @@ This is body. The old title is Old Title.
 </html>
 """ == result
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_output(self):
-        tpl = Template(
+        tpl = futurefinity.templating.Template(
             "Hello, <%= name %>!")
         assert await tpl.render_str(
             name="FutureFinity") == "Hello, FutureFinity!"
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_if_elif_else(self):
-        tpl = Template(
+        tpl = futurefinity.templating.Template(
             "<% if cond %>cond_str<% elif sub_cond %>sub_cond_str"
             "<% else %>else_str<% end %>")
 
@@ -176,9 +176,9 @@ This is body. The old title is Old Title.
         third_result = await tpl.render_str(cond=False, sub_cond=False)
         assert third_result == "else_str"
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_statement_escape(self):
-        tpl = Template(
+        tpl = futurefinity.templating.Template(
             "<%% is the begin mark, and <%r= \"%%> is the end mark. \" %>"
             "<%r= \"<% and\" %> %> only need to be escaped whenever they "
             "have ambiguity of the templating system.")
@@ -189,32 +189,40 @@ This is body. The old title is Old Title.
             "<% and %> only need to be escaped whenever they "
             "have ambiguity of the templating system.")
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_async_for(self):
         time_iterator = _AsyncTimeIterator()
-        tpl = Template(
+        tpl = futurefinity.templating.Template(
             "<% async for i in time_iterator %><%r= str(i) %>, <% end %>")
 
         result = await tpl.render_str(time_iterator=time_iterator)
         assert result == str(time_iterator._iterated_time)[1:-1] + ", "
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_html_escape(self):
-        tpl = Template("Hello, <%h= name %>!")
+        tpl = futurefinity.templating.Template("Hello, <%h= name %>!")
         assert await tpl.render_str(
             name="<tag></tag>") == "Hello, &lt;tag&gt;&lt;/tag&gt;!"
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_json_escape(self):
-        tpl = Template("{\"name\": <%j= name %>}")
+        tpl = futurefinity.templating.Template("{\"name\": <%j= name %>}")
         assert await tpl.render_str(
             name="{\"name\": \"admin\"}"
             ) == '{\"name\": \"{\\"name\\": \\"admin\\"}\"}'
 
-    @run_until_complete
+    @helper.run_until_complete
     async def test_url_escape(self):
-        tpl = Template("https://www.example.com/?user=<%u= name %>")
+        tpl = futurefinity.templating.Template(
+            "https://www.example.com/?user=<%u= name %>")
         assert await tpl.render_str(
             name="a&redirect=https://www.example2.com/"
             ) == ("https://www.example.com/?user=a%26redirect%3Dhttps%3A%2F%2F"
                   "www.example2.com%2F")
+
+    @helper.run_until_complete
+    async def test_raise_error(self):
+        tpl = futurefinity.templating.Template(
+            "<% raise RuntimeError %>")
+        with pytest.raises(RuntimeError):
+            await tpl.render_str()

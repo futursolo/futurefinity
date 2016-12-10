@@ -24,7 +24,7 @@ if not sys.version_info[:3] >= (3, 5, 0):
 
 else:
     import futurefinity
-    import futurefinity.tests
+    import futurefinity.testutils
 
 install_requires = []
 
@@ -54,7 +54,7 @@ if __name__ == "__main__":
             "test": tests_require
         },
         cmdclass={
-            "test": futurefinity.tests.TestCommand
+            "test": futurefinity.testutils.TestCommand
         },
         classifiers=[
             "License :: OSI Approved :: Apache Software License",

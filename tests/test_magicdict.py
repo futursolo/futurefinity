@@ -15,36 +15,36 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from futurefinity.tests.utils import TestCase
-
-from futurefinity.security import get_random_str
-from futurefinity.magicdict import (
-    MagicDict, TolerantMagicDict, MagicDictFrozenError)
+import futurefinity
 
 import pytest
 import random
 
 
-class MagicItemsViewTestCase(TestCase):
+class MagicItemsViewTestCase:
     def test_len_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         dict_len = random.choice(range(10, 90))
         for i in range(0, dict_len):
-            magic_dict.add(get_random_str(5), get_random_str(5))
+            magic_dict.add(
+                futurefinity.security.get_random_str(5),
+                futurefinity.security.get_random_str(5))
 
         assert len(magic_dict.items()) == dict_len
 
     def test_iter_method_magic_items_view(self):
         items_list = []
         for i in range(0, random.choice(range(10, 90))):
-            items_list.append((get_random_str(5), get_random_str(5)))
+            items_list.append(
+                (futurefinity.security.get_random_str(5),
+                 futurefinity.security.get_random_str(5)))
 
-        magic_dict = MagicDict(items_list)
+        magic_dict = futurefinity.magicdict.MagicDict(items_list)
 
         assert list(magic_dict.items()) == items_list
 
     def test_contains_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
@@ -53,12 +53,12 @@ class MagicItemsViewTestCase(TestCase):
         assert ("a", "c") in magic_dict.items()
 
     def test_le_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -66,11 +66,11 @@ class MagicItemsViewTestCase(TestCase):
         assert magic_dict.items() <= magic_dict2.items()
 
     def test_lt_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -78,12 +78,12 @@ class MagicItemsViewTestCase(TestCase):
         assert magic_dict.items() < magic_dict2.items()
 
     def test_eq_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -91,12 +91,12 @@ class MagicItemsViewTestCase(TestCase):
         assert magic_dict.items() == magic_dict2.items()
 
     def test_ne_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "d")
@@ -104,24 +104,24 @@ class MagicItemsViewTestCase(TestCase):
         assert magic_dict.items() != magic_dict2.items()
 
     def test_gt_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
         assert magic_dict.items() > magic_dict2.items()
 
     def test_ge_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -129,24 +129,24 @@ class MagicItemsViewTestCase(TestCase):
         assert magic_dict.items() >= magic_dict2.items()
 
     def test_and_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
         assert (magic_dict.items() & magic_dict2.items()) == set([("a", "b")])
 
     def test_or_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
@@ -154,36 +154,36 @@ class MagicItemsViewTestCase(TestCase):
             [("a", "b"), ("a", "c")])
 
     def test_sub_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
         assert (magic_dict.items() - magic_dict2.items()) == set([("a", "c")])
 
     def test_xor_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
         assert (magic_dict.items() ^ magic_dict2.items()) == set([("a", "c")])
 
     def test_reversed_method_magic_items_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "c")
         magic_dict2.add("a", "b")
@@ -191,26 +191,30 @@ class MagicItemsViewTestCase(TestCase):
         assert reversed(magic_dict.items()) == magic_dict2.items()
 
 
-class MagicKeysViewTestCase(TestCase):
+class MagicKeysViewTestCase:
     def test_len_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         dict_len = random.choice(range(10, 90))
         for i in range(0, dict_len):
-            magic_dict.add(get_random_str(5), get_random_str(5))
+            magic_dict.add(
+                futurefinity.security.get_random_str(5),
+                futurefinity.security.get_random_str(5))
 
         assert len(magic_dict.keys()) == dict_len
 
     def test_iter_method_magic_keys_view(self):
         items_list = []
         for i in range(0, random.choice(range(10, 90))):
-            items_list.append((get_random_str(5), get_random_str(5)))
+            items_list.append(
+                (futurefinity.security.get_random_str(5),
+                 futurefinity.security.get_random_str(5)))
 
-        magic_dict = MagicDict(items_list)
+        magic_dict = futurefinity.magicdict.MagicDict(items_list)
 
         assert list(magic_dict.keys()) == [i for i, _ in items_list]
 
     def test_contains_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
@@ -218,12 +222,12 @@ class MagicKeysViewTestCase(TestCase):
         assert "a" in magic_dict.keys()
 
     def test_le_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -231,11 +235,11 @@ class MagicKeysViewTestCase(TestCase):
         assert magic_dict.keys() <= magic_dict2.keys()
 
     def test_lt_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("c", "d")
@@ -243,12 +247,12 @@ class MagicKeysViewTestCase(TestCase):
         assert magic_dict.keys() < magic_dict2.keys()
 
     def test_eq_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -256,12 +260,12 @@ class MagicKeysViewTestCase(TestCase):
         assert magic_dict.keys() == magic_dict2.keys()
 
     def test_ne_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("c", "d")
@@ -269,24 +273,24 @@ class MagicKeysViewTestCase(TestCase):
         assert magic_dict.keys() != magic_dict2.keys()
 
     def test_gt_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("c", "d")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
         assert magic_dict.keys() > magic_dict2.keys()
 
     def test_ge_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -294,12 +298,12 @@ class MagicKeysViewTestCase(TestCase):
         assert magic_dict.keys() >= magic_dict2.keys()
 
     def test_and_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("c", "d")
@@ -307,12 +311,12 @@ class MagicKeysViewTestCase(TestCase):
         assert (magic_dict.keys() & magic_dict2.keys()) == set(["a"])
 
     def test_or_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "c")
         magic_dict.add("b", "d")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("c", "d")
@@ -321,36 +325,36 @@ class MagicKeysViewTestCase(TestCase):
             ["a", "b", "c"])
 
     def test_sub_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("c", "d")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("c", "d")
 
         assert (magic_dict.keys() - magic_dict2.keys()) == set(["a"])
 
     def test_xor_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("c", "d")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
 
         assert (magic_dict.keys() ^ magic_dict2.keys()) == set(["c"])
 
     def test_reversed_method_magic_keys_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("c", "d")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("c", "d")
         magic_dict2.add("a", "b")
@@ -358,26 +362,30 @@ class MagicKeysViewTestCase(TestCase):
         assert reversed(magic_dict.keys()) == magic_dict2.keys()
 
 
-class MagicValuesViewTestCase(TestCase):
+class MagicValuesViewTestCase:
     def test_len_method_magic_values_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         dict_len = random.choice(range(10, 90))
         for i in range(0, dict_len):
-            magic_dict.add(get_random_str(5), get_random_str(5))
+            magic_dict.add(
+                futurefinity.security.get_random_str(5),
+                futurefinity.security.get_random_str(5))
 
         assert len(magic_dict.values()) == dict_len
 
     def test_iter_method_magic_values_view(self):
         items_list = []
         for i in range(0, random.choice(range(10, 90))):
-            items_list.append((get_random_str(5), get_random_str(5)))
+            items_list.append(
+                (futurefinity.security.get_random_str(5),
+                 futurefinity.security.get_random_str(5)))
 
-        magic_dict = MagicDict(items_list)
+        magic_dict = futurefinity.magicdict.MagicDict(items_list)
 
         assert list(magic_dict.values()) == [i for _, i in items_list]
 
     def test_contains_method_magic_values_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
@@ -386,12 +394,12 @@ class MagicValuesViewTestCase(TestCase):
         assert "c" in magic_dict.values()
 
     def test_eq_method_magic_values_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("a", "c")
@@ -399,12 +407,12 @@ class MagicValuesViewTestCase(TestCase):
         assert magic_dict.values() == magic_dict2.values()
 
     def test_ne_method_magic_values_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("a", "b")
         magic_dict2.add("c", "d")
@@ -412,12 +420,12 @@ class MagicValuesViewTestCase(TestCase):
         assert magic_dict.values() != magic_dict2.values()
 
     def test_reversed_method_magic_values_view(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict.add("a", "b")
         magic_dict.add("c", "d")
 
-        magic_dict2 = MagicDict()
+        magic_dict2 = futurefinity.magicdict.MagicDict()
 
         magic_dict2.add("c", "d")
         magic_dict2.add("a", "b")
@@ -425,15 +433,15 @@ class MagicValuesViewTestCase(TestCase):
         assert reversed(magic_dict.values()) == magic_dict2.values()
 
 
-class MagicDictTestCase(TestCase):
+class MagicDictTestCase:
     def test_init_method_magic_dict(self):
         test_data = {"a": "b", "c": b"d", "e": random.choice(range(0, 100))}
 
-        assert MagicDict(test_data) == test_data
-        assert MagicDict(**test_data) == test_data
+        assert futurefinity.magicdict.MagicDict(test_data) == test_data
+        assert futurefinity.magicdict.MagicDict(**test_data) == test_data
 
     def test_getitem_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
         magic_dict.add("a", "d")
@@ -441,13 +449,13 @@ class MagicDictTestCase(TestCase):
         assert magic_dict["a"] == "b"
 
     def test_setitem_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict["a"] = "b"
 
         assert magic_dict.get_list("a") == ["b"]
 
     def test_delitem_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
         magic_dict.add("a", "d")
@@ -456,7 +464,7 @@ class MagicDictTestCase(TestCase):
         assert "a" not in magic_dict
 
     def test_iter_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict.add("a", "c")
         magic_dict.add("a", "d")
         magic_dict.add("b", "e")
@@ -468,7 +476,7 @@ class MagicDictTestCase(TestCase):
         assert result_set == set(["a", "b"])
 
     def test_len_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict.add("a", "c")
         magic_dict.add("a", "d")
         magic_dict.add("b", "e")
@@ -476,14 +484,14 @@ class MagicDictTestCase(TestCase):
         assert len(magic_dict) == 3
 
     def test_contains_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict["a"] = "b"
 
         assert ("a" in magic_dict) is True
         assert ("c" in magic_dict) is False
 
     def test_eq_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict["a"] = "b"
 
         assert magic_dict == {"a": "b"}
@@ -491,30 +499,31 @@ class MagicDictTestCase(TestCase):
 
     def test_ne_method_magic_dict(self):
 
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict["a"] = "b"
 
         assert magic_dict != {"c": "d"}
         assert (magic_dict != {"a": "b"}) is False
 
     def test_str_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict.add("a", "b")
 
         assert str(magic_dict) == "MagicDict([('a', 'b')])"
 
     def test_reversed_method_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict["a"] = "b"
         magic_dict["c"] = "d"
         magic_dict["e"] = "f"
 
-        assert magic_dict == MagicDict([("a", "b"), ("c", "d"), ("e", "f")])
-        assert reversed(magic_dict) == MagicDict(
+        assert magic_dict == futurefinity.magicdict.MagicDict(
+            [("a", "b"), ("c", "d"), ("e", "f")])
+        assert reversed(magic_dict) == futurefinity.magicdict.MagicDict(
             [("e", "f"), ("c", "d"), ("a", "b")])
 
     def test_add_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         assert "a" not in magic_dict
 
@@ -524,7 +533,7 @@ class MagicDictTestCase(TestCase):
         assert magic_dict["a"] == "b"
 
     def test_pop_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         magic_dict["a"] = "b"
 
@@ -532,7 +541,7 @@ class MagicDictTestCase(TestCase):
         assert len(magic_dict) == 0
 
     def test_popitem_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         magic_dict["a"] = "b"
 
@@ -540,7 +549,7 @@ class MagicDictTestCase(TestCase):
         assert len(magic_dict) == 0
 
     def test_clear_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         magic_dict["a"] = "b"
         magic_dict.clear()
@@ -548,7 +557,7 @@ class MagicDictTestCase(TestCase):
         assert len(magic_dict) == 0
 
     def test_setdefault_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict["a"] = "b"
         magic_dict.setdefault("a", "c")
@@ -559,14 +568,14 @@ class MagicDictTestCase(TestCase):
 
     def test_fromkeys_magic_dict(self):
         keys = ["a", "b", "c"]
-        magic_dict = MagicDict.fromkeys(keys, value="d")
+        magic_dict = futurefinity.magicdict.MagicDict.fromkeys(keys, value="d")
 
         assert magic_dict["a"] == "d"
         assert magic_dict["b"] == "d"
         assert magic_dict["c"] == "d"
 
     def test_get_first_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         test_list = ["b", "c", "d"]
         for item in test_list:
@@ -575,7 +584,7 @@ class MagicDictTestCase(TestCase):
         assert magic_dict.get_first("a") == test_list[0]
 
     def test_get_last_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         test_list = ["b", "c", "d"]
         for item in test_list:
@@ -584,7 +593,7 @@ class MagicDictTestCase(TestCase):
         assert magic_dict.get_last("a") == test_list[-1]
 
     def test_get_list_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         test_list = ["b", "c", "d"]
         for item in test_list:
@@ -593,7 +602,7 @@ class MagicDictTestCase(TestCase):
         assert magic_dict.get_list("a") == test_list
 
     def test_items_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         test_set = set(["d", "e", "f"])
         for item in test_set:
@@ -610,7 +619,7 @@ class MagicDictTestCase(TestCase):
         assert result_dict["c"] == test_set
 
     def test_keys_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         test_set = set(["d", "e", "f"])
         for item in test_set:
@@ -625,7 +634,7 @@ class MagicDictTestCase(TestCase):
         assert result_set == set(["a", "b", "c"])
 
     def test_values_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         test_set = set(["d", "e", "f"])
         for item in test_set:
@@ -642,19 +651,19 @@ class MagicDictTestCase(TestCase):
         assert result_dict["f"] == 3
 
     def test_freeze_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict["a"] = "b"
 
         magic_dict.freeze()
 
-        with pytest.raises(MagicDictFrozenError):
+        with pytest.raises(futurefinity.magicdict.MagicDictFrozenError):
             magic_dict["c"] = "d"
 
         assert magic_dict["a"] == "b"
 
     def test_frozen_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
 
         magic_dict["a"] = "b"
 
@@ -665,7 +674,7 @@ class MagicDictTestCase(TestCase):
         assert magic_dict["a"] == "b"
 
     def test_copy_magic_dict(self):
-        magic_dict = MagicDict()
+        magic_dict = futurefinity.magicdict.MagicDict()
         magic_dict.add("a", "b")
 
         copied_magic_dict = magic_dict.copy()
@@ -673,9 +682,9 @@ class MagicDictTestCase(TestCase):
         assert magic_dict == copied_magic_dict
 
 
-class TolerantMagicDictTestCase(TestCase):
+class TolerantMagicDictTestCase:
     def test_getitem_method_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict.add("a", "b")
         magic_dict.add("a", "c")
         magic_dict.add("a", "d")
@@ -683,13 +692,13 @@ class TolerantMagicDictTestCase(TestCase):
         assert magic_dict["A"] == "b"
 
     def test_setitem_method_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict["A"] = "b"
 
         assert magic_dict.get_list("a") == ["b"]
 
     def test_delitem_method_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict.add("a", "b")
         magic_dict.add("A", "c")
         magic_dict.add("a", "d")
@@ -699,31 +708,32 @@ class TolerantMagicDictTestCase(TestCase):
         assert "A" not in magic_dict
 
     def test_contains_method_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict["a"] = "b"
 
         assert ("A" in magic_dict) is True
         assert ("c" in magic_dict) is False
 
     def test_str_method_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict.add("A", "b")
 
         assert str(magic_dict) == "TolerantMagicDict([('a', 'b')])"
 
     def test_reversed_method_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict["A"] = "b"
         magic_dict["c"] = "d"
         magic_dict["E"] = "f"
 
-        assert magic_dict == TolerantMagicDict(
+        assert magic_dict == futurefinity.magicdict.TolerantMagicDict(
             [("a", "b"), ("c", "d"), ("e", "f")])
-        assert reversed(magic_dict) == TolerantMagicDict(
-            [("e", "f"), ("c", "d"), ("a", "b")])
+        assert reversed(
+            magic_dict) == futurefinity.magicdict.TolerantMagicDict(
+                [("e", "f"), ("c", "d"), ("a", "b")])
 
     def test_add_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         assert "a" not in magic_dict
 
@@ -735,7 +745,7 @@ class TolerantMagicDictTestCase(TestCase):
         assert magic_dict["a"] == "b"
 
     def test_pop_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         magic_dict["A"] = "b"
 
@@ -743,7 +753,7 @@ class TolerantMagicDictTestCase(TestCase):
         assert len(magic_dict) == 0
 
     def test_setdefault_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         magic_dict["a"] = "b"
         magic_dict.setdefault("A", "c")
@@ -754,14 +764,15 @@ class TolerantMagicDictTestCase(TestCase):
 
     def test_fromkeys_tolerant_magic_dict(self):
         keys = ["A", "b", "C"]
-        magic_dict = TolerantMagicDict.fromkeys(keys, value="d")
+        magic_dict = futurefinity.magicdict.TolerantMagicDict.fromkeys(
+            keys, value="d")
 
         assert magic_dict["a"] == "d"
         assert magic_dict["b"] == "d"
         assert magic_dict["c"] == "d"
 
     def test_get_first_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         test_list = ["b", "c", "d"]
         for item in test_list:
@@ -770,7 +781,7 @@ class TolerantMagicDictTestCase(TestCase):
         assert magic_dict.get_first(random.choice(["a", "A"])) == test_list[0]
 
     def test_get_last_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         test_list = ["b", "c", "d"]
         for item in test_list:
@@ -779,7 +790,7 @@ class TolerantMagicDictTestCase(TestCase):
         assert magic_dict.get_last(random.choice(["a", "A"])) == test_list[-1]
 
     def test_get_iter_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
 
         test_list = ["b", "c", "d"]
         for item in test_list:
@@ -788,7 +799,7 @@ class TolerantMagicDictTestCase(TestCase):
         assert magic_dict.get_list(random.choice(["a", "A"])) == test_list
 
     def test_copy_tolerant_magic_dict(self):
-        magic_dict = TolerantMagicDict()
+        magic_dict = futurefinity.magicdict.TolerantMagicDict()
         magic_dict.add("a", "b")
         magic_dict.add("C", "D")
 
