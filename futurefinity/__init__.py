@@ -19,21 +19,18 @@ from ._version import __version__, version
 
 from . import log
 from . import web
-from . import utils
 from . import client
 from . import compat
 from . import server
-from . import ioutils
 from . import routing
 from . import streams
 from . import encoding
 from . import protocol
 from . import security
-from . import httputils
 from . import magicdict
 from . import templating
 
 __all__ = [
-    "__version__", "version", "log", "web", "utils", "client", "compat",
-    "server", "ioutils", "routing", "streams", "encoding", "protocol",
-    "security", "httputils", "magicdict", "templating"]
+    "__version__", "version", "log", "web", "client", "compat", "server",
+    "routing", "streams", "encoding", "protocol", "security", "magicdict",
+    "templating"]
