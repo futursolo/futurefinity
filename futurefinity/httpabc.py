@@ -23,6 +23,13 @@ from . import streams
 import abc
 
 
+class InvalidHTTPOperationError(Exception):
+    """
+    This Error is raised when an invalid operation is fired.
+    """
+    pass
+
+
 class AbstractHTTPInitial(abc.ABC):
     @property
     @abc.abstractmethod
@@ -104,6 +111,19 @@ class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
 
     @property
     @abc.abstractmethod
+    def stream_id(self) -> int:
+        """
+        The id of the stream.
+        """
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def context(self) -> AbstractHTTPContext:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
     def request(self) -> AbstractHTTPRequest:
         """
         The Request of the stream.
@@ -139,7 +159,9 @@ class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def send_response(self, response: AbstractHTTPInitial):
+    async def send_response(
+        self, *, status_code: int,
+            headers: Optional[Mapping[Text, Text]]=None):
         """
         Send a response.
 
@@ -149,6 +171,9 @@ class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
 
     @abc.abstractmethod
     def response_written(self) -> bool:
+        """
+        Return `True` if the response has been written.
+        """
         raise NotImplementedError
 
 
@@ -189,6 +214,11 @@ class AbstractHTTPConnection(abc.ABC):
     def http_version(self) -> int:
         raise NotImplementedError
 
+    @property
+    @abc.abstractmethod
+    def context(self) -> AbstractHTTPContext:
+        raise NotImplementedError
+
     @abc.abstractmethod
     def bind_handler(self, handler_factory: Callable[
             [], AbstractHTTPStreamHandler]):
@@ -201,7 +231,10 @@ class AbstractHTTPConnection(abc.ABC):
 
     @abc.abstractmethod
     async def send_request(
-            self, request: AbstractHTTPRequest) -> AbstractHTTPStreamHandler:
+        self, *, method: compat.Text,
+        uri: compat.Text, authority: Optional[compat.Text]=None,
+        headers: Optional[Mapping[compat.Text, compat.Text]]=None
+            ) -> AbstractHTTPStreamHandler:
         """
         Send a request.
 
@@ -214,7 +247,8 @@ class AbstractHTTPConnection(abc.ABC):
         """
         Handle the connection to stream handler(s) until the connection close.
 
-        A handler must be binded before this method is called.
+        The cancellation of this coroutine will resulting the closure of the
+        connection.
         """
         raise NotImplementedError
 
