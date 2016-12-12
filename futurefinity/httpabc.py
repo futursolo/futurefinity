@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Mapping, Optional
+from typing import Mapping, Optional, Callable
 
 from . import compat
 from . import streams
@@ -27,6 +27,11 @@ class AbstractHTTPInitial(abc.ABC):
     @property
     @abc.abstractmethod
     def headers(self) -> Mapping[compat.Text, compat.Text]:
+        """
+        The headers of the initial.
+
+        This should return an instance of `magicdict.TolerantMagicDict`.
+        """
         raise NotImplementedError
 
 
@@ -34,21 +39,33 @@ class AbstractHTTPRequest(AbstractHTTPInitial):
     @property
     @abc.abstractmethod
     def method(self) -> compat.Text:
+        """
+        The method of the request.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def link(self) -> compat.Text:
+    def uri(self) -> compat.Text:
+        """
+        The uri of the request.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def authority(self) -> compat.Text:
+        """
+        The authority of the request.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def scheme(self) -> Text:
+    def scheme(self) -> compat.Text:
+        """
+        The scheme of the request.
+        """
         raise NotImplementedError
 
 
@@ -56,18 +73,30 @@ class AbstractHTTPResponse(AbstractHTTPInitial):
     @property
     @abc.abstractmethod
     def status_code(self) -> int:
+        """
+        The status code of the response.
+        """
         raise NotImplementedError
 
 
 class AbstractHTTPContext(abc.ABC):
+    """
+    The constant context can be shared among multiple connection.
+    """
     pass
 
 
 class AbstractEvent(abc.ABC):
+    """
+    The event happened on the stream or the connection.
+    """
     pass
 
 
 class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
+    """
+    The stream writer to help the handler to control the connection.
+    """
     @property
     @abc.abstractmethod
     def http_version(self) -> int:
@@ -76,26 +105,49 @@ class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
     @property
     @abc.abstractmethod
     def request(self) -> AbstractHTTPRequest:
+        """
+        The Request of the stream.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def response(self) -> AbstractHTTPResponse:
+        """
+        The Response of the stream.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def incoming(self) -> AbstractHTTPInitial:
+        """
+        The incoming intital.
+
+        This always points to the initial received from the remote side.
+        """
         raise NotImplementedError
 
     @property
     @abc.abstractmethod
     def outgoing(self) -> AbstractHTTPInitial:
+        """
+        The outgoing intital.
+
+        This always points to the initial sent from the local side.
+        """
         raise NotImplementedError
 
+    @abc.abstractmethod
     async def send_response(self, response: AbstractHTTPInitial):
+        """
+        Send a response.
+
+        This method is only usable on server side.
+        """
         raise NotImplementedError
 
+    @abc.abstractmethod
     def response_written(self) -> bool:
         raise NotImplementedError
 

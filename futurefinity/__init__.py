@@ -22,6 +22,7 @@ from . import web
 from . import client
 from . import compat
 from . import server
+from . import httpabc
 from . import routing
 from . import streams
 from . import encoding
@@ -32,5 +33,5 @@ from . import templating
 
 __all__ = [
     "__version__", "version", "log", "web", "client", "compat", "server",
-    "routing", "streams", "encoding", "protocol", "security", "magicdict",
-    "templating"]
+    "httpabc", "routing", "streams", "encoding", "protocol", "security",
+    "magicdict", "templating"]
