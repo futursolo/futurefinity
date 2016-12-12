@@ -182,9 +182,9 @@ class AbstractStreamWriter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def flush(self):
+    async def drain(self):
         """
-        Give the underlying implementation a chance to flush the pending data
+        Give the underlying implementation a chance to drain the pending data
         out of the internal buffer.
         """
         raise NotImplementedError
@@ -237,7 +237,7 @@ class AbstractStreamWriter(abc.ABC):
     @abc.abstractmethod
     def abort(self):
         """
-        Abort the writer without flush out all the pending buffer.
+        Abort the writer without draining out all the pending buffer.
         """
         raise NotImplementedError
 
@@ -343,12 +343,6 @@ class BaseStreamReader(AbstractStreamReader):
             self.__exc = e
 
     def buflen(self) -> int:
-        """
-        Return the length of the internal buffer.
-
-        If the reader has no internal buffer, it should issue a
-        `NotImplementedError`.
-        """
         return self.__buflen
 
     async def __read_impl(self, n: int=-1) -> bytes:
@@ -488,12 +482,6 @@ class BaseStreamReader(AbstractStreamReader):
         return self.__eof
 
     async def wait_eof(self):
-        """
-        Wait for the eof has been appended.
-
-        When limit(if any) has been reached, and the eof is not reached,
-        this method will issue an `asyncio.LimitOverrunError`.
-        """
         async with self.__read_lock:
             while True:
                 try:
@@ -612,8 +600,6 @@ class BaseStreamWriter(AbstractStreamWriter):
 
     async def wait_closed(self):
         """
-        Wait the writer to close.
-
         This is the most compatible implementation.
 
         The subclasses should override it
@@ -630,7 +616,7 @@ class BaseStreamWriter(AbstractStreamWriter):
 
     def _abort_impl(self):
         """
-        The default implementation of abort is the same as close a connection
+        The default implementation of abort is the same as closing a stream.
 
         The subclass should override if abort can be implemented
         in a different way.
@@ -639,7 +625,7 @@ class BaseStreamWriter(AbstractStreamWriter):
 
     def abort(self):
         """
-        Abort the writer without flush out all the pending buffer.
+        Abort the writer without drain out all the pending buffer.
         """
         if self.closed():
             return
@@ -719,8 +705,8 @@ class Stream(BaseStream):
     def _write_eof_impl(self):
         self.transport.write_eof()
 
-    async def flush(self):
-        await self._protocol._flush_impl()
+    async def drain(self):
+        await self._protocol._drain_impl()
 
     @cached_property
     def _check_if_closed_impl(self) -> Callable[[], bool]:
@@ -794,12 +780,6 @@ class Stream(BaseStream):
                     return
 
     def _abort_impl(self):
-        """
-        The default implementation of abort is the same as close a connection
-
-        The subclass should override if abort can be implemented
-        in a different way.
-        """
         self.transport.abort()
 
         if (self._wait_closed_fur is not None and
@@ -829,11 +809,11 @@ class _StreamHelperProtocol(asyncio.Protocol):
         self._allow_open_after_eof = True
 
         self._fetch_data_impl_lock = asyncio.Lock()
-        self._flush_impl_lock = asyncio.Lock()
+        self._drain_impl_lock = asyncio.Lock()
         self._wait_closed_impl_lock = asyncio.Lock()
 
         self._fetch_data_impl_fur = None
-        self._flush_impl_fur = None
+        self._drain_impl_fur = None
         self._wait_closed_impl_fur = None
 
         self._pending_buffer = []
@@ -861,9 +841,9 @@ class _StreamHelperProtocol(asyncio.Protocol):
     def resume_writing(self):
         self._writing_paused = False
 
-        if (self._flush_impl_fur is not None and
-                not self._flush_impl_fur.done()):
-            self._flush_impl_fur.set_result(None)
+        if (self._drain_impl_fur is not None and
+                not self._drain_impl_fur.done()):
+            self._drain_impl_fur.set_result(None)
 
     def pause_writing(self):
         self._writing_paused = True
@@ -892,9 +872,9 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 not self._fetch_data_impl_fur.done()):
             self._fetch_data_impl_fur.set_result(None)
 
-        if (self._flush_impl_fur is not None and
-                not self._flush_impl_fur.done()):
-            self._flush_impl_fur.set_result(None)
+        if (self._drain_impl_fur is not None and
+                not self._drain_impl_fur.done()):
+            self._drain_impl_fur.set_result(None)
 
         if (self._wait_closed_impl_fur is not None and
                 not self._wait_closed_impl_fur.done()):
@@ -926,8 +906,8 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 finally:
                     self._fetch_data_impl_fur.cancel()
 
-    async def _flush_impl(self) -> bytes:
-        async with self._flush_impl_lock:
+    async def _drain_impl(self) -> bytes:
+        async with self._drain_impl_lock:
             while True:
                 if not self._writing_paused:
                     return
@@ -935,10 +915,10 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 if self._closed:
                     return
 
-                assert self._flush_impl_fur is None or \
-                    self._flush_impl_fur.done()
+                assert self._drain_impl_fur is None or \
+                    self._drain_impl_fur.done()
 
-                self._flush_impl_fur = self._loop.create_future()
+                self._drain_impl_fur = self._loop.create_future()
 
                 try:
                     await self._fetch_data_impl_fur
