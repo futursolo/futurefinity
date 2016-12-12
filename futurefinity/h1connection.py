@@ -84,7 +84,7 @@ class _H1Request(httpabc.AbstractHTTPRequest):
 class _H1Response(httpabc.AbstractHTTPResponse):
     def __init__(
         self, *, status_code: int,
-            headers: Optional[Mapping[Text, Text]]=None):
+            headers: Optional[Mapping[compat.Text, compat.Text]]=None):
         self._status_code = status_code
         self._headers = magicdict.TolerantMagicDict()
 
@@ -187,7 +187,7 @@ class _H1StreamWriter(httpabc.AbstractHTTPStreamWriter):
     @abc.abstractmethod
     async def send_response(
         self, *, status_code: int,
-            headers: Optional[Mapping[Text, Text]]=None):
+            headers: Optional[Mapping[compat.Text, compat.Text]]=None):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -325,7 +325,7 @@ class _H1ConnectionWriter(httpabc.AbstractHTTPStreamWriter):
 
     async def send_response(
         self, *, status_code: int,
-            headers: Optional[Mapping[Text, Text]]=None):
+            headers: Optional[Mapping[compat.Text, compat.Text]]=None):
         raise NotImplementedError("You cannot send response from stream 0.")
 
     def response_written(self) -> bool:

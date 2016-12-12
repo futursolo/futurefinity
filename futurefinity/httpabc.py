@@ -161,7 +161,7 @@ class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
     @abc.abstractmethod
     async def send_response(
         self, *, status_code: int,
-            headers: Optional[Mapping[Text, Text]]=None):
+            headers: Optional[Mapping[compat.Text, compat.Text]]=None):
         """
         Send a response.
 
