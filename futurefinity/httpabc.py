@@ -21,6 +21,7 @@ from . import compat
 from . import streams
 
 import abc
+import asyncio
 
 
 class InvalidHTTPOperationError(Exception):
