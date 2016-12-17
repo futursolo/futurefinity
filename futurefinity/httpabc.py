@@ -30,6 +30,13 @@ class InvalidHTTPOperationError(Exception):
     pass
 
 
+class HTTPConnectionClosedError(Exception):
+    """
+    This Error is raised when the http connection is closed.
+    """
+    pass
+
+
 class AbstractHTTPInitial(abc.ABC):
     @property
     @abc.abstractmethod
@@ -209,6 +216,13 @@ class AbstractHTTPStreamHandler(abc.ABC):
 
 
 class AbstractHTTPConnection(abc.ABC):
+    @abc.abstractmethod
+    def __init__(
+        self, context: AbstractHTTPContext, tcp_stream: streams.AbstractStream,
+        handler_factory: Callable[[], AbstractHTTPStreamHandler], *,
+            loop: Optional[asyncio.AbstractEventLoop]=None):
+        raise NotImplementedError
+
     @property
     @abc.abstractmethod
     def http_version(self) -> int:
@@ -217,16 +231,6 @@ class AbstractHTTPConnection(abc.ABC):
     @property
     @abc.abstractmethod
     def context(self) -> AbstractHTTPContext:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def bind_handler(self, handler_factory: Callable[
-            [], AbstractHTTPStreamHandler]):
-        """
-        Bind a handler for incoming stream(s).
-
-        One connection can have at most one handler at the same time.
-        """
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -243,19 +247,9 @@ class AbstractHTTPConnection(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def handle_until_close(self):
+    async def start_serving(self):
         """
-        Handle the connection to stream handler(s) until the connection close.
-
-        The cancellation of this coroutine will resulting the closure of the
-        connection.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def closed(self) -> bool:
-        """
-        Return `True` if the connection is closed.
+        Start serving the connection.
         """
         raise NotImplementedError
 
@@ -272,11 +266,8 @@ class AbstractHTTPConnection(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def abort(self):
+    async def wait_closed(self):
         """
-        Abort the connection. Tear down the connection without waiting all
-        opened stream(s) to be closed gracefully.
-
-        No new stream should be created after this point.
+        Wait the connection to close.
         """
         raise NotImplementedError

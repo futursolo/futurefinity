@@ -15,7 +15,20 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Mapping, Optional, Callable, Any, Union, MutableMapping
+
+"""
+Server State :
+stream_created(writer) -> event_received() * n -> stream_closed()
+RequestReceived --> DataReceived * n --> EOFReceived.
+                |
+                --> UpgradeRequested --> accept_upgrade() --> stream_closed()
+                                     |
+                                     --> decline_upgrade() --> stream_closed()
+"""
+
+
+from typing import (
+    Mapping, Optional, Callable, Any, Union, MutableMapping, Tuple)
 
 from .utils import Identifier, cached_property
 from . import log
@@ -193,7 +206,7 @@ class H1Context(httpabc.AbstractHTTPContext):
         self, is_client: bool, *, idle_timeout: int=10,
         max_initial_length: int=8 * 1024,  # 8K
         allow_keep_alive: bool=True,
-        chunk_size: int=10 * 1024  # 10K
+        chunk_size: int=10 * 1024,  # 10K
             ):
         self._is_client = is_client
         self._idle_timeout = idle_timeout
@@ -223,12 +236,16 @@ class H1Context(httpabc.AbstractHTTPContext):
 
 
 class _H1ConnnectionVariables:
-    def __init__(self, tcp_stream: streams.AbstractStream):
+    def __init__(
+        self, tcp_stream: streams.AbstractStream,
+            handler_factory: Callable[[], httpabc.AbstractHTTPStreamHandler]):
         self._http_version = 11
         self._can_keep_alive = True
 
         self._tcp_stream = tcp_stream
         self._handled_stream_num = 0
+
+        self._handler_factory = handler_factory
 
     @property
     def http_version(self) -> int:
@@ -255,6 +272,9 @@ class _H1ConnnectionVariables:
 
     def inc_handled_stream_num(self):
         self._handled_stream_num += 1
+
+    def create_stream_handler(self) -> httpabc.AbstractHTTPStreamHandler:
+        return self._handler_factory()
 
     # def detach_stream(self):
     #     raise NotImplementedError
@@ -918,98 +938,36 @@ class _H1StreamWriter(
         raise NotImplementedError
 
 
-class _H1ConnectionWriter(httpabc.AbstractHTTPStreamWriter):
+class _H1Stream:
     def __init__(self, conn: "H1Connection"):
         self._conn = conn
 
-    @property
-    def http_version(self) -> int:
-        return self._conn.http_version
+        self._incoming = None
 
     @property
-    def stream_id(self) -> int:
-        """
-        Stream id 0 means this is a connection.
-        """
-        return 0
+    def http_version(self) -> int:
+        return self._variables.http_version
 
     @property
     def context(self) -> AbstractHTTPContext:
         return self._conn.context
 
     @property
-    def request(self) -> AbstractHTTPRequest:
-        raise NotImplementedError("Stream 0 has no request.")
+    def _variables(self) -> _H1ConnnectionVariables:
+        return self._conn._variables
 
     @property
-    def response(self) -> AbstractHTTPResponse:
-        raise NotImplementedError("Stream 0 has no response.")
-
-    @property
-    def incoming(self) -> AbstractHTTPInitial:
-        raise NotImplementedError("Stream 0 has no incoming initial.")
-
-    @property
-    def outgoing(self) -> AbstractHTTPInitial:
-        raise NotImplementedError("Stream 0 has no outgoing initial.")
-
-    async def send_response(
-        self, *, status_code: int,
-            headers: Optional[Mapping[compat.Text, compat.Text]]=None):
-        raise NotImplementedError("You cannot send response from stream 0.")
-
-    def response_written(self) -> bool:
-        return False
-
     @abc.abstractmethod
-    def write(self, data: bytes):
-        raise NotImplementedError("You cannot write data from stream 0.")
-
-    @abc.abstractmethod
-    def writelines(self, data: Iterable[bytes]):
-        raise NotImplementedError("You cannot write data from stream 0.")
-
-    async def drain(self):
-        if not self._conn._tcp_stream:
-            return
-
-        await self._conn._tcp_stream.drain()
-
-    def can_write_eof(self) -> bool:
-        return False
-
-    def write_eof(self):
-        raise NotImplementedError("You cannot write eof from stream 0.")
-
-    def eof_written(self) -> bool:
-        return False
-
-    def closed(self) -> bool:
-        return self._conn.closed()
-
-    def close(self):
-        self._conn.close()
-
-    @abc.abstractmethod
-    async def wait_closed(self):
-        """
-        Wait the writer to close.
-        """
+    def incoming(self) -> Union[_H1Request, _H1Response]:
         raise NotImplementedError
 
-    def abort(self):
-        self._conn.abort()
+    async def _init_stream(
+        self, request: Optional[httpabc.AbstractHTTPRequest]
+            ) -> _H1StreamWriter:
+        raise NotImplementedError
 
-    def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
-        if default is _DEFUALT_MARK:
-            raise KeyError(name)
-
-        return default
-
-    def __end__(self):
-        super().__end__()
-        self.close()
+    async def next_event(self) -> httpabc.AbstractEvent:
+        raise NotImplementedError
 
 
 class H1Connection(httpabc.AbstractHTTPConnection):
@@ -1020,15 +978,12 @@ class H1Connection(httpabc.AbstractHTTPConnection):
         self._loop = loop or asyncio.get_event_loop()
         self._context = context
 
-        self._handler_factory = handler_factory
+        self._variables = _H1ConnnectionVariables(
+            tcp_stream=tcp_stream, handler_factory=handler_factory)
 
-        self._variables = _H1ConnnectionVariables(tcp_stream)
+        self._closing = False
 
-        self._running = False
-        self._closed = False
-
-        self._conn_handler = None
-        self._current_http_stream = None
+        self._serving_fur = None
 
         self._send_request_fur = None
         self._handler_for_request_fur = None
@@ -1055,7 +1010,8 @@ class H1Connection(httpabc.AbstractHTTPConnection):
             raise httpabc.InvalidHTTPOperationError(
                 "An HTTP server cannot send requests to the remote.")
 
-        assert self._running, "The connection is not being handled."
+        assert self._serving_fur is not None, \
+            "The connection is not being handled."
 
         if not self._variables.tcp_stream:
                 raise httpabc.InvalidHTTPOperationError(
@@ -1069,7 +1025,7 @@ class H1Connection(httpabc.AbstractHTTPConnection):
             raise httpabc.InvalidHTTPOperationError(
                 "The connection has been closed.")
 
-        if self._current_http_stream is not None:
+        if self._send_request_fur.done():
             raise RuntimeError(
                 "HTTP/1.x can only have one stream per connection "
                 "at the same time.")
@@ -1080,9 +1036,6 @@ class H1Connection(httpabc.AbstractHTTPConnection):
             method=method, scheme=scheme, uri=uri, authority=authority,
             headers=headers)
 
-        assert self._send_request_fur is not None and \
-            not self._send_request_fur.done()
-
         self._send_request_fur.set_result(request)
 
         self._handler_for_request_fur = compat.create_future(self._loop)
@@ -1091,94 +1044,103 @@ class H1Connection(httpabc.AbstractHTTPConnection):
 
         return handler
 
-    async def handle_until_close(self):
-        assert not self._running, "The connection is being handled."
+    async def start_serving(self):
+        assert self._serving_fur is False, "The connection is serving."
+        assert self._closing is False, "The connection is closing."
 
+        self._serving_fur = compat.ensure_future(
+            self._serve_until_close(self), loop=self._loop)
+
+    async def _serve_until_close(self):
         try:
-            if not self._tcp_stream:
-                raise httpabc.InvalidHTTPOperationError(
-                    "The tcp stream has been "
-                    "detached from the connection.")
-
-            if self._variables._tcp_stream.closed():
-                self.close()
-
-            if self.closed():
-                raise httpabc.InvalidHTTPOperationError(
-                    "The connection has been closed.")
-
-            assert self._conn_handler is None
-            assert self._send_request_fur is None
-            assert self._current_http_stream is None
-
-            self._conn_handler = self._handler_factory()
-
-            self._conn_handler.stream_created(_H1ConnectionWriter(self))
-
             while True:
-                handler = self._handler_factory()
-                self._current_http_stream = _H1StreamWriter(
-                    self, handler)
+                http_stream = _H1Stream(self)
 
-                if self.context.is_client:
-                    self._send_request_fur = compat.create_future(self._loop)
+                try:
+                    if self.context.is_client:
+                        while True:
+                            try:
+                                self._send_request_fur = compat.create_future(
+                                    self._loop)
+                                request = await self._send_request_fur
 
-                    request = await self._send_request_fur
+                            except asyncio.CancelledError:
+                                continue
+
+                            else:
+                                break
+
+                        writer = await http_stream._init_stream(request)
+
+                    else:
+                        writer = await http_stream._init_stream()
+
+                except (streams.StreamEOFError, asyncio.IncompleteReadError,
+                        ConnectionError):
+                    break
+                handler = self._variables.create_stream_handler()
+
+                try:
+                    maybe_awaitable = handler.stream_created(writer)
+                    if inspect.isawaitable(maybe_awaitable):
+                        await maybe_awaitable
 
                     if (self._handler_for_request_fur is not None and
                             not self._handler_for_request_fur.done()):
                         self._handler_for_request_fur.set_result(handler)
 
-                    await self._current_http_stream._run_until_close(request)
+                    while True:
+                        try:
+                            event = await http_stream.next_event()
 
-                else:  # Server Side.
-                    await self._current_http_stream._run_until_close()
+                        except (streams.StreamEOFError,
+                                asyncio.IncompleteReadError, ConnectionError):
+                            break
 
-                self._current_http_stream = None
+                        maybe_awaitable = handler.event_received(event)
+                        if inspect.isawaitable(maybe_awaitable):
+                            await maybe_awaitable
 
-                if not self._variables.can_keep_alive:
-                    break
+                    await writer.wait_closed()
 
-                if self._variables.tcp_stream:
+                    if not self._variables.can_keep_alive:
+                        break  # Keep-Alive Disabled.
+
+                    if not self._variables.tcp_stream:
+                        break  # Detached by upgrading.
+
                     if self._variables.tcp_stream.closed():
-                        break
+                        break  # Stream Closed.
+
+                except Exception as exc:
+                    maybe_awaitable = handler.stream_closed(exc)
+                    if inspect.isawaitable(maybe_awaitable):
+                        await maybe_awaitable
+                    # Log Exception of stream_closed() if available.
+
+                else:
+                    maybe_awaitable = handler.stream_closed(None)
+                    if inspect.isawaitable(maybe_awaitable):
+                        await maybe_awaitable
+                    # Log Exception of stream_closed() if available.
 
         finally:
-            self._running = False
             self.close()
 
-    def closed(self) -> bool:
-        if self._variables.tcp_stream:
-            if self._variables.tcp_stream.closed():
-                self.close()
-
-        return self._closed
-
-    def _close_impl(self):
-        if self._current_http_stream:
-            self._current_http_stream.close()
-
-        if self._conn_handler:
-            self._conn_handler.stream_closed(None)
-
     def close(self):
-        if self.closed():
+        if self._closing:
             return
 
-        self._closed = True
+        self._closing = True
 
-        self._close_impl()
+        self._variables.disable_keep_alive()
 
-    def abort(self):
-        if self.closed():
-            return
+    async def wait_closed(self):
+        try:
+            await self._serving_fur
 
-        self._closed = True
-
-        if self._current_http_stream:
-            self._current_http_stream.abort()
-
-        self._close_impl()
+        except:
+            pass
 
     def __end__(self):
         super().__end__()
