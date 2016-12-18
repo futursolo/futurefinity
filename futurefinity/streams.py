@@ -676,19 +676,7 @@ class Stream(BaseStream):
         return self._transport
 
     async def _fetch_data(self) -> bytes:
-        """
-        Fetch data, the data will be appended to the internal buffer.
-
-        If the EOF has been reached, it should issue an EOFError, so the
-        reader will collect the eof and stop reading from it.
-
-        This method must be overriden to support functionality of
-        `BaseStreamReader`.
-
-        For other exceptions, it will be treated as a normal exception, and
-        will also append an EOF to the stream.
-        """
-        raise NotImplementedError
+        return await self._protocol._fetch_data_impl()
 
     def _write_impl(self, data: bytes):
         if self.eof_written():

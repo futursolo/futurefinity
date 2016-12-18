@@ -38,33 +38,6 @@ class ResponseReceived(httpabc.AbstractEvent):
         return self._response
 
 
-class UpgradeResponded(httpabc.AbstractEvent):
-    @property
-    @abc.abstractmethod
-    def proposed_protocol(self) -> compat.Text:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    async def accept_upgrade(self) -> streams.AbstractStream:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def decline_with_close(self) -> streams.AbstractStream:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def accepted(self) -> bool:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def declined(self) -> bool:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def handled(self) -> bool:
-        raise NotImplementedError
-
-
 class UpgradeRequested(httpabc.AbstractEvent):
     @property
     @abc.abstractmethod
@@ -72,37 +45,20 @@ class UpgradeRequested(httpabc.AbstractEvent):
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def accept_upgrade(
-        self, headers: Mapping[compat.Text, compat.Text]
+    async def accept(
+        self, headers: Optional[Mapping[compat.Text, compat.Text]]=None
             ) -> streams.AbstractStream:
-        """if not self.is_detachable():
-            raise InvalidHTTPOperationError(
-                "Cannot detach since the connection is not under "
-                "a detachable state.")
+        raise NotImplementedError
 
-        tcp_stream, self._tcp_stream = self._tcp_stream, None
-        return tcp_stream"""
+
+class UpgradeResponded(httpabc.AbstractEvent):
+    @property
+    @abc.abstractmethod
+    def proposed_protocol(self) -> compat.Text:
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def decline_with_400(
-            self, headers: Mapping[compat.Text, compat.Text]):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def ignore_and_continue(self):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def accepted(self) -> bool:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def declined(self) -> bool:
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def handled(self) -> bool:
+    async def accept(self) -> streams.AbstractStream:
         raise NotImplementedError
 
 
@@ -119,13 +75,17 @@ class EOFReceived(httpabc.AbstractEvent):
     pass
 
 
-class BadRequest(httpabc.AbstractEvent):
+class BadRequest(httpabc.AbstractEvent):  # HTTPError: 400
+    pass
+
+
+class RequestLengthRequired(httpabc.AbstractEvent):  # HTTPError: 411
+    pass
+
+
+class EntityTooLarge(httpabc.AbstractEvent):  # HTTPError: 413
     pass
 
 
 class BadResponse(httpabc.AbstractEvent):
-    pass
-
-
-class EntityTooLarge(httpabc.AbstractEvent):
     pass

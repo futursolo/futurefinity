@@ -17,7 +17,8 @@
 
 from . import compat
 from . import encoding
-from typing import Optional, Union
+from . import magicdict
+from typing import Optional, Union, Mapping
 from http.cookies import SimpleCookie as HTTPCookies
 
 import time
@@ -55,3 +56,35 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
         raise TypeError("unknown timestamp type: {}".format(ts))
 
     return encoding.ensure_str(email.utils.formatdate(ts, usegmt=True))
+
+
+def parse_semicolon_header(
+        value: compat.Text) -> Mapping[compat.Text, Optional[compat.Text]]:
+    header_dict = magicdict.TolerantMagicDict()
+    for part in value.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        splitted = part.split("=", 1)
+        part_name = splitted.pop(0)
+        part_value = splitted.pop() if splitted else None
+        if part_value:
+            if part_value.startswith('"') and part_value.endswith('"'):
+                part_value = part_value[1:-1]
+        header_dict.add(part_name.strip(), part_value.strip())
+
+    return header_dict
+
+
+def build_semicolon_header(
+    header_dict: Mapping[compat.Text, Optional[compat.Text]]
+        ) -> compat.Text:
+    header_list = []
+    for name, value in header_dict.items():
+        part = name.strip()
+        if value is not None:
+            part += "=" + value.strip()
+
+        header_list.append(part)
+
+    return "; ".join(header_list)

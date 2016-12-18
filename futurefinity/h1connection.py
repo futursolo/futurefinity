@@ -276,8 +276,12 @@ class _H1ConnnectionVariables:
     def create_stream_handler(self) -> httpabc.AbstractHTTPStreamHandler:
         return self._handler_factory()
 
-    # def detach_stream(self):
-    #     raise NotImplementedError
+    def detach_stream(self) -> streams.AbstractStream:
+        assert self._tcp_stream is not None
+
+        self.disable_keep_alive()
+        self._tcp_stream, tcp_stream = None, self._tcp_stream
+        return tcp_stream
 
 
 class _BaseH1InitialProcessor:
@@ -584,77 +588,170 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
             raise
 
 
+class _H1BodyPrematureEOFError(Exception):
+    pass
+
+
 class _H1BaseBodyStreamReader(streams.BaseStreamReader):
     def __init__(
-        self, underlying_reader: streams.AbstractStreamReader,
-            *args, **kwargs):
+        self, last_reader: streams.AbstractStreamReader,
+            incoming: Union[_H1Request, _H1Response], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._underlying_reader = underlying_reader
-
-    def close(self):
-        raise NotImplementedError("You cannot close a body stream reader.")
+        self._last_reader = last_reader
+        self._incoming = incoming
 
 
 class _H1ContentLengthBodyStreamReader(_H1BaseBodyStreamReader):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._length_read = 0
+
+    @cached_property
+    def _total_length(self) -> int:
+        try:
+            return int(self._incoming.headers["content-length"])
+
+        except Exception as e:
+            raise _H1BadInitialError(
+                "Cannot Parse content-length as an integer.") from e
+
+    @property
+    def _length_left(self) -> int:
+        return self._total_length - self._length_read
+
     async def _fetch_data(self) -> bytes:
-        raise NotImplementedError
+        if self._length_left == 0:
+            raise streams.StreamEOFError
+
+        try:
+            while True:
+                data = await self._last_reader.read(self._length_left)
+                if data:  # Filter Empty Data.
+                    self._length_read += len(data)
+                    return data
+
+        except streams.StreamEOFError as e:
+            if self._length_left != 0:
+                raise _H1BodyPrematureEOFError from e
+
+            raise
 
 
 class _H1ChunkedBodyStreamReader(_H1BaseBodyStreamReader):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._current_length_left = None
+        self._crlf_dropped = False
+
+        self._eof_reached = False
+
+    async def _try_drop_crlf(self):
+        if self._crlf_dropped:
+            return
+
+        if self._current_length_left > 0:
+            return
+
+        await self._last_reader.readexactly(2)  # Drop Redundant CRLF.
+        self._crlf_dropped = True
+
+    async def _read_next_length(self):
+        if self._current_length_left > 0:
+            return
+
+        if self.has_eof():
+            return
+
+        await self._try_drop_crlf()
+
+        length_str = await self._last_reader.readuntil(
+            b"\r\n", keep_separator=False)
+
+        length_str = list(
+            httputils.parse_semicolon_header(length_str).keys())[0]
+        # Drop the chunked extension.
+
+        try:
+            self._current_length_left = int(length_str, 16)
+
+        except ValueError as e:
+            # Not Valid Hexadecimal bytes
+            raise _H1BadInitialError("Bad Chunk Length Received.") from e
+
+        self._crlf_dropped = False
+
+        if self._current_length_left == 0:
+            raise streams.StreamEOFError
+
     async def _fetch_data(self) -> bytes:
-        raise NotImplementedError
+        if self._eof_reached:
+            raise streams.StreamEOFError
+
+        try:
+            await self._read_next_length()
+
+        except streams.StreamEOFError:
+            self._eof_reached = True
+            await self._try_drop_crlf()
+            raise
+
+        try:
+            while True:
+                data = await self._last_reader.read(self._current_length_left)
+                if data:  # Filter Empty Data.
+                    self._current_length_left -= len(data)
+                    return data
+
+        except streams.StreamEOFError as e:
+            raise _H1BodyPrematureEOFError from e
 
 
 class _H1ReadUntilEOFBodyStreamReader(_H1BaseBodyStreamReader):
     async def _fetch_data(self) -> bytes:
-        raise NotImplementedError
+        while True:
+            data = await self._body_reader.read(65536)  # 64K.
+            if data:  # Filter Empty Bytes.
+                return data
+
+
+class _H1EmptyBodyStreamReader(_H1BaseBodyStreamReader):
+    def __init__(
+        self, last_reader: Optional[streams.AbstractStreamReader],
+        incoming: Optional[Union[_H1Request, _H1Response]],
+            *args, **kwargs):
+        super(streams.BaseStreamReader, self).__init__(*args, **kwargs)
+
+    async def _fetch_data(self) -> bytes:
+        raise streams.StreamEOFError
 
 
 class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
     def __init__(
-        self, underlying_writer: streams.AbstractStreamWriter,
+        self, last_writer: streams.AbstractStreamWriter,
             *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._underlying_writer = underlying_writer
+        self._last_writer = last_writer
 
     @abc.abstractmethod
     def _write_impl(self, data: bytes):
         raise NotImplementedError
 
-    @abc.abstractmethod
     async def drain(self):
-        """
-        Give the underlying implementation a chance to drain the pending data
-        out of the internal buffer.
-        """
-        raise NotImplementedError
+        await self._last_writer.drain()
 
-    @abc.abstractmethod
     def can_write_eof(self) -> bool:
-        """
-        Return `True` if an eof can be written to the writer.
-        """
-        raise NotImplementedError
+        return True
 
     @abc.abstractmethod
     def _write_eof_impl(self):
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def eof_written(self) -> bool:
-        """
-        Return `True` if the eof has been written or
-        the writer has been closed.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def _check_if_closed_impl(self) -> bool:
-        raise NotImplementedError
+        return self.eof_written()
 
-    @abc.abstractmethod
     def _close_impl(self):
-        raise NotImplementedError
+        self.write_eof()  # For body writers, close == write_eof.
 
     @abc.abstractmethod
     async def wait_closed(self):
@@ -663,43 +760,51 @@ class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def abort(self):
-        """
-        Abort the writer without draining out all the pending buffer.
-        """
-        raise NotImplementedError
+    def _abort_impl(self):
+        self.close()  # For most body writers, abort == close.
 
-    @abc.abstractmethod
-    def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
-        """
-        Return optional stream information.
 
-        If The specific name is not presented and the default is not provided,
-        the method should raise a `KeyError`.
-        """
-        raise NotImplementedError
+class _H1ChunkedBodyStreamWriter(_H1BaseBodyStreamWriter):  # "{}\r\n"
+    pass
+
+
+class _H1WriteUntilEOFBodyStreamWriter(_H1BaseBodyStreamWriter):
+    pass
+
+
+class _H1EmptyBodyStreamWriter(_H1BaseBodyStreamWriter):
+    def __init__(
+        self, last_writer: Optional[streams.AbstractStreamWriter],
+            *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.write_eof()
+
+    def _write_impl(self, data: bytes):
+        raise StreamEOFError("EOF written.")
+
+    async def drain(self):
+        return
+
+    def _write_eof_impl(self):
+        pass
+
+    async def wait_closed(self):
+        return
 
 
 class _H1StreamWriter(
         httpabc.AbstractHTTPStreamWriter, streams.BaseStreamWriter):
-    def __init__(
-        self, conn: "H1Connection",
-            handler: httpabc.AbstractHTTPStreamHandler):
-        self._conn = conn
-        self._handler = handler
+    def __init__(self, http_stream: "_H1Stream"):
+        self._http_stream = http_stream
+
+        self._outgoing = None
 
         self._variables.inc_handled_stream_num()
         self._stream_id = self._variables.handled_stream_num
 
-        self._request = None
-        self._response = None
+        self._body_writer = None
 
-        self._eof_read = False
         self._eof_written = False
-
-        self._wait_eof_written_fur = None
 
         self._closed = False
 
@@ -719,46 +824,54 @@ class _H1StreamWriter(
 
     @property
     def context(self) -> AbstractHTTPContext:
-        return self._conn.context
+        return self._http_stream.context
 
     @property
     def _variables(self) -> _H1ConnnectionVariables:
-        return self._conn._variables
+        return self._http_stream._variables
 
     @cached_property
     def request(self) -> _H1Request:
-        if self._request is None:
-            raise AttributeError("Request is not Ready.")
+        try:
+            if self.context.is_client:
+                return self.outgoing
 
-        return self._request
+            else:
+                return self.incoming
+
+        except AttributeError:
+            raise AttributeError("Request is not Ready.") from None
 
     @cached_property
     def response(self) -> _H1Response:
-        if self._response is None:
-            raise AttributeError("Response is not Ready.")
+        try:
+            if self.context.is_client:
+                return self.incoming
 
-        return self._response
+            else:
+                return self.outgoing
+
+        except AttributeError:
+            raise AttributeError("Response is not Ready.") from None
 
     @cached_property
     def incoming(self) -> Union[_H1Request, _H1Response]:
-        if self.context.is_client:
-            return self.response
+        if self._http_stream._incoming is None:
+            raise AttributeError("Incoming is not Ready.")
 
-        else:
-            return self.request
+        return self._http_stream._incoming
 
     @cached_property
     def outgoing(self) -> Union[_H1Request, _H1Response]:
-        if self.context.is_client:
-            return self.request
+        if self._outgoing is None:
+            raise AttributeError("Outgoing is not Ready.")
 
-        else:
-            return self.response
+        return self._outgoing
 
     async def send_response(
         self, *, status_code: int,
             headers: Optional[Mapping[compat.Text, compat.Text]]=None):
-        assert not self.response_written, "You can only write response once."
+        assert not self.response_written(), "You can only write response once."
         if not self.context.is_client:
             raise httpabc.InvalidHTTPOperationError(
                 "An HTTP client cannot send responses to the remote.")
@@ -771,7 +884,7 @@ class _H1StreamWriter(
                 context=self.context, variables=self._variables)
             await builder.build_and_write(response)
 
-            self._response = builder.built_initial
+            self._outgoing = builder.built_initial
 
         except:
             self.close()
@@ -780,122 +893,52 @@ class _H1StreamWriter(
     def response_written(self) -> bool:
         return self._response is not None
 
-    async def _call_handler_with_event(self, event: httpabc.AbstractEvent):
-        try:
-            maybe_awaitable = self._handler.event_received(event)
-            if inspect.isawaitable(maybe_awaitable):
-                await maybe_awaitable
-
-        except Excetion as e:
-            self.close()
-
-    @property
-    @abc.abstractmethod
-    def _body_reader(self) -> _H1BaseBodyStreamReader:
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def _body_writer(self) -> _H1BaseBodyStreamWriter:
-        raise NotImplementedError
-
-    async def _run_until_close(
-        self, request: Optional[_H1Request]=None
-            ) -> _ActionAfterStreamClosed:
+    async def _init_stream_writer(
+            self, request: Optional[httpabc.AbstractHTTPRequest]=None):
         if self.context.is_client:
             assert request is not None
+            builder = _H1InitialBuilder(
+                context=self.context, variables=self._variables)
+            await builder.build_and_write(request)
+            self._outgoing = builder.built_initial
 
         else:
             assert request is None
 
-        try:
-            maybe_awaitable = self._handler.stream_created(self)
-            if inspect.isawaitable(maybe_awaitable):
-                await maybe_awaitable
+    async def _accept_upgrade(
+            self, headers: Mapping[compat.Text, compat.Text]):
+        await self.send_response(status_code=101, headers=headers)
 
-            if self.closed():
-                return
-
-        except Excetion as e:
-            self.close()
-
-            try:
-                maybe_awaitable = self._handler.stream_closed(e)
-                if inspect.isawaitable(maybe_awaitable):
-                    await maybe_awaitable
-
-            except:
-                _log.error(
-                    "Error Occurred inside stream_closed.",
-                    exc_info=sys.exc_info())
-
-        if self.context.is_client:
-            builder = _H1InitialBuilder(
-                context=self.context, variables=self._variables)
-            await builder.build_and_write(request)
-            self._request = builder.built_initial
-
-        parser = _H1InitialParser(
-            context=self.context, variables=self._variables)
-        incoming_initial = await parser.read_and_parse()
-
-        if self.context.is_client:
-            self._request = incoming_initial
-            initial_event = httpevents.RequestReceived(self._request)
-
-        else:
-            self._response = incoming_initial
-            initial_event = httpevents.ResponseReceived(self._response)
-
-        await self._call_handler_with_event(initial_event)
-
-        if self.closed():
-            return
-
-        while True:
-            try:
-                data = await self._body_reader.read(65536)  # 64K.
-
-            except streams.StreamEOFError:
-                await self._call_handler_with_event(httpevents.EOFReceived())
-                self._eof_read = True
-                break
-
-            await self._call_handler_with_event(httpevents.DataReceived(data))
-
-        # Wait Write EOF.
-        # Mark Stream Writer as closed.
+        assert self._body_writer is None
+        self._body_writer = _H1EmptyBodyStreamWriter()
+        # Prevent further writing.
 
     @abc.abstractmethod
     def _write_impl(self, data: bytes):
+        assert self.response_written(), "You must write response first."
         raise NotImplementedError
 
-    @abc.abstractmethod
     async def drain(self):
-        """
-        Give the underlying implementation a chance to drain the pending data
-        out of the internal buffer.
-        """
-        raise NotImplementedError
+        if self._body_writer is not None:
+            await self._body_writer.drain()
 
-    @abc.abstractmethod
+        # The TCP Stream cannot be detached before the body writer is ready.
+        else:
+            await self._variables.tcp_stream.drain()
+
     def can_write_eof(self) -> bool:
-        """
-        Return `True` if an eof can be written to the writer.
-        """
-        raise NotImplementedError
+        return self._body_writer is not None
 
     @abc.abstractmethod
     def _write_eof_impl(self):
+        assert self.response_written(), "You must write response first."
         raise NotImplementedError
 
-    @abc.abstractmethod
     def eof_written(self) -> bool:
-        """
-        Return `True` if the eof has been written or
-        the writer has been closed.
-        """
-        raise NotImplementedError
+        if self._body_writer is None:
+            return False
+
+        return self._body_writer.eof_written()
 
     @abc.abstractmethod
     def _check_if_closed_impl(self) -> bool:
@@ -919,34 +962,76 @@ class _H1StreamWriter(
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
     def abort(self):
-        """
-        Abort the writer without draining out all the pending buffer.
-        """
-        raise NotImplementedError
+        if self._body_writer is not None:
+            self._body_writer.abort()
 
-    @abc.abstractmethod
+        self._close_impl()
+
     def get_extra_info(
             self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
-        """
-        Return optional stream information.
 
-        If The specific name is not presented and the default is not provided,
-        the method should raise a `KeyError`.
-        """
-        raise NotImplementedError
+        if self._variables.tcp_stream is not None:
+            return self._variables.tcp_stream.get_extra_info(name, default)
+
+        elif default is _DEFUALT_MARK:
+            raise KeyError(name)
+
+        return default
+
+
+class _H1UpgradeRequested(httpevents.UpgradeRequested):
+    def __init__(
+            self, proposed_protocol: compat.Text, http_stream: "_H1Stream"):
+        self._proposed_protocol = proposed_protocol
+        self._http_stream = http_stream
+
+    @property
+    def proposed_protocol(self) -> compat.Text:
+        return self._proposed_protocol
+
+    async def accept(
+        self, headers: Optional[Mapping[compat.Text, compat.Text]]=None
+            ) -> streams.AbstractStream:
+        return await self._http_stream._accept_upgrade(headers)
+
+
+class _H1UpgradeResponded(httpevents.UpgradeResponded):
+    def __init__(
+            self, proposed_protocol: compat.Text, http_stream: "_H1Stream"):
+        self._proposed_protocol = proposed_protocol
+        self._http_stream = http_stream
+
+    @property
+    def proposed_protocol(self) -> compat.Text:
+        return self._proposed_protocol
+
+    async def accept(self) -> streams.AbstractStream:
+        return await self._http_stream._accept_upgrade()
+
+
+class _H1ReadFinished(Exception):
+    pass
 
 
 class _H1Stream:
     def __init__(self, conn: "H1Connection"):
         self._conn = conn
 
+        self._pending_incoming = None
         self._incoming = None
 
+        self._writer = None
+
+        self._pending_upgrade = False
+
+        self._body_reader = None
+
+        self._read_finished = False
+
     @property
-    def http_version(self) -> int:
-        return self._variables.http_version
+    def _loop(self) -> asyncio.AbstractEventLoop:
+        return self._conn._loop
 
     @property
     def context(self) -> AbstractHTTPContext:
@@ -956,18 +1041,158 @@ class _H1Stream:
     def _variables(self) -> _H1ConnnectionVariables:
         return self._conn._variables
 
-    @property
-    @abc.abstractmethod
-    def incoming(self) -> Union[_H1Request, _H1Response]:
-        raise NotImplementedError
+    async def _read_incoming_initial(self):
+        assert (self._pending_incoming and self._incoming) is None
+        parser = _H1InitialParser(
+            context=self.context, variables=self._variables)
+        self._pending_incoming = await parser.read_and_parse()
 
-    async def _init_stream(
-        self, request: Optional[httpabc.AbstractHTTPRequest]
+    async def init_stream(
+        self, request: Optional[httpabc.AbstractHTTPRequest]=None
             ) -> _H1StreamWriter:
-        raise NotImplementedError
+        assert self._writer is None
+        self._writer = _H1StreamWriter(self)
+
+        await self._writer._init_stream_writer(request)
+        if not self.context.is_client:
+            # Read the request for server before return writer.
+            await self._read_incoming_initial()
+
+        return self._writer
+
+    async def _accept_upgrade(
+        self, headers: Optional[Mapping[compat.Text, compat.Text]]=None
+            ) -> streams.AbstractStream:
+        if not self._pending_upgrade:
+            raise httpabc.InvalidHTTPOperationError(
+                "There's no pending upgrade.")
+
+        if self.context.is_client:
+            assert headers is None
+
+        else:
+            new_headers = magicdict.TolerantMagicDict()
+            if headers:
+                new_headers.update(headers)
+
+            await self._writer._accept_upgrade(headers)
+
+        tcp_stream = self._variables.detach_stream()
+        self._pending_upgrade = False
+
+        return tcp_stream
 
     async def next_event(self) -> httpabc.AbstractEvent:
-        raise NotImplementedError
+        if not self._incoming:
+            if not self._pending_incoming:
+                await self._read_incoming_initial()
+
+            self._incoming, self._pending_incoming = \
+                self._pending_incoming, None
+
+            if self.context.is_client:
+                return httpevents.ResponseReceived(self._incoming)
+
+            else:
+                return httpevents.RequestReceived(self._incoming)
+
+        if not self._body_reader:  # Initialize Body Reader(s).
+            if "connection" in self._incoming.headers.keys():
+                conn_header = self._incoming.headers["connection"]
+                if conn_header.lower() == "upgrade":  # Upgrade Found.
+                    self._pending_upgrade = True
+                    self._body_reader = _H1EmptyBodyStreamReader(
+                        None, None, loop=self._loop)
+
+                    proposed_protocol = self._incoming.headers.get(
+                        "upgrade", "")
+
+                    if self.context.is_client:
+                        return _H1UpgradeResponded(
+                            proposed_protocol=proposed_protocol,
+                            http_stream=self)
+
+                    else:
+                        return _H1UpgradeRequested(
+                            proposed_protocol=proposed_protocol,
+                            http_stream=self)
+
+            readers = []
+            eof_determined = False
+
+            if self.context.is_client:
+                # HEAD requests and 204, 304 responses has no body.
+                if self._writer.outgoing.method == "HEAD":
+                    readers.append(_H1EmptyBodyStreamReader)
+                    eof_determined = True
+
+                elif self._incoming.status_code in (204, 304):
+                    readers.append(_H1EmptyBodyStreamReader)
+                    eof_determined = True
+
+            if not eof_determined:  # Check Transfer-Encoding.
+                if "transfer-encoding" in self._incoming.headers.keys():
+                    transfer_encoding = httputils.parse_semicolon_header(
+                        self._incoming.headers["transfer-encoding"])
+
+                    last_transfer_encoding = list(
+                        transfer_encoding.keys())[-1].strip()
+
+                    if ("chunked" in transfer_encoding.keys() and
+                            last_transfer_encoding != "chunked"):
+                        raise _H1BadInitialError(
+                            "Chunked transfer encoding found, "
+                            "but not at last.")
+
+                    if last_transfer_encoding == "identity":
+                        if len(transfer_encoding) != 1:
+                            raise _H1BadInitialError(
+                                "Identity is not the only transfer encoding.")
+
+                    if last_transfer_encoding == "chunked":
+                        readers.append(_H1ChunkedBodyStreamReader)
+                        eof_determined = True
+
+            if not eof_determined:  # Check Content-Length.
+                if "content-length" not in self._incoming.headers.keys():
+                    if self.context.is_client:
+                        if self._variables.can_keep_alive:
+                            self._variables.disable_keep_alive()
+
+                        readers.append(_H1ReadUntilEOFBodyStreamReader)
+                        # Read until connection close.
+
+                    else:  # On server-side.
+                        raise _H1BadInitialError(
+                            "Content-Length MUST be present in the Request.")
+
+                else:
+                    readers.append(_H1ContentLengthBodyStreamReader)
+
+            assert len(readers) > 0
+            last_reader = self._variables.tcp_stream
+
+            for BodyReader in readers:
+                last_reader = BodyReader(
+                    last_reader=last_reader, incoming=self._incoming,
+                    loop=self._loop)
+
+            self._body_reader = last_reader
+
+        if self._read_finished:
+            raise _H1ReadFinished
+
+        self._pending_upgrade = False
+
+        try:
+            while True:
+                data = await self._body_reader.read(65536)  # 64K.
+                if data:  # Filter Empty Bytes.
+                    return httpevents.DataReceived(data)
+
+        except streams.StreamEOFError:
+            self._read_finished = True
+            return httpevents.EOFReceived()
 
 
 class H1Connection(httpabc.AbstractHTTPConnection):
@@ -1070,10 +1295,10 @@ class H1Connection(httpabc.AbstractHTTPConnection):
                             else:
                                 break
 
-                        writer = await http_stream._init_stream(request)
+                        writer = await http_stream.init_stream(request)
 
                     else:
-                        writer = await http_stream._init_stream()
+                        writer = await http_stream.init_stream()
 
                 except (streams.StreamEOFError, asyncio.IncompleteReadError,
                         ConnectionError):
@@ -1094,7 +1319,8 @@ class H1Connection(httpabc.AbstractHTTPConnection):
                             event = await http_stream.next_event()
 
                         except (streams.StreamEOFError,
-                                asyncio.IncompleteReadError, ConnectionError):
+                                asyncio.IncompleteReadError, ConnectionError,
+                                _H1ReadFinished):
                             break
 
                         maybe_awaitable = handler.event_received(event)
@@ -1117,6 +1343,9 @@ class H1Connection(httpabc.AbstractHTTPConnection):
                     if inspect.isawaitable(maybe_awaitable):
                         await maybe_awaitable
                     # Log Exception of stream_closed() if available.
+                    """_log.error(
+                    "Error Occurred inside stream_closed.",
+                    exc_info=sys.exc_info())"""
 
                 else:
                     maybe_awaitable = handler.stream_closed(None)
