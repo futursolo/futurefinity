@@ -553,9 +553,18 @@ class BaseStreamWriter(AbstractStreamWriter):
         raise NotImplementedError
 
     def write(self, data: bytes):
+        if self.eof_written():
+            raise StreamEOFError("EOF written.")
+
+        if self.closed():
+            raise StreamClosedError
+
         self._write_impl(bytes(data))
 
     def writelines(self, data: Iterable[bytes]):
+        if self.eof_written() or self.closed():
+            raise StreamClosedError("Write after EOF or stream closed.")
+
         self._write_impl(b"".join(data))
 
     def _write_eof_impl(self):
@@ -568,7 +577,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         raise NotImplementedError
 
     def write_eof(self):
-        if self.eof_written():
+        if self.eof_written() or self.closed():
             return
 
         self._write_eof_impl()
@@ -679,12 +688,6 @@ class Stream(BaseStream):
         return await self._protocol._fetch_data_impl()
 
     def _write_impl(self, data: bytes):
-        if self.eof_written():
-            raise StreamEOFError("EOF written.")
-
-        if self.closed():
-            raise StreamClosedError
-
         self.transport.write(data)
 
     def can_write_eof(self) -> bool:

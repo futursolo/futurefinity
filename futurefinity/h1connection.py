@@ -17,13 +17,23 @@
 
 
 """
-Server State :
-stream_created(writer) -> event_received() * n -> stream_closed()
-RequestReceived --> DataReceived * n --> EOFReceived.
-                |
-                --> UpgradeRequested --> accept_upgrade() --> stream_closed()
-                                     |
-                                     --> decline_upgrade() --> stream_closed()
+Server State:
+    stream_created(writer) -> event_received() * n -> stream_closed()
+
+    RequestReceived --> DataReceived * n --> EOFReceived.
+                    |                    |
+                    --> UpgradeRequested --> accept() --> stream_closed()
+
+    send_response() -> write() * n -> write_eof()
+
+Client State:
+    send_request() -> write() * n -> write_eof()
+
+    stream_created(writer) -> event_received() * n -> stream_closed()
+
+    ResponseReceived --> DataReceived * n --> EOFReceived.
+                     |                    |
+                     --> UpgradeResponded --> accept() --> stream_closed()
 """
 
 
@@ -48,6 +58,7 @@ import enum
 import asyncio
 import inspect
 import threading
+import collections
 
 _log = log.get_child_logger("h1connection")
 
@@ -58,7 +69,7 @@ _SELF_IDENTIFIER = "futurefinity/" + futurefinity_version
 
 class CapitalizedH1Headers(dict):
     """
-    Convert a string to HTTP Header style capitalized string.
+    Convert a string to HTTP/1.x Header style capitalized string.
 
     .. code-block:: python3
 
@@ -728,10 +739,15 @@ class _H1EmptyBodyStreamReader(_H1BaseBodyStreamReader):
 
 class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
     def __init__(
-        self, last_writer: streams.AbstractStreamWriter,
-            *args, **kwargs):
+        self, last_writer: streams.AbstractStreamWriter, context: H1Context,
+            *args, loop: Optional[asyncio.AbstractEventLoop]=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self._loop = loop
+        self._context = context
         self._last_writer = last_writer
+
+        self._wait_closed_fur = None
+        self._wait_closed_lock = asyncio.Lock()
 
     @abc.abstractmethod
     def _write_impl(self, data: bytes):
@@ -747,36 +763,161 @@ class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
     def _write_eof_impl(self):
         raise NotImplementedError
 
+    def write_eof(self):
+        super().write_eof()
+
+        if (self._wait_closed_fur is not None and
+                not self._wait_closed_fur.done()):
+            self._wait_closed_fur.set_result(None)
+
     def _check_if_closed_impl(self) -> bool:
-        return self.eof_written()
+        return self.eof_written() or self._last_writer.closed()
 
     def _close_impl(self):
         self.write_eof()  # For body writers, close == write_eof.
 
-    @abc.abstractmethod
     async def wait_closed(self):
-        """
-        Wait the writer to close.
-        """
-        raise NotImplementedError
+        async with self._wait_closed_lock:
+            while True:
+                await asyncio.sleep(0)  # Touch the Event Loop.
+
+                if self.closed():
+                    return
+
+                assert self._wait_closed_fur is None or \
+                    self._wait_closed_fur.done()
+                self._wait_closed_fur = compat.create_future(loop=self._loop)
+
+                try:
+                    done, pending = await asyncio.wait(
+                        [self._wait_closed_fur,
+                         self._last_writer.wait_closed()],
+                        return_when=asyncio.FIRST_COMPLETED)
+
+                    for fur in pending:
+                        fur.cancel()
+
+                finally:
+                    self._wait_closed_fur.cancel()
 
     def _abort_impl(self):
-        self.close()  # For most body writers, abort == close.
+        self._close_impl()  # For most body writers, abort == close.
 
 
-class _H1ChunkedBodyStreamWriter(_H1BaseBodyStreamWriter):  # "{}\r\n"
-    pass
+class _H1WrappedBodyStreamWriter(_H1BaseBodyStreamWriter):
+    """
+    Shield The last reader from close() and write_eof().
+    """
+    def _write_impl(self, data: bytes):
+        self._last_writer.write(data)
+
+    def _write_eof_impl(self):
+        pass
+
+
+class _H1ChunkedBodyStreamWriter(_H1BaseBodyStreamWriter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._wait_closed_fur = None
+
+        self._wait_closed_lock = asyncio.Lock()
+
+        self._buflen = 0
+
+        self._buffer = collections.deque()
+
+    def _append_to_buffer(self, data: bytes):
+        self._buffer.append(data)
+        self._buflen += len(data)
+
+    def _prepend_to_buffer(self, data: bytes):
+        self._buffer.appendleft(data)
+        self._buflen += len(data)
+
+    def _pop_data_from_buffer(self) -> bytes:
+        data = self._buffer.popleft()
+        self._buflen -= len(data)
+        return data
+
+    def _pop_everything_from_buffer(self) -> bytes:
+        data = b"".join(self._buffer)
+        self._buflen = 0
+        self._buffer.clear()
+
+        return data
+
+    def _try_write_next_chunk(self):
+        chunk_buffer = []
+        chunk_len = 0
+
+        length_left = self._context.chunk_size
+        while True:
+            if not self._buffer:
+                break
+
+            data = self._pop_data_from_buffer()
+            data_len = len(data)
+            if data_len > length_left:
+                data, data_rest = data[:length_left], data[length_left:]
+                self._prepend_to_buffer(data_rest)
+                data_len = length_left
+
+            chunk_buffer.append(data)
+            length_left -= data_len
+            chunk_len += data_len
+
+            if not length_left:
+                break
+
+        if not chunk_len:
+            return
+
+        chunk_buffer.append(b"\r\n")
+
+        self._last_writer.write(
+            encoding.ensure_bytes("{:x}\r\n".format(chunk_len)))
+        self._last_writer.write(b"".join(chunk_buffer))
+
+    def _try_flush_pending_buffer(self, enforce: bool=False):
+        while True:
+            if (not enforce) and self._buflen < self._context.chunk_size:
+                return
+
+            if not self._buflen:
+                return
+
+            self._try_write_next_chunk()
+
+    def _write_impl(self, data: bytes):
+        self._append_to_buffer(data)
+
+        self._try_flush_pending_buffer()
+
+    def _write_eof_impl(self):
+        self._try_flush_pending_buffer(enforce=True)
+        self._last_writer.write(b"0\r\n\r\n")
+
+        self._last_writer.write_eof()
+
+    def _abort_impl(self):
+        # For chunked body writer, abort is not to write the last chunk.
+        self._last_writer.write_eof()
 
 
 class _H1WriteUntilEOFBodyStreamWriter(_H1BaseBodyStreamWriter):
-    pass
+    def _write_impl(self, data: bytes):
+        self._last_writer.write(data)
+
+    def _write_eof_impl(self):
+        self._last_writer.write_eof()
 
 
 class _H1EmptyBodyStreamWriter(_H1BaseBodyStreamWriter):
     def __init__(
-        self, last_writer: Optional[streams.AbstractStreamWriter],
-            *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        self, last_writer: streams.AbstractStreamWriter,
+        context: Optional[H1Context], *args,
+            loop: Optional[asyncio.AbstractEventLoop]=None, **kwargs):
+        super(streams.BaseStreamWriter, self).__init__(*args, **kwargs)
         self.write_eof()
 
     def _write_impl(self, data: bytes):
@@ -787,6 +928,9 @@ class _H1EmptyBodyStreamWriter(_H1BaseBodyStreamWriter):
 
     def _write_eof_impl(self):
         pass
+
+    def write_eof(self):
+        super(streams.BaseStreamWriter, self).write_eof()
 
     async def wait_closed(self):
         return
@@ -868,6 +1012,61 @@ class _H1StreamWriter(
 
         return self._outgoing
 
+    def _determine_body_writer(self):
+        assert self._body_writer is None
+        if self.outgoing.headers["connection"].lower().strip() == "upgrade":
+            self._body_writer = _H1EmptyBodyStreamWriter(None, None)
+            # Prevent further writing.
+
+        writers = []
+        eof_determined = False
+        if not self.context.is_client:
+            # HEAD requests and 204, 304 responses has no body.
+            if self.incoming.method == "HEAD":
+                writers.append(_H1EmptyBodyStreamWriter)
+                eof_determined = True
+
+            elif self.outgoing.status_code in (204, 304):
+                writers.append(_H1EmptyBodyStreamWriter)
+                eof_determined = True
+
+        if not eof_determined:  # Check Transfer-Encoding.
+            if "transfer-encoding" in self.outgoing.headers.keys():
+                transfer_encoding = httputils.parse_semicolon_header(
+                    self.outgoing.headers["transfer-encoding"])
+
+                last_transfer_encoding = list(
+                    transfer_encoding.keys())[-1].strip()
+
+                if ("chunked" in transfer_encoding.keys() and
+                        last_transfer_encoding != "chunked"):
+                    raise _H1BadInitialError(
+                        "Chunked transfer encoding found, "
+                        "but not at last.")
+
+                if "identity" in transfer_encoding.keys():
+                    if len(transfer_encoding) != 1:
+                        raise _H1BadInitialError(
+                            "Identity is not the only transfer encoding.")
+
+                if last_transfer_encoding == "chunked":
+                    writers.append(_H1ChunkedBodyStreamWriter)
+                    eof_determined = True
+
+        if not eof_determined:  # Write until EOF.
+            writers.append(_H1WriteUntilEOFBodyStreamWriter)
+
+        assert len(writers) > 0
+        last_writer = _H1WrappedBodyStreamWriter(self._variables.tcp_stream)
+
+        for BodyReader in readers:
+            last_writer = BodyReader(
+                last_writer=last_writer,
+                context=self.context,
+                loop=self._loop)
+
+        self._body_writer = last_writer
+
     async def send_response(
         self, *, status_code: int,
             headers: Optional[Mapping[compat.Text, compat.Text]]=None):
@@ -886,6 +1085,8 @@ class _H1StreamWriter(
 
             self._outgoing = builder.built_initial
 
+            self._determine_body_writer()
+
         except:
             self.close()
             raise
@@ -902,16 +1103,14 @@ class _H1StreamWriter(
             await builder.build_and_write(request)
             self._outgoing = builder.built_initial
 
+            self._determine_body_writer()
+
         else:
             assert request is None
 
     async def _accept_upgrade(
             self, headers: Mapping[compat.Text, compat.Text]):
         await self.send_response(status_code=101, headers=headers)
-
-        assert self._body_writer is None
-        self._body_writer = _H1EmptyBodyStreamWriter()
-        # Prevent further writing.
 
     @abc.abstractmethod
     def _write_impl(self, data: bytes):
@@ -1144,7 +1343,7 @@ class _H1Stream:
                             "Chunked transfer encoding found, "
                             "but not at last.")
 
-                    if last_transfer_encoding == "identity":
+                    if "identity" in transfer_encoding.keys():
                         if len(transfer_encoding) != 1:
                             raise _H1BadInitialError(
                                 "Identity is not the only transfer encoding.")
