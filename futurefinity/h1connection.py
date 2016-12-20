@@ -213,6 +213,10 @@ class _H1Response(httpabc.AbstractHTTPResponse):
 
 
 class H1Context(httpabc.AbstractHTTPContext):
+    """
+    The Context for HTTP/1.x.
+    This may be shared through multiple http connections.
+    """
     def __init__(
         self, is_client: bool, *, idle_timeout: int=10,
         max_initial_length: int=8 * 1024,  # 8K
@@ -248,15 +252,47 @@ class H1Context(httpabc.AbstractHTTPContext):
 
 class _H1ConnnectionVariables:
     def __init__(
-        self, tcp_stream: streams.AbstractStream,
-            handler_factory: Callable[[], httpabc.AbstractHTTPStreamHandler]):
+        self, context: H1Context, tcp_stream: streams.AbstractStream,
+        handler_factory: Callable[[], httpabc.AbstractHTTPStreamHandler],
+            loop: asyncio.AbstractEventLoop):
+        self._loop = loop
+        self._context = context
+
         self._http_version = 11
-        self._can_keep_alive = True
+        self._can_keep_alive = context.allow_keep_alive
 
         self._tcp_stream = tcp_stream
         self._handled_stream_num = 0
 
         self._handler_factory = handler_factory
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        return self._loop
+
+    @property
+    def context(self) -> H1Context:
+        return self._context
+
+    @property
+    def is_client(self) -> bool:
+        return self._context._is_client
+
+    @property
+    def idle_timeout(self) -> int:
+        return self._context._idle_timeout
+
+    @property
+    def max_initial_length(self) -> int:
+        return self._context._max_initial_length
+
+    @property
+    def allow_keep_alive(self) -> bool:
+        return self._context._allow_keep_alive
+
+    @property
+    def chunk_size(self) -> int:
+        return self._context._chunk_size
 
     @property
     def http_version(self) -> int:
@@ -287,7 +323,7 @@ class _H1ConnnectionVariables:
     def create_stream_handler(self) -> httpabc.AbstractHTTPStreamHandler:
         return self._handler_factory()
 
-    def detach_stream(self) -> streams.AbstractStream:
+    def detach_tcp_stream(self) -> streams.AbstractStream:
         assert self._tcp_stream is not None
 
         self.disable_keep_alive()
@@ -295,11 +331,104 @@ class _H1ConnnectionVariables:
         return tcp_stream
 
 
-class _BaseH1InitialProcessor:
-    def __init__(
-            self, context: "H1Context", variables: _H1ConnnectionVariables):
-        self._context = context
-        self._variables = variables
+class _H1StreamVariables:
+    def __init__(self, conn_vars: _H1ConnnectionVariables):
+        self._conn_vars = conn_vars
+
+        self._incoming = None
+        self._outgoing = None
+
+        self._conn_vars.inc_handled_stream_num()
+        self._stream_id = self._conn_vars.handled_stream_num
+
+    @property
+    def conn_vars(self) -> _H1ConnnectionVariables:
+        return self._conn_vars
+
+    @property
+    def loop(self) -> asyncio.AbstractEventLoop:
+        return self._conn_vars.loop
+
+    @property
+    def context(self) -> H1Context:
+        return self._conn_vars.context
+
+    @property
+    def is_client(self) -> bool:
+        return self._conn_vars.is_client
+
+    @property
+    def stream_id(self) -> _H1ConnnectionVariables:
+        return self._conn_vars
+
+    @property
+    def idle_timeout(self) -> int:
+        return self._conn_vars.idle_timeout
+
+    @property
+    def max_initial_length(self) -> int:
+        return self._conn_vars.max_initial_length
+
+    @property
+    def allow_keep_alive(self) -> bool:
+        return self._conn_vars.allow_keep_alive
+
+    @property
+    def chunk_size(self) -> int:
+        return self._conn_vars._chunk_size
+
+    @property
+    def http_version(self) -> int:
+        return self._conn_vars.http_version
+
+    @property
+    def tcp_stream(self) -> Optional[streams.AbstractStream]:
+        return self._conn_vars._tcp_stream
+
+    @property
+    def can_keep_alive(self) -> bool:
+        return self._conn_vars._can_keep_alive
+
+    @property
+    def incoming(self) -> Optional[Union[_H1Request, _H1Response]]:
+        return self._incoming
+
+    @property
+    def outgoing(self) -> Optional[Union[_H1Request, _H1Response]]:
+        return self._incoming
+
+    @property
+    def request(self) -> Optional[_H1Request]:
+        if self._conn_vars.is_client:
+            return self._outgoing
+
+        else:
+            return self._incoming
+
+    @property
+    def response(self) -> Optional[_H1Response]:
+        if self._conn_vars.is_client:
+            return self._incoming
+
+        else:
+            return self._outgoing
+
+    def set_incoming(self, val: Union[_H1Request, _H1Response]):
+        assert self._incoming is None
+        self._incoming = val
+
+    def set_outgoing(self, val: Union[_H1Request, _H1Response]):
+        assert self._outgoing is None
+        self._outgoing = val
+
+    def disable_keep_alive(self):
+        self._conn_vars.disable_keep_alive()
+
+    def downgrade_http_version(self):
+        self._conn_vars.downgrade_http_version()
+
+    def detach_tcp_stream(self) -> streams.AbstractStream:
+        return self._conn_vars.detach_tcp_stream()
 
 
 class _H1BadInitialError(Exception):
@@ -310,9 +439,9 @@ class _H1InitialTooLargeError(Exception):
     pass
 
 
-class _H1InitialParser(_BaseH1InitialProcessor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class _H1InitialParser:
+    def __init__(self, stream_vars: _H1StreamVariables):
+        self._stream_vars = stream_vars
 
         self._read_len = 0
         self._line_separator = None
@@ -549,7 +678,9 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
         self._tcp_stream.write(encoding.ensure_bytes(
             "".join(self._pending_data), encoding="latin-1"))
 
-    async def build_and_write(self, initial: Union[_H1Request, _H1Response]):
+    async def build_and_write(
+        self, initial: Union[_H1Request, _H1Response]
+            ) -> Union[_H1Request, _H1Response]:
         if self._exc:
             raise self._exc
 
@@ -593,6 +724,8 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
                 self._built_initial = _H1Response(
                     status_code=initial.status_code,
                     headers=self._justified_headers)
+
+            return self._built_initial
 
         except Exception as e:
             self._exc = e
@@ -1214,11 +1347,10 @@ class _H1ReadFinished(Exception):
 
 
 class _H1Stream:
-    def __init__(self, conn: "H1Connection"):
-        self._conn = conn
+    def __init__(self, conn_vars: _H1ConnnectionVariables):
+        self._vars = _H1StreamVariables(conn_vars)
 
         self._pending_incoming = None
-        self._incoming = None
 
         self._writer = None
 
@@ -1229,33 +1361,24 @@ class _H1Stream:
         self._read_finished = False
 
     @property
-    def _loop(self) -> asyncio.AbstractEventLoop:
-        return self._conn._loop
-
-    @property
     def context(self) -> AbstractHTTPContext:
-        return self._conn.context
+        return self._vars.context
 
-    @property
-    def _variables(self) -> _H1ConnnectionVariables:
-        return self._conn._variables
-
-    async def _read_incoming_initial(self):
-        assert (self._pending_incoming and self._incoming) is None
-        parser = _H1InitialParser(
-            context=self.context, variables=self._variables)
+    async def _read_incoming(self):
+        assert self._pending_incoming is None
+        parser = _H1InitialParser(self._vars)
         self._pending_incoming = await parser.read_and_parse()
 
     async def init_stream(
         self, request: Optional[httpabc.AbstractHTTPRequest]=None
             ) -> _H1StreamWriter:
         assert self._writer is None
-        self._writer = _H1StreamWriter(self)
+        self._writer = _H1StreamWriter(self._vars)
 
         await self._writer._init_stream_writer(request)
-        if not self.context.is_client:
-            # Read the request for server before return writer.
-            await self._read_incoming_initial()
+        if not self._vars.is_client:
+            # Read the request for server before returning the writer.
+            await self._read_incoming()
 
         return self._writer
 
@@ -1284,7 +1407,7 @@ class _H1Stream:
     async def next_event(self) -> httpabc.AbstractEvent:
         if not self._incoming:
             if not self._pending_incoming:
-                await self._read_incoming_initial()
+                await self._read_incoming()
 
             self._incoming, self._pending_incoming = \
                 self._pending_incoming, None
@@ -1399,26 +1522,29 @@ class H1Connection(httpabc.AbstractHTTPConnection):
         self, context: H1Context, tcp_stream: streams.AbstractStream,
         handler_factory: Callable[[], httpabc.AbstractHTTPStreamHandler], *,
             loop: Optional[asyncio.AbstractEventLoop]=None):
-        self._loop = loop or asyncio.get_event_loop()
-        self._context = context
-
-        self._variables = _H1ConnnectionVariables(
-            tcp_stream=tcp_stream, handler_factory=handler_factory)
+        loop = loop or asyncio.get_event_loop()
+        self._vars = _H1ConnnectionVariables(
+            context=context, tcp_stream=tcp_stream,
+            handler_factory=handler_factory, loop=loop)
 
         self._closing = False
 
         self._serving_fur = None
 
+        self._current_http_stream = None
+
         self._send_request_fur = None
         self._handler_for_request_fur = None
 
+        self._send_request_scheme = None
+
     @property
     def http_version(self) -> int:
-        return self._variables.http_version
+        return self._vars.http_version
 
     @property
     def context(self) -> H1Context:
-        return self._context
+        return self._vars.context
 
     async def send_request(
         self, *, method: compat.Text,
@@ -1430,43 +1556,31 @@ class H1Connection(httpabc.AbstractHTTPConnection):
 
         This method is only usable on client side.
         """
-        if not self.context.is_client:
+        if not self._vars.is_client:
             raise httpabc.InvalidHTTPOperationError(
                 "An HTTP server cannot send requests to the remote.")
 
-        assert self._serving_fur is not None, \
-            "The connection is not being handled."
-
-        if not self._variables.tcp_stream:
-                raise httpabc.InvalidHTTPOperationError(
-                    "The tcp stream has been "
-                    "detached from the connection.")
-
-        if self._variables._tcp_stream.closed():
-            self.close()
-
-        if self.closed():
-            raise httpabc.InvalidHTTPOperationError(
-                "The connection has been closed.")
-
-        if self._send_request_fur.done():
+        if self._send_request_fur is None or self._send_request_fur.done():
             raise RuntimeError(
-                "HTTP/1.x can only have one stream per connection "
-                "at the same time.")
+                "The connection cannot take your request now. "
+                "Maybe it's closed, or it's handling another request.")
 
-        scheme = "http" if self._variables._tcp_stream.get_extra_info(
-            "sslcontext", None) is None else "https"
+        if not self._send_request_scheme:
+            if self._vars._tcp_stream.get_extra_info("sslcontext", None):
+                self._send_request_scheme = "https"
+
+            else:
+                self._send_request_scheme = "http"
+
         request = _H1Request(
-            method=method, scheme=scheme, uri=uri, authority=authority,
-            headers=headers)
+            method=method, scheme=self._send_request_scheme, uri=uri,
+            authority=authority, headers=headers)
 
         self._send_request_fur.set_result(request)
 
-        self._handler_for_request_fur = compat.create_future(self._loop)
+        self._handler_for_request_fur = compat.create_future(self._vars._loop)
 
-        handler = await self._handler_for_request_fur
-
-        return handler
+        return await self._handler_for_request_fur
 
     async def start_serving(self):
         assert self._serving_fur is False, "The connection is serving."
@@ -1475,34 +1589,61 @@ class H1Connection(httpabc.AbstractHTTPConnection):
         self._serving_fur = compat.ensure_future(
             self._serve_until_close(self), loop=self._loop)
 
+    async def _init_next_stream(self) -> (_H1Stream, _H1StreamWriter):
+        assert self._send_request_fur is None or self._send_request_fur.done()
+
+        http_stream = _H1Stream(self._vars)
+
+        if self.context.is_client:
+            while True:
+                try:
+                    self._send_request_fur = compat.create_future(
+                        self._loop)
+
+                    wait_closed_fur = self._vars.tcp_stream.wait_closed()
+                    done, pending = await asyncio.wait(
+                        [self._send_request_fur,
+                         wait_closed_fur],
+                        return_when=asyncio.FIRST_COMPLETED)
+
+                    for fur in pending:  # Cancel All the pending futures.
+                        fur.cancel()
+
+                    if self._send_request_fur in done:
+                        request = self._send_request_fur.result()
+
+                    else:
+                        raise streams.StreamClosedError("Stream Closed.")
+
+                except asyncio.CancelledError:
+                    continue
+
+                else:
+                    break
+
+        else:  # Server reads the request from the remote.
+            request = None
+
+        writer = await http_stream.init_stream(request)
+
+        return http_stream, writer
+
     async def _serve_until_close(self):
         try:
             while True:
-                http_stream = _H1Stream(self)
-
                 try:
-                    if self.context.is_client:
-                        while True:
-                            try:
-                                self._send_request_fur = compat.create_future(
-                                    self._loop)
-                                request = await self._send_request_fur
+                    http_stream, writer = await self._init_next_stream()
+                    self._current_http_stream = http_stream
 
-                            except asyncio.CancelledError:
-                                continue
+                except Exception as e:
+                    if (self._handler_for_request_fur is not None and
+                            not self._handler_for_request_fur.done()):
+                        self._handler_for_request_fur.set_exception(e)
 
-                            else:
-                                break
+                    self.close()
+                    return
 
-                        writer = await http_stream.init_stream(request)
-
-                    else:
-                        writer = await http_stream.init_stream()
-
-                except (streams.StreamEOFError, asyncio.IncompleteReadError,
-                        ConnectionError):
-                    break
-                handler = self._variables.create_stream_handler()
+                handler = self._vars.create_stream_handler()
 
                 try:
                     maybe_awaitable = handler.stream_created(writer)
@@ -1528,32 +1669,55 @@ class H1Connection(httpabc.AbstractHTTPConnection):
 
                     await writer.wait_closed()
 
-                    if not self._variables.can_keep_alive:
-                        break  # Keep-Alive Disabled.
+                except Exception as e:
+                    if (self._handler_for_request_fur is not None and
+                            not self._handler_for_request_fur.done()):
+                        self._handler_for_request_fur.set_exception(e)
 
-                    if not self._variables.tcp_stream:
-                        break  # Detached by upgrading.
+                    self._current_http_stream.abort()
+                    self._vars.tcp_stream.close()
 
-                    if self._variables.tcp_stream.closed():
-                        break  # Stream Closed.
+                    try:
+                        maybe_awaitable = handler.stream_closed(None)
+                        if inspect.isawaitable(maybe_awaitable):
+                            await maybe_awaitable
 
-                except Exception as exc:
-                    maybe_awaitable = handler.stream_closed(exc)
-                    if inspect.isawaitable(maybe_awaitable):
-                        await maybe_awaitable
-                    # Log Exception of stream_closed() if available.
-                    """_log.error(
-                    "Error Occurred inside stream_closed.",
-                    exc_info=sys.exc_info())"""
+                    except:
+                        _log.error(
+                            "Error occurred in stream_closed().",
+                            exc_info=sys.exc_info())
+
+                    return
 
                 else:
-                    maybe_awaitable = handler.stream_closed(None)
-                    if inspect.isawaitable(maybe_awaitable):
-                        await maybe_awaitable
-                    # Log Exception of stream_closed() if available.
+                    try:
+                        maybe_awaitable = handler.stream_closed(None)
+                        if inspect.isawaitable(maybe_awaitable):
+                            await maybe_awaitable
+
+                    except:
+                        _log.error(
+                            "Error occurred in stream_closed(), "
+                            "tear down the connection.",
+                            exc_info=sys.exc_info())
+
+                        return
+
+                    if not self._vars.can_keep_alive:
+                        break  # Keep-Alive Disabled.
+
+                    if not self._vars.tcp_stream:
+                        break  # Detached by upgrading.
+
+                    if self._vars.tcp_stream.closed():
+                        break  # Stream Closed.
 
         finally:
+            self._current_http_stream = None
             self.close()
+
+            if self._vars.tcp_stream:
+                self._vars.tcp_stream.close()
 
     def close(self):
         if self._closing:
@@ -1561,7 +1725,16 @@ class H1Connection(httpabc.AbstractHTTPConnection):
 
         self._closing = True
 
-        self._variables.disable_keep_alive()
+        self._vars.disable_keep_alive()
+
+        if not self._current_http_stream:
+            if self._vars.tcp_stream:
+                self._vars.tcp_stream.close()
+
+            if self._serving_fur:
+                self._serving_fur.cancel()
+
+        self._current_http_stream = None
 
     async def wait_closed(self):
         try:
@@ -1571,5 +1744,5 @@ class H1Connection(httpabc.AbstractHTTPConnection):
             pass
 
     def __end__(self):
-        super().__end__()
+        self._current_http_stream = None
         self.close()
