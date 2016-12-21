@@ -26,9 +26,10 @@ else:
     import futurefinity
     import futurefinity.testutils
 
-install_requires = ["packaging"]
+install_requires = ["packaging>=16.5"]
 
 full_requires = ["cryptography>=1.2,<2.0"]
+full_requires.extend(install_requires)
 
 tests_require = ["pytest>=3.0,<4.0"]
 tests_require.extend(full_requires)
