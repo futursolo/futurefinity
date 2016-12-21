@@ -20,20 +20,18 @@ from setuptools import find_packages, setup
 import pip
 import sys
 
-setup_requires = ["packaging>=16.5"]
-
-try:
-    import packaging
-
-except ImportError:
-    pip.main(["install"] + setup_requires)
-    import packaging
-
 if not sys.version_info[:3] >= (3, 5, 0):
     raise RuntimeError("FutureFinity requires Python 3.5.0 or higher.")
 
-else:
-    import futurefinity._version
+setup_requires = ["packaging>=16.5", "aiofiles>=0.3.0,<1.0"]
+
+try:
+    import futurefinity
+    import futurefinity.testutils
+
+except ImportError:
+    pip.main(["install"] + setup_requires)
+    import futurefinity
     import futurefinity.testutils
 
 install_requires = []
@@ -48,7 +46,7 @@ tests_require.extend(full_requires)
 if __name__ == "__main__":
     setup(
         name="futurefinity",
-        version=futurefinity._version.version,
+        version=futurefinity.version,
         author="Futur Solo",
         author_email="futursolo@gmail.com",
         url="https://github.com/futursolo/futurefinity",
