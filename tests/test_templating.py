@@ -36,7 +36,7 @@ class _AsyncTimeIterator:
         self._iterated_time = []
 
     def __aiter__(self):
-        if not futurefinity.compat.PY352:
+        if not futurefinity.compat.pyver_satisfies(">=3.5.2"):
             fur = asyncio.Future()
             fur.set_result(self)
             return fur

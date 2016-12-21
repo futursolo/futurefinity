@@ -31,14 +31,6 @@ import unittest.mock
 
 
 class HTTPHeadersTestCase:
-    def test_capitalized_http_v1_headers(self):
-        capitalize_header = futurefinity.protocol.CapitalizedHTTPv1Headers()
-
-        assert capitalize_header["set-cookie"] == "Set-Cookie"
-        assert capitalize_header["SET-COOKIE"] == "Set-Cookie"
-        assert capitalize_header["sET-CooKIe"] == "Set-Cookie"
-        assert capitalize_header["MY-cUsToM-heAdER"] == "My-Custom-Header"
-
     def test_http_headers_parse(self):
         test_string = "Header-A: value-a\r\nHeader-B: value-b\r\n"
 

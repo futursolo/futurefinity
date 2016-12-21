@@ -15,22 +15,21 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Optional, Any, Union, Tuple
+from typing import Optional, Any, Union, Tuple, Callable
 from types import TracebackType
 
 import sys
 import typing
 import asyncio
 import inspect
+import functools
 import collections.abc
+import packaging.version
+import packaging.specifiers
 
 __all__ = [
-    "PY350", "PY351", "PY352", "Text", "TYPE_CHECKING", "Awaitable",
+    "Text", "TYPE_CHECKING", "Awaitable", "ExcType", "pyver_satisfies"
     "ensure_future", "create_future"]
-
-PY350 = sys.version_info[:3] >= (3, 5, 0)
-PY351 = sys.version_info[:3] >= (3, 5, 1)
-PY352 = sys.version_info[:3] >= (3, 5, 2)
 
 Text = getattr(typing, "Text", str)
 TYPE_CHECKING = getattr(typing, "TYPE_CHECKING", False)
@@ -43,12 +42,24 @@ else:
             typing.Generic[typing.T_co], extra=collections.abc.Awaitable):
         __slots__ = ()
 
-ExcType = Union[Tuple[Any, BaseException, TracebackType],
-                Tuple[None, None, None]]
+ExcType = Union[
+    Tuple[Callable[..., BaseException], BaseException, TracebackType],
+    Tuple[None, None, None]]
 # Do not use Type[BaseException] for the first argument,
 # or a TypeError will be raised.
 
-if PY351:
+
+@functools.lru_cache(maxsize=128, typed=False)
+def pyver_satisfies(specifiers: Text) -> bool:
+    """
+    Check Python Version by PEP440.
+    """
+    specifiers = packaging.specifiers.SpecifierSet(specifiers)
+    version = packaging.version.Version(sys.version.split()[0])
+    return version in specifiers
+
+
+if pyver_satisfies(">=3.5.1"):
     ensure_future = asyncio.ensure_future
 
 else:

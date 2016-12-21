@@ -15,7 +15,11 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+from typing import Optional, Mapping
+
+from . import compat
 from . import httpabc
+from . import streams
 
 import abc
 

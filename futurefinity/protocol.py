@@ -27,6 +27,7 @@ from . import encoding
 from . import security
 from . import httputils
 from . import magicdict
+from . import h1connection
 from ._version import version as futurefinity_version
 
 from collections import namedtuple
@@ -72,77 +73,6 @@ class ProtocolError(Exception):
     pass
 
 
-class CapitalizedHTTPv1Headers(dict):
-    """
-    Convert a string to HTTPHeader style capitalize.
-
-    .. code-block:: python3
-
-      >>> capitalize_header = CapitalizedHTTPv1Header()
-      >>> capitalize_header["set-cookie"]
-      'Set-Cookie'
-      >>> capitalize_header["SET-COOKIE"]
-      'Set-Cookie'
-      >>> capitalize_header["sET-CooKIe"]
-      'Set-Cookie'
-      >>> capitalize_header["MY-cUsToM-heAdER"]
-      'My-Custom-Header'
-    """
-    def __init__(self, *args, **kwargs):
-        dict.__init__(self, *args, **kwargs)
-        self.update({
-            "te": "TE",
-            "age": "Age",
-            "date": "Date",
-            "etag": "ETag",
-            "from": "From",
-            "host": "Host",
-            "vary": "Vary",
-            "allow": "Allow",
-            "range": "Range",
-            "accept": "Accept",
-            "cookie": "Cookie",
-            "expect": "Expect",
-            "server": "Server",
-            "referer": "Referer",
-            "if-match": "If-Match",
-            "if-range": "If-Range",
-            "location": "Location",
-            "connection": "Connection",
-            "keep-alive": "Keep-Alive",
-            "set-cookie": "Set-Cookie",
-            "user-agent": "User-Agent",
-            "content-md5": "Content-MD5",
-            "retry-after": "Retry-After",
-            "content-type": "Content-Type",
-            "max-forwards": "Max-Forwards",
-            "accept-ranges": "Accept-Ranges",
-            "authorization": "Authorization",
-            "content-range": "Content-Range",
-            "if-none-match": "If-None-Match",
-            "last-modified": "Last-Modified",
-            "accept-charset": "Accept-Charset",
-            "content-length": "Content-Length",
-            "accept-encoding": "Accept-Encoding",
-            "accept-language": "Accept-Language",
-            "content-encoding": "Content-Encoding",
-            "www-authenticate": "WWW-Authenticate",
-            "if-modified-since": "If-Modified-Since",
-            "proxy-authenticate": "Proxy-Authenticate",
-            "if-unmodified-since": "If-Unmodified-Since",
-            "proxy-authorization": "Proxy-Authorization",
-        })
-
-    def __getitem__(self, key: compat.Text) -> compat.Text:
-        if key not in self:
-            self[key] = key.title()
-
-        return dict.__getitem__(self, key)
-
-
-_capitalize_header = CapitalizedHTTPv1Headers()
-
-
 class HTTPHeaders(magicdict.TolerantMagicDict):
     """
     HTTPHeaders class, based on TolerantMagicDict.
@@ -170,7 +100,8 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
         """
         headers_str = ""
         for (name, value) in self.items():
-            headers_str += "{}: {}".format(_capitalize_header[name], value)
+            headers_str += "{}: {}".format(
+                h1connection.capitalize_h1_header[name], value)
             headers_str += _CRLF_MARK
 
         return encoding.ensure_bytes(headers_str)

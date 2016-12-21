@@ -34,7 +34,7 @@ import collections
 if compat.TYPE_CHECKING:
     from futurefinity import web
 
-if compat.PY351:
+if compat.pyver_satisfies(">=3.5.1"):
     TextPattern = Pattern[compat.Text]
 
 else:

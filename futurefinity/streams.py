@@ -132,7 +132,7 @@ class AbstractStreamReader(abc.ABC, collections.abc.AsyncIterator):
         """
         raise NotImplementedError
 
-    if compat.PY352:
+    if compat.pyver_satisfies(">=3.5.2"):
         @abc.abstractmethod
         def __aiter__(self) -> "AbstractStreamReader":
             """
@@ -512,7 +512,7 @@ class BaseStreamReader(AbstractStreamReader):
 
         return default
 
-    if compat.PY352:
+    if compat.pyver_satisfies(">=3.5.2"):
         def __aiter__(self) -> "BaseStreamReader":
             return self
 
@@ -701,7 +701,7 @@ class Stream(BaseStream):
 
     @cached_property
     def _check_if_closed_impl(self) -> Callable[[], bool]:
-        if compat.PY351:
+        if compat.pyver_satisfies(">=3.5.1"):
             return self.transport.is_closing
 
         # Python 3.5.0 Compatibility Layer.

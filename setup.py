@@ -26,7 +26,7 @@ else:
     import futurefinity
     import futurefinity.testutils
 
-install_requires = []
+install_requires = ["packaging"]
 
 full_requires = ["cryptography>=1.2,<2.0"]
 

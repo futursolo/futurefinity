@@ -15,24 +15,16 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from ._version import __version__, version
+import futurefinity
 
-from . import log
-from . import web
-from . import client
-from . import compat
-from . import server
-from . import httpabc
-from . import routing
-from . import streams
-from . import encoding
-from . import protocol
-from . import security
-from . import magicdict
-from . import templating
-from . import h1connection
 
-__all__ = [
-    "__version__", "version", "log", "web", "client", "compat", "server",
-    "httpabc", "routing", "streams", "encoding", "protocol", "security",
-    "magicdict", "templating", "h1connection"]
+class CapitalizedH1HeadersTestCase:
+    def test_capitalize_h1_headers(self):
+        assert futurefinity.h1connection.capitalize_h1_header[
+            "set-cookie"] == "Set-Cookie"
+        assert futurefinity.h1connection.capitalize_h1_header[
+            "SET-COOKIE"] == "Set-Cookie"
+        assert futurefinity.h1connection.capitalize_h1_header[
+            "sET-CooKIe"] == "Set-Cookie"
+        assert futurefinity.h1connection.capitalize_h1_header[
+            "MY-cUsToM-heAdER"] == "My-Custom-Header"

@@ -78,7 +78,7 @@ class ResponseEntityTooLarge(ClientError):
 
 
 def _check_if_transport_closed(transport: asyncio.BaseTransport) -> bool:
-    if compat.PY351:
+    if compat.pyver_satisfies(">=3.5.1"):
         return transport.is_closing()
 
     try:

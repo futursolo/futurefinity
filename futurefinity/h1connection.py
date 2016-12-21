@@ -130,7 +130,7 @@ class CapitalizedH1Headers(dict):
         })
         self._mutex_lock = threading.Lock()
 
-    def __getitem__(self, key: Text) -> Text:
+    def __getitem__(self, key: compat.Text) -> compat.Text:
         key = key.lower()
 
         if key not in self:
@@ -221,7 +221,7 @@ class H1Context(httpabc.AbstractHTTPContext):
         self, is_client: bool, *, idle_timeout: int=10,
         max_initial_length: int=8 * 1024,  # 8K
         allow_keep_alive: bool=True,
-        chunk_size: int=10 * 1024,  # 10K
+        chunk_size: int=10 * 1024  # 10K
             ):
         self._is_client = is_client
         self._idle_timeout = idle_timeout
@@ -1083,7 +1083,7 @@ class _H1StreamWriter(
         return self._vars.stream_id
 
     @property
-    def context(self) -> AbstractHTTPContext:
+    def context(self) -> httpabc.AbstractHTTPContext:
         return self._vars.context
 
     @cached_property
@@ -1249,7 +1249,7 @@ class _H1StreamWriter(
         self._close_impl()
 
     def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+            self, name: compat.Text, default: Any=_DEFAULT_MARK) -> Any:
 
         if self._vars.tcp_stream is not None:
             return self._vars.tcp_stream.get_extra_info(name, default)
@@ -1307,7 +1307,7 @@ class _H1Stream:
         self._read_finished = False
 
     @property
-    def context(self) -> AbstractHTTPContext:
+    def context(self) -> httpabc.AbstractHTTPContext:
         return self._vars.context
 
     async def _read_incoming(self):
@@ -1521,7 +1521,7 @@ class H1Connection(httpabc.AbstractHTTPConnection):
         self, *, method: compat.Text,
         uri: compat.Text, authority: Optional[compat.Text]=None,
         headers: Optional[Mapping[compat.Text, compat.Text]]=None
-            ) -> AbstractHTTPStreamHandler:
+            ) -> httpabc.AbstractHTTPStreamHandler:
         """
         Send a request.
 
