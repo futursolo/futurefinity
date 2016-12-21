@@ -66,6 +66,10 @@ _DEFAULT_MARK = Identifier()
 
 _SELF_IDENTIFIER = "futurefinity/" + futurefinity_version
 
+__all__ = [
+    "CapitalizedH1Headers", "capitalize_h1_header", "H1Context",
+    "H1Connection"]
+
 
 class CapitalizedH1Headers(dict):
     """

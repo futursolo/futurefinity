@@ -17,16 +17,27 @@
 
 from setuptools import find_packages, setup
 
+import pip
 import sys
+
+setup_requires = ["packaging>=16.5"]
+
+try:
+    import packaging
+
+except ImportError:
+    pip.main(["install"] + setup_requires)
+    import packaging
 
 if not sys.version_info[:3] >= (3, 5, 0):
     raise RuntimeError("FutureFinity requires Python 3.5.0 or higher.")
 
 else:
-    import futurefinity
+    import futurefinity._version
     import futurefinity.testutils
 
-install_requires = ["packaging>=16.5"]
+install_requires = []
+install_requires.extend(setup_requires)
 
 full_requires = ["cryptography>=1.2,<2.0"]
 full_requires.extend(install_requires)
@@ -37,7 +48,7 @@ tests_require.extend(full_requires)
 if __name__ == "__main__":
     setup(
         name="futurefinity",
-        version=futurefinity.version,
+        version=futurefinity._version.version,
         author="Futur Solo",
         author_email="futursolo@gmail.com",
         url="https://github.com/futursolo/futurefinity",
@@ -47,6 +58,7 @@ if __name__ == "__main__":
         long_description=open("README.rst", "r").read(),
         packages=find_packages(),
         include_package_data=True,
+        setup_requires=setup_requires,
         install_requires=install_requires,
         tests_require=tests_require,
         zip_safe=False,
