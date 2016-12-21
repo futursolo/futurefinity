@@ -441,7 +441,7 @@ class _H1InitialTooLargeError(Exception):
 
 class _H1InitialParser:
     def __init__(self, stream_vars: _H1StreamVariables):
-        self._stream_vars = stream_vars
+        self._vars = stream_vars
 
         self._read_len = 0
         self._line_separator = None
@@ -465,19 +465,19 @@ class _H1InitialParser:
             pass  # nothing is going to happen.
 
         elif http_version == "http/1.0":
-            self._variables.downgrade_http_version()
+            self._vars.downgrade_http_version()
 
         else:
             raise ValueError("Unknown HTTP version.")
 
     async def _read_and_parse_basic_info(self):
         basic_info_line = await asyncio.wait_for(
-            self._variables._tcp_stream.readuntil(b"\n", keep_separator=False),
-            self.context.idle_timeout)
+            self._vars._tcp_stream.readuntil(b"\n", keep_separator=False),
+            self._vars.idle_timeout)
 
         basic_info_len = len(basic_info_line) + 1
 
-        if basic_info_len > self._context.max_initial_length:
+        if basic_info_len > self._vars.max_initial_length:
             raise _H1InitialTooLargeError(
                 "The initial exceeded the initial limit.",
                 total_length)
@@ -506,16 +506,16 @@ class _H1InitialParser:
         line_separator_len = len(self._line_separator)
         while True:
             header_line = await asyncio.wait_for(
-                self._variables._tcp_stream.readuntil(
+                self._vars._tcp_stream.readuntil(
                     self._line_separator, keep_separator=False),
-                self._context.idle_timeout)
+                self._vars.idle_timeout)
 
             self._read_len += header_line + line_separator_length
 
             if not header_line:
                 break  # Headers Completed.
 
-            if self._read_len > self._context.max_initial_length:
+            if self._read_len > self._vars.max_initial_length:
                 raise asyncio.LimitOverrunError(
                     "The intitial exceeded the initial limit.",
                     total_length)
@@ -569,9 +569,9 @@ class _H1InitialParser:
 
             if self._parsed_headers.get(
                     "connection", "close").lower().strip() != "keep-alive":
-                self._variables.disable_keep_alive()
+                self._vars.disable_keep_alive()
 
-            if self.context.is_client:  # Client reads responses.
+            if self._vars.is_client:  # Client reads responses.
                 self._parse_response()
 
             else:  # Server reads requests.
@@ -584,13 +584,11 @@ class _H1InitialParser:
             raise
 
 
-class _H1InitialBuilder(_BaseH1InitialProcessor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class _H1InitialBuilder:
+    def __init__(self, stream_vars: _H1StreamVariables):
+        self._vars = stream_vars
 
         self._pending_data = []
-
-        self._http_version = http_version
 
         self._justified_headers = None
         self._built_initial = None
@@ -598,12 +596,8 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
         self._exc = None
 
     @cached_property
-    def http_version(self) -> int:
-        return self._http_version
-
-    @cached_property
     def _http_version_str(self) -> int:
-        if self.http_version == 11:
+        if self._vars.http_version == 11:
             return "HTTP/1.1"
 
         else:  # HTTP Version Cannot be something else than 10 or 11.
@@ -627,33 +621,31 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
             encoding.ensure_str(response.status_code),
             httputils.status_code_descriptions[status_code]))
 
-    def _justify_request_headers(
-            self, headers: Mapping[compat.Text, compat.Text]):
+    def _justify_request_headers(self, request: _H1Request):
         assert self._justified_headers is None
         self._justified_headers = magicdict.TolerantMagicDict()
-        self._justified_headers.update(headers)
+        self._justified_headers.update(request.headers)
 
         self._justified_headers.setdefault("accept", "*/*")
         self._justified_headers.setdefault("user-agent", _SELF_IDENTIFIER)
 
         if "connection" not in self._justified_headers.keys():
-            if self._variables.can_keep_alive:
+            if self._vars.can_keep_alive:
                 self._justified_headers["connection"] = "Keep-Alive"
 
             else:
                 self._justified_headers["connection"] = "Close"
 
-    def _justify_response_headers(
-            self, headers: Mapping[compat.Text, compat.Text]):
+    def _justify_response_headers(self, response: _H1Response):
         assert self._justified_headers is None
         self._justified_headers = magicdict.TolerantMagicDict()
-        self._justified_headers.update(headers)
+        self._justified_headers.update(response.headers)
 
-        if status_code >= 400:
+        if response.status_code >= 400:
             self._justified_headers["connection"] = "Close"
 
         if "connection" not in self._justified_headers.keys():
-            if self._variables.can_keep_alive:
+            if self._vars.can_keep_alive:
                 self._justified_headers["connection"] = "Keep-Alive"
 
             else:
@@ -662,7 +654,7 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
         self._justified_headers.setdefault("server", _SELF_IDENTIFIER)
 
         if "content-length" not in headers.keys():
-            if self.http_version == 11:
+            if self._vars.http_version == 11:
                 self._justified_headers.setdefault(
                     "transfer-encoding", "Chunked")
                 # Auto Chunked Content Transfer is only enabled for responses.
@@ -688,24 +680,24 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
             raise httpabc.InvalidHTTPOperationError(
                 "The builder is not reusable.")
 
-        if self.context.is_client:  # Client sends requests.
+        if self._vars.is_client:  # Client sends requests.
             assert isinstance(initial, _H1Request)
 
         else:  # Server sends responses.
             assert isinstance(initial, _H1Response)
 
         try:
-            if self.context.is_client:  # Client sends requests.
+            if self._vars.is_client:  # Client sends requests.
                 self._build_request_basic_info(initial)
-                self._justify_request_headers(initial.headers)
+                self._justify_request_headers(initial)
 
             else:  # Server sends responses.
                 self._build_response_basic_info(initial)
-                self._justify_response_headers(initial.headers)
+                self._justify_response_headers(initial)
 
             if self._justified_headers.get(
                     "connection", "close").lower().strip() != "keep-alive":
-                self._variables.disable_keep_alive()
+                self._vars.disable_keep_alive()
 
             self._build_justified_headers()
             self._pending_data.append("\r\n")
@@ -713,7 +705,7 @@ class _H1InitialBuilder(_BaseH1InitialProcessor):
             self._write_pending_data()
             await self._tcp_stream.drain()
 
-            if self.context.is_client:
+            if self._vars.is_client:
                 self._built_initial = _H1Request(
                     method=initial.method, uri=initial.uri,
                     authority=getattr(initial, "authority", None),
@@ -739,10 +731,10 @@ class _H1BodyPrematureEOFError(Exception):
 class _H1BaseBodyStreamReader(streams.BaseStreamReader):
     def __init__(
         self, last_reader: streams.AbstractStreamReader,
-            incoming: Union[_H1Request, _H1Response], *args, **kwargs):
+            stream_vars: _H1StreamVariables, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._last_reader = last_reader
-        self._incoming = incoming
+        self._vars = stream_vars
 
 
 class _H1ContentLengthBodyStreamReader(_H1BaseBodyStreamReader):
@@ -753,7 +745,7 @@ class _H1ContentLengthBodyStreamReader(_H1BaseBodyStreamReader):
     @cached_property
     def _total_length(self) -> int:
         try:
-            return int(self._incoming.headers["content-length"])
+            return int(self._vars.incoming.headers["content-length"])
 
         except Exception as e:
             raise _H1BadInitialError(
@@ -854,7 +846,7 @@ class _H1ChunkedBodyStreamReader(_H1BaseBodyStreamReader):
 class _H1ReadUntilEOFBodyStreamReader(_H1BaseBodyStreamReader):
     async def _fetch_data(self) -> bytes:
         while True:
-            data = await self._body_reader.read(65536)  # 64K.
+            data = await self._last_reader.read(65536)  # 64K.
             if data:  # Filter Empty Bytes.
                 return data
 
@@ -862,8 +854,7 @@ class _H1ReadUntilEOFBodyStreamReader(_H1BaseBodyStreamReader):
 class _H1EmptyBodyStreamReader(_H1BaseBodyStreamReader):
     def __init__(
         self, last_reader: Optional[streams.AbstractStreamReader],
-        incoming: Optional[Union[_H1Request, _H1Response]],
-            *args, **kwargs):
+            stream_vars: Optional[_H1StreamVariables], *args, **kwargs):
         super(streams.BaseStreamReader, self).__init__(*args, **kwargs)
 
     async def _fetch_data(self) -> bytes:
@@ -872,12 +863,11 @@ class _H1EmptyBodyStreamReader(_H1BaseBodyStreamReader):
 
 class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
     def __init__(
-        self, last_writer: streams.AbstractStreamWriter, context: H1Context,
-            *args, loop: Optional[asyncio.AbstractEventLoop]=None, **kwargs):
+        self, last_writer: streams.AbstractStreamWriter,
+            stream_vars: _H1StreamVariables, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._loop = loop
-        self._context = context
         self._last_writer = last_writer
+        self._vars = stream_vars
 
         self._wait_closed_fur = None
         self._wait_closed_lock = asyncio.Lock()
@@ -919,7 +909,8 @@ class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
 
                 assert self._wait_closed_fur is None or \
                     self._wait_closed_fur.done()
-                self._wait_closed_fur = compat.create_future(loop=self._loop)
+                self._wait_closed_fur = compat.create_future(
+                    loop=self._vars._loop)
 
                 try:
                     done, pending = await asyncio.wait(
@@ -983,7 +974,7 @@ class _H1ChunkedBodyStreamWriter(_H1BaseBodyStreamWriter):
         chunk_buffer = []
         chunk_len = 0
 
-        length_left = self._context.chunk_size
+        length_left = self._vars.chunk_size
         while True:
             if not self._buffer:
                 break
@@ -1013,7 +1004,7 @@ class _H1ChunkedBodyStreamWriter(_H1BaseBodyStreamWriter):
 
     def _try_flush_pending_buffer(self, enforce: bool=False):
         while True:
-            if (not enforce) and self._buflen < self._context.chunk_size:
+            if (not enforce) and self._buflen < self._vars.chunk_size:
                 return
 
             if not self._buflen:
@@ -1047,9 +1038,8 @@ class _H1WriteUntilEOFBodyStreamWriter(_H1BaseBodyStreamWriter):
 
 class _H1EmptyBodyStreamWriter(_H1BaseBodyStreamWriter):
     def __init__(
-        self, last_writer: streams.AbstractStreamWriter,
-        context: Optional[H1Context], *args,
-            loop: Optional[asyncio.AbstractEventLoop]=None, **kwargs):
+        self, last_writer: Optional[streams.AbstractStreamWriter],
+            stream_vars: Optional[_H1StreamVariables], *args, **kwargs):
         super(streams.BaseStreamWriter, self).__init__(*args, **kwargs)
         self.write_eof()
 
@@ -1071,23 +1061,16 @@ class _H1EmptyBodyStreamWriter(_H1BaseBodyStreamWriter):
 
 class _H1StreamWriter(
         httpabc.AbstractHTTPStreamWriter, streams.BaseStreamWriter):
-    def __init__(self, http_stream: "_H1Stream"):
-        self._http_stream = http_stream
-
-        self._outgoing = None
-
-        self._variables.inc_handled_stream_num()
-        self._stream_id = self._variables.handled_stream_num
+    def __init__(self, stream_vars: _H1StreamVariables):
+        self._vars = stream_vars
 
         self._body_writer = None
 
         self._eof_written = False
 
-        self._closed = False
-
     @property
     def http_version(self) -> int:
-        return self._variables.http_version
+        return self._vars.http_version
 
     @property
     def stream_id(self) -> int:
@@ -1097,69 +1080,57 @@ class _H1StreamWriter(
         In HTTP/1.x, it keeps tracking the number of handled streams in
         current connection.
         """
-        return self._stream_id
+        return self._vars.stream_id
 
     @property
     def context(self) -> AbstractHTTPContext:
-        return self._http_stream.context
-
-    @property
-    def _variables(self) -> _H1ConnnectionVariables:
-        return self._http_stream._variables
+        return self._vars.context
 
     @cached_property
     def request(self) -> _H1Request:
-        try:
-            if self.context.is_client:
-                return self.outgoing
+        if self._vars.request is None:
+            raise AttributeError("Request is not Ready.")
 
-            else:
-                return self.incoming
-
-        except AttributeError:
-            raise AttributeError("Request is not Ready.") from None
+        return self._vars.request
 
     @cached_property
     def response(self) -> _H1Response:
-        try:
-            if self.context.is_client:
-                return self.incoming
+        if self._vars.response is None:
+            raise AttributeError("Response is not Ready.")
 
-            else:
-                return self.outgoing
-
-        except AttributeError:
-            raise AttributeError("Response is not Ready.") from None
+        return self._vars.response
 
     @cached_property
     def incoming(self) -> Union[_H1Request, _H1Response]:
-        if self._http_stream._incoming is None:
+        if self._vars.incoming is None:
             raise AttributeError("Incoming is not Ready.")
 
-        return self._http_stream._incoming
+        return self._vars.incoming
 
     @cached_property
     def outgoing(self) -> Union[_H1Request, _H1Response]:
-        if self._outgoing is None:
+        if self._vars.outgoing is None:
             raise AttributeError("Outgoing is not Ready.")
 
-        return self._outgoing
+        return self._vars.outgoing
 
     def _determine_body_writer(self):
         assert self._body_writer is None
-        if self.outgoing.headers["connection"].lower().strip() == "upgrade":
-            self._body_writer = _H1EmptyBodyStreamWriter(None, None)
+        if self._vars.outgoing.headers[
+                "connection"].lower().strip() == "upgrade":
+            self._body_writer = _H1EmptyBodyStreamWriter(None, self._vars)
             # Prevent further writing.
+            return
 
         writers = []
         eof_determined = False
-        if not self.context.is_client:
+        if not self._vars.is_client:
             # HEAD requests and 204, 304 responses has no body.
-            if self.incoming.method == "HEAD":
+            if self._vars.incoming.method == "HEAD":
                 writers.append(_H1EmptyBodyStreamWriter)
                 eof_determined = True
 
-            elif self.outgoing.status_code in (204, 304):
+            elif self._vars.outgoing.status_code in (204, 304):
                 writers.append(_H1EmptyBodyStreamWriter)
                 eof_determined = True
 
@@ -1171,17 +1142,6 @@ class _H1StreamWriter(
                 last_transfer_encoding = list(
                     transfer_encoding.keys())[-1].strip()
 
-                if ("chunked" in transfer_encoding.keys() and
-                        last_transfer_encoding != "chunked"):
-                    raise _H1BadInitialError(
-                        "Chunked transfer encoding found, "
-                        "but not at last.")
-
-                if "identity" in transfer_encoding.keys():
-                    if len(transfer_encoding) != 1:
-                        raise _H1BadInitialError(
-                            "Identity is not the only transfer encoding.")
-
                 if last_transfer_encoding == "chunked":
                     writers.append(_H1ChunkedBodyStreamWriter)
                     eof_determined = True
@@ -1190,13 +1150,11 @@ class _H1StreamWriter(
             writers.append(_H1WriteUntilEOFBodyStreamWriter)
 
         assert len(writers) > 0
-        last_writer = _H1WrappedBodyStreamWriter(self._variables.tcp_stream)
+        last_writer = _H1WrappedBodyStreamWriter(
+            self._vars.tcp_stream, self._vars)
 
         for BodyReader in readers:
-            last_writer = BodyReader(
-                last_writer=last_writer,
-                context=self.context,
-                loop=self._loop)
+            last_writer = BodyReader(self._vars.tcp_stream, self._vars)
 
         self._body_writer = last_writer
 
@@ -1204,7 +1162,7 @@ class _H1StreamWriter(
         self, *, status_code: int,
             headers: Optional[Mapping[compat.Text, compat.Text]]=None):
         assert not self.response_written(), "You can only write response once."
-        if not self.context.is_client:
+        if not self._vars.is_client:
             raise httpabc.InvalidHTTPOperationError(
                 "An HTTP client cannot send responses to the remote.")
 
@@ -1212,8 +1170,7 @@ class _H1StreamWriter(
             response = _H1Response(
                 status_code=status_code, headers=headers)
 
-            builder = _H1InitialBuilder(
-                context=self.context, variables=self._variables)
+            builder = _H1InitialBuilder(self._vars)
             await builder.build_and_write(response)
 
             self._outgoing = builder.built_initial
@@ -1229,10 +1186,9 @@ class _H1StreamWriter(
 
     async def _init_stream_writer(
             self, request: Optional[httpabc.AbstractHTTPRequest]=None):
-        if self.context.is_client:
+        if self._vars.is_client:
             assert request is not None
-            builder = _H1InitialBuilder(
-                context=self.context, variables=self._variables)
+            builder = _H1InitialBuilder(self._vars)
             await builder.build_and_write(request)
             self._outgoing = builder.built_initial
 
@@ -1243,12 +1199,14 @@ class _H1StreamWriter(
 
     async def _accept_upgrade(
             self, headers: Mapping[compat.Text, compat.Text]):
+        if "upgrade" not in headers.keys() and self._vars.incoming is not None:
+            headers = magicdict.TolerantMagicDict(headers)
+            headers["upgrade"] = self._vars.incoming.headers.get("upgrade", "")
         await self.send_response(status_code=101, headers=headers)
 
-    @abc.abstractmethod
     def _write_impl(self, data: bytes):
         assert self.response_written(), "You must write response first."
-        raise NotImplementedError
+        self._body_writer.write(data)
 
     async def drain(self):
         if self._body_writer is not None:
@@ -1256,15 +1214,14 @@ class _H1StreamWriter(
 
         # The TCP Stream cannot be detached before the body writer is ready.
         else:
-            await self._variables.tcp_stream.drain()
+            await self._vars.tcp_stream.drain()
 
     def can_write_eof(self) -> bool:
         return self._body_writer is not None
 
-    @abc.abstractmethod
     def _write_eof_impl(self):
         assert self.response_written(), "You must write response first."
-        raise NotImplementedError
+        self._body_writer.write_eof()
 
     def eof_written(self) -> bool:
         if self._body_writer is None:
@@ -1272,27 +1229,18 @@ class _H1StreamWriter(
 
         return self._body_writer.eof_written()
 
-    @abc.abstractmethod
     def _check_if_closed_impl(self) -> bool:
-        raise NotImplementedError
+        if not self._body_writer:
+            return False
 
-    @abc.abstractmethod
+        return self._body_writer.closed()
+
     def _close_impl(self):
-        """if not self._tcp_stream.is_closing():
-            if not self._current_stream.at_eof():
-                _log.warning(
-                    "The body is not properly read, "
-                    "tear down the connection.")
-                self.close()
-                self._tcp_stream.close()"""
-        raise NotImplementedError
+        if self._body_writer:
+            self._body_writer.close()
 
-    @abc.abstractmethod
     async def wait_closed(self):
-        """
-        Wait the writer to close.
-        """
-        raise NotImplementedError
+        await self._body_writer.wait_closed()
 
     def abort(self):
         if self._body_writer is not None:
@@ -1303,8 +1251,8 @@ class _H1StreamWriter(
     def get_extra_info(
             self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
 
-        if self._variables.tcp_stream is not None:
-            return self._variables.tcp_stream.get_extra_info(name, default)
+        if self._vars.tcp_stream is not None:
+            return self._vars.tcp_stream.get_extra_info(name, default)
 
         elif default is _DEFUALT_MARK:
             raise KeyError(name)
@@ -1350,8 +1298,6 @@ class _H1Stream:
     def __init__(self, conn_vars: _H1ConnnectionVariables):
         self._vars = _H1StreamVariables(conn_vars)
 
-        self._pending_incoming = None
-
         self._writer = None
 
         self._pending_upgrade = False
@@ -1365,22 +1311,91 @@ class _H1Stream:
         return self._vars.context
 
     async def _read_incoming(self):
-        assert self._pending_incoming is None
+        assert self._vars.incoming is None
         parser = _H1InitialParser(self._vars)
-        self._pending_incoming = await parser.read_and_parse()
+        incoming = await parser.read_and_parse()
+        self._vars.set_incoming(incoming)
 
     async def init_stream(
         self, request: Optional[httpabc.AbstractHTTPRequest]=None
             ) -> _H1StreamWriter:
         assert self._writer is None
         self._writer = _H1StreamWriter(self._vars)
-
         await self._writer._init_stream_writer(request)
-        if not self._vars.is_client:
-            # Read the request for server before returning the writer.
-            await self._read_incoming()
-
         return self._writer
+
+    def _determine_body_reader(self):
+        assert self._body_reader is None
+
+        if "connection" in self._vars.incoming.headers.keys():
+            conn_header = self._incoming.headers["connection"]
+            if conn_header.lower() == "upgrade":  # Upgrade Found.
+                self._pending_upgrade = True
+                self._body_reader = _H1EmptyBodyStreamReader(
+                    None, self._vars)
+
+                return
+
+        readers = []
+        eof_determined = False
+
+        if self._vars.is_client:
+            # HEAD requests and 204, 304 responses has no body.
+            if self._vars.outgoing.method == "HEAD":
+                readers.append(_H1EmptyBodyStreamReader)
+                eof_determined = True
+
+            elif self._vars.incoming.status_code in (204, 304):
+                readers.append(_H1EmptyBodyStreamReader)
+                eof_determined = True
+
+        if not eof_determined:  # Check Transfer-Encoding.
+            if "transfer-encoding" in self._vars.incoming.headers.keys():
+                transfer_encoding = httputils.parse_semicolon_header(
+                    self._vars.incoming.headers["transfer-encoding"])
+
+                last_transfer_encoding = list(
+                    transfer_encoding.keys())[-1].strip()
+
+                if ("chunked" in transfer_encoding.keys() and
+                        last_transfer_encoding != "chunked"):
+                    raise _H1BadInitialError(
+                        "Chunked transfer encoding found, "
+                        "but not at last.")
+
+                if "identity" in transfer_encoding.keys():
+                    if len(transfer_encoding) != 1:
+                        raise _H1BadInitialError(
+                            "Identity is not the only transfer encoding.")
+
+                if last_transfer_encoding == "chunked":
+                    readers.append(_H1ChunkedBodyStreamReader)
+                    eof_determined = True
+
+        if not eof_determined:  # Check Content-Length.
+            if "content-length" not in self._vars.incoming.headers.keys():
+                if self._vars.is_client:
+                    self._vars.disable_keep_alive()
+
+                    readers.append(_H1ReadUntilEOFBodyStreamReader)
+                    # Read until connection close.
+                    eof_determined = True
+
+                else:  # On server-side.
+                    raise _H1BadInitialError(
+                        "Content-Length MUST be present in the Request.")
+
+            else:
+                readers.append(_H1ContentLengthBodyStreamReader)
+                eof_determined = True
+
+        assert len(readers) > 0
+        last_reader = self._vars.tcp_stream
+
+        for BodyReader in readers:
+            last_reader = BodyReader(last_reader, self._vars)
+
+        self._body_reader = last_reader
 
     async def _accept_upgrade(
         self, headers: Optional[Mapping[compat.Text, compat.Text]]=None
@@ -1389,7 +1404,7 @@ class _H1Stream:
             raise httpabc.InvalidHTTPOperationError(
                 "There's no pending upgrade.")
 
-        if self.context.is_client:
+        if self._vars.is_client:
             assert headers is None
 
         else:
@@ -1399,110 +1414,62 @@ class _H1Stream:
 
             await self._writer._accept_upgrade(headers)
 
-        tcp_stream = self._variables.detach_stream()
+        tcp_stream = self._vars.detach_tcp_stream()
         self._pending_upgrade = False
+        self._read_finished = True
 
         return tcp_stream
 
     async def next_event(self) -> httpabc.AbstractEvent:
-        if not self._incoming:
-            if not self._pending_incoming:
-                await self._read_incoming()
-
-            self._incoming, self._pending_incoming = \
-                self._pending_incoming, None
-
-            if self.context.is_client:
-                return httpevents.ResponseReceived(self._incoming)
-
-            else:
-                return httpevents.RequestReceived(self._incoming)
-
-        if not self._body_reader:  # Initialize Body Reader(s).
-            if "connection" in self._incoming.headers.keys():
-                conn_header = self._incoming.headers["connection"]
-                if conn_header.lower() == "upgrade":  # Upgrade Found.
-                    self._pending_upgrade = True
-                    self._body_reader = _H1EmptyBodyStreamReader(
-                        None, None, loop=self._loop)
-
-                    proposed_protocol = self._incoming.headers.get(
-                        "upgrade", "")
-
-                    if self.context.is_client:
-                        return _H1UpgradeResponded(
-                            proposed_protocol=proposed_protocol,
-                            http_stream=self)
-
-                    else:
-                        return _H1UpgradeRequested(
-                            proposed_protocol=proposed_protocol,
-                            http_stream=self)
-
-            readers = []
-            eof_determined = False
-
-            if self.context.is_client:
-                # HEAD requests and 204, 304 responses has no body.
-                if self._writer.outgoing.method == "HEAD":
-                    readers.append(_H1EmptyBodyStreamReader)
-                    eof_determined = True
-
-                elif self._incoming.status_code in (204, 304):
-                    readers.append(_H1EmptyBodyStreamReader)
-                    eof_determined = True
-
-            if not eof_determined:  # Check Transfer-Encoding.
-                if "transfer-encoding" in self._incoming.headers.keys():
-                    transfer_encoding = httputils.parse_semicolon_header(
-                        self._incoming.headers["transfer-encoding"])
-
-                    last_transfer_encoding = list(
-                        transfer_encoding.keys())[-1].strip()
-
-                    if ("chunked" in transfer_encoding.keys() and
-                            last_transfer_encoding != "chunked"):
-                        raise _H1BadInitialError(
-                            "Chunked transfer encoding found, "
-                            "but not at last.")
-
-                    if "identity" in transfer_encoding.keys():
-                        if len(transfer_encoding) != 1:
-                            raise _H1BadInitialError(
-                                "Identity is not the only transfer encoding.")
-
-                    if last_transfer_encoding == "chunked":
-                        readers.append(_H1ChunkedBodyStreamReader)
-                        eof_determined = True
-
-            if not eof_determined:  # Check Content-Length.
-                if "content-length" not in self._incoming.headers.keys():
-                    if self.context.is_client:
-                        if self._variables.can_keep_alive:
-                            self._variables.disable_keep_alive()
-
-                        readers.append(_H1ReadUntilEOFBodyStreamReader)
-                        # Read until connection close.
-
-                    else:  # On server-side.
-                        raise _H1BadInitialError(
-                            "Content-Length MUST be present in the Request.")
-
-                else:
-                    readers.append(_H1ContentLengthBodyStreamReader)
-
-            assert len(readers) > 0
-            last_reader = self._variables.tcp_stream
-
-            for BodyReader in readers:
-                last_reader = BodyReader(
-                    last_reader=last_reader, incoming=self._incoming,
-                    loop=self._loop)
-
-            self._body_reader = last_reader
-
         if self._read_finished:
             raise _H1ReadFinished
+
+        if not self._vars.incoming:
+            try:
+                await self._read_incoming()
+
+            except _H1InitialTooLargeError:
+                self._read_finished = True
+                return httpevents.EntityTooLarge()
+
+            except _H1BadInitialError:
+                self._read_finished = True
+                if self._vars.is_client:
+                    return httpevents.BadResponse()
+
+                else:
+                    return httpevents.BadRequest()
+
+            if self._vars.is_client:
+                return httpevents.ResponseReceived(self._vars.response)
+
+            else:
+                return httpevents.RequestReceived(self._vars.request)
+
+        if not self._body_reader:  # Initialize Body Reader(s).
+            try:
+                self._determine_body_reader()
+
+            except _H1BadInitialError:
+                self._read_finished = True
+                if self._vars.is_client:
+                    return httpevents.BadResponse()
+
+                else:
+                    return httpevents.BadRequest()
+
+            if self._pending_upgrade:
+                proposed_protocol = self._incoming.headers.get("upgrade", "")
+
+                if self._vars.is_client:
+                    return _H1UpgradeResponded(
+                        proposed_protocol=proposed_protocol,
+                        http_stream=self)
+
+                else:
+                    return _H1UpgradeRequested(
+                        proposed_protocol=proposed_protocol,
+                        http_stream=self)
 
         self._pending_upgrade = False
 
@@ -1515,6 +1482,10 @@ class _H1Stream:
         except streams.StreamEOFError:
             self._read_finished = True
             return httpevents.EOFReceived()
+
+        except _H1BodyPrematureEOFError:
+            self._read_finished = True
+            return httpevents.UnexpectedEOF()
 
 
 class H1Connection(httpabc.AbstractHTTPConnection):
@@ -1587,18 +1558,18 @@ class H1Connection(httpabc.AbstractHTTPConnection):
         assert self._closing is False, "The connection is closing."
 
         self._serving_fur = compat.ensure_future(
-            self._serve_until_close(self), loop=self._loop)
+            self._serve_until_close(self), loop=self._vars._loop)
 
     async def _init_next_stream(self) -> (_H1Stream, _H1StreamWriter):
         assert self._send_request_fur is None or self._send_request_fur.done()
 
         http_stream = _H1Stream(self._vars)
 
-        if self.context.is_client:
+        if self._vars.is_client:
             while True:
                 try:
                     self._send_request_fur = compat.create_future(
-                        self._loop)
+                        self._vars._loop)
 
                     wait_closed_fur = self._vars.tcp_stream.wait_closed()
                     done, pending = await asyncio.wait(

@@ -89,3 +89,7 @@ class EntityTooLarge(httpabc.AbstractEvent):  # HTTPError: 413
 
 class BadResponse(httpabc.AbstractEvent):
     pass
+
+
+class UnexpectedEOF(httpabc.AbstractEvent):
+    pass
