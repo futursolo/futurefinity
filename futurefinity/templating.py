@@ -346,6 +346,7 @@ import re
 import asyncio
 import functools
 import threading
+import concurrent.futures
 
 __all__ = ["TemplateNotFoundError", "ParseError", "InvalidStatementOperation",
            "PrinterError", "CodeGenerationError", "TemplateRenderError",
@@ -1445,9 +1446,8 @@ class BaseLoader:
 
 class AsyncFileSystemLoader(BaseLoader):
     """
-    An implementation of `BaseLoader` based on the
-    `futurefinity.ioutils.AsyncFileSystemOperations` loads from a root path
-    in the file system.
+    An implementation of `BaseLoader` loads files from the file system
+    asynchronously.
     """
     def __init__(self, root_path: compat.Text, *args, **kwargs):
         assert isinstance(root_path, str)
@@ -1458,7 +1458,7 @@ class AsyncFileSystemLoader(BaseLoader):
 
         super().__init__(*args, **kwargs)
 
-        self._async_fs_ops = ioutils.AsyncFileSystemOperations(loop=self._loop)
+        self._executor = concurrent.futures.ThreadPoolExecutor()
 
     @property
     def _loop(self) -> asyncio.AbstractEventLoop:
@@ -1500,5 +1500,7 @@ class AsyncFileSystemLoader(BaseLoader):
         raise TemplateNotFoundError("No such file {}.".format(final_tpl_path))
 
     async def _load_tpl_content(self, tpl_path: compat.Text) -> bytes:
-        async with self._async_fs_ops.aopen(tpl_path, "rb") as tpl_fp:
+        async with ioutils.aopen(
+            tpl_path, "rb", executor=self._executor, loop=self._loop
+                ) as tpl_fp:
             return await tpl_fp.read()

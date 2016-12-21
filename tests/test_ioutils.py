@@ -15,11 +15,9 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-import futurefinity
 import futurefinity.ioutils
+import futurefinity.testutils
 
-import io
-import os
 import time
 import asyncio
 
@@ -61,60 +59,3 @@ class ExecutorTestCase:
             return id(futurefinity.ioutils.get_default_executor())
 
         assert id(default_executor) != (await child_thread())
-
-
-class AsyncIOBaseTestCase:
-    @helper.run_until_complete
-    async def test_async_bytes_io(self):
-        content = os.urandom(10)
-        bytes_io = await futurefinity.ioutils.AsyncBytesIO(content)
-
-        async with bytes_io as asyncfp:
-            new_content = os.urandom(5)
-            await asyncfp.seek(0, io.SEEK_END)
-
-            await asyncfp.write(new_content)
-
-            await asyncfp.seek(0)
-
-            assert (await asyncfp.read()) == content + new_content
-
-        assert bytes_io.closed
-
-    @helper.run_until_complete
-    async def test_async_string_io(self):
-        content = futurefinity.security.get_random_str(10)
-        string_io = await futurefinity.ioutils.AsyncStringIO(content)
-
-        async with string_io as asyncfp:
-            new_content = futurefinity.security.get_random_str(5)
-            await asyncfp.seek(0, io.SEEK_END)
-
-            await asyncfp.write(new_content)
-
-            await asyncfp.seek(0)
-
-            assert (await asyncfp.read()) == content + new_content
-
-        assert string_io.closed
-
-
-class AsyncFileSystemOperationsTestCase:
-    @helper.run_until_complete
-    async def test_aope_async_with(self):
-        async with futurefinity.ioutils.aopen(
-                helper.get_tests_path("tpls/index.html")) as asyncfp:
-            with open(helper.get_tests_path("tpls/index.html")) as f:
-                assert f.read() == await asyncfp.read()
-
-    @helper.run_until_complete
-    async def test_aope_await(self):
-        asyncfp = await futurefinity.ioutils.aopen(
-            helper.get_tests_path("tpls/index.html"))
-        try:
-            with open(helper.get_tests_path("tpls/index.html")) as f:
-                assert f.read() == await asyncfp.read()
-
-        finally:
-            await asyncfp.close()
-
