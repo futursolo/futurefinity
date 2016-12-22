@@ -1029,7 +1029,7 @@ if hasattr(socket, 'AF_UNIX'):
 
         return await fur
 
-    async def start_server(
+    async def start_unix_server(
         callback: Callable[[Stream], Optional[compat.Awaitable[None]]],
         path: Optional[compat.Text]=None, *,
         loop: Optional[asyncio.AbstractEventLoop]=None,
