@@ -23,9 +23,19 @@ from typing import Iterable, Optional, Any, Callable
 
 import abc
 import enum
+import socket
 import asyncio
 import collections
 import collections.abc
+
+__all__ = [
+    "StreamEOFError", "StreamClosedError", "AbstractStreamReader",
+    "AbstractStreamWriter", "AbstractStream", "BaseStreamReader",
+    "BaseStreamWriter", "BaseStream", "Stream", "open_connection",
+    "start_unix_server"]
+
+if hasattr(socket, "AF_UNIX"):
+    __all__.extend(["open_unix_connection", "start_unix_server"])
 
 _DEFAULT_LIMIT = 2 ** 16
 _DEFUALT_MARK = Identifier()
@@ -35,7 +45,7 @@ _log = log.get_child_logger("streams")
 
 class StreamEOFError(EOFError):
     """
-    Read after `AbstractStreamReader.append_eof` has been called.
+    Read or write after EOF is read or written.
     """
     pass
 
@@ -47,7 +57,8 @@ class StreamClosedError(StreamEOFError, OSError):
     pass
 
 
-class AbstractStreamReader(abc.ABC, collections.abc.AsyncIterator):
+class AbstractStreamReader(
+        abc.ABC, collections.abc.AsyncIterator):  # pragma: no cover
     """
     The abstract base class of the stream reader(read only stream).
     """
@@ -160,7 +171,7 @@ class AbstractStreamReader(abc.ABC, collections.abc.AsyncIterator):
         raise NotImplementedError
 
 
-class AbstractStreamWriter(abc.ABC):
+class AbstractStreamWriter(abc.ABC):  # pragma: no cover
     """
     The abstract base class of the stream writer(write only stream).
     """
@@ -253,7 +264,8 @@ class AbstractStreamWriter(abc.ABC):
         raise NotImplementedError
 
 
-class AbstractStream(AbstractStreamReader, AbstractStreamWriter):
+class AbstractStream(
+        AbstractStreamReader, AbstractStreamWriter):  # pragma: no cover
     """
     The abstract base class of the bidirectional stream(read and write stream).
     """
@@ -281,7 +293,7 @@ class BaseStreamReader(AbstractStreamReader):
         self.__read_lock = asyncio.Lock()
 
     @abc.abstractmethod
-    async def _fetch_data(self) -> bytes:
+    async def _fetch_data(self) -> bytes:  # pragma: no cover
         """
         Fetch data, the data will be appended to the internal buffer.
 
@@ -532,6 +544,16 @@ class BaseStreamReader(AbstractStreamReader):
 
         return data
 
+    def __repr__(self) -> compat.Text:
+        info = {
+            "buflen": self.buflen(),
+            "has_eof": self.has_eof(),
+            "at_eof": self.at_eof(),
+        }
+        return "<{} {}>".format(
+            self.__class__.__name__,
+            " ".join(["{}={}".format(k, v) for k, v in info.items()]))
+
 
 class BaseStreamWriter(AbstractStreamWriter):
     """
@@ -544,7 +566,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         self.__closed = False
 
     @abc.abstractmethod
-    def _write_impl(self, data: bytes):
+    def _write_impl(self, data: bytes):  # pragma: no cover
         """
         Write the data. If the stream cannot be written any more,
         this should issue a `StreamClosedError` to prevent from
@@ -567,7 +589,7 @@ class BaseStreamWriter(AbstractStreamWriter):
 
         self._write_impl(b"".join(data))
 
-    def _write_eof_impl(self):
+    def _write_eof_impl(self):  # pragma: no cover
         """
         The implementation of write_eof.
 
@@ -587,7 +609,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         return self.__eof_written
 
     @abc.abstractmethod
-    def _check_if_closed_impl(self) -> bool:
+    def _check_if_closed_impl(self) -> bool:  # pragma: no cover
         raise NotImplementedError
 
     def closed(self) -> bool:
@@ -597,7 +619,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         return self.__closed
 
     @abc.abstractmethod
-    def _close_impl(self):
+    def _close_impl(self):  # pragma: no cover
         raise NotImplementedError
 
     def close(self):
@@ -652,7 +674,7 @@ class BaseStreamWriter(AbstractStreamWriter):
 
 class BaseStream(AbstractStream, BaseStreamReader, BaseStreamWriter):
     """
-    This class can be used as long as the subclasses satisfys
+    This class can be used as long as the subclasses fulfilled
     the requirements of `BaseStreamReader` and `BaseStreamWriter`.
     """
     def __init__(
@@ -660,6 +682,18 @@ class BaseStream(AbstractStream, BaseStreamReader, BaseStreamWriter):
             loop: Optional[asyncio.AbstractEventLoop]=None):
         super(BaseStreamReader, self).__init__(limit=limit, loop=loop)
         super(BaseStreamWriter, self).__init__()
+
+    def __repr__(self) -> compat.Text:
+        info = {
+            "buflen": self.buflen(),
+            "has_eof": self.has_eof(),
+            "at_eof": self.at_eof(),
+            "eof_written": self.eof_written(),
+            "closed": self.closed(),
+        }
+        return "<{} {}>".format(
+            self.__class__.__name__,
+            " ".join(["{}={}".format(k, v) for k, v in info.items()]))
 
 
 class Stream(BaseStream):
@@ -976,4 +1010,47 @@ async def start_server(
         fur.add_done_callback(after_connected)
         return _StreamHelperProtocol(fur=fur, limit=limit, loop=loop)
 
-    return await loop.create_server(factory, host, port, **kwds)
+    return await loop.create_server(factory, host, port, **kwargs)
+
+if hasattr(socket, 'AF_UNIX'):
+    async def open_unix_connection(
+        path: Optional[compat.Text]=None, *,
+        loop: Optional[asyncio.AbstractEventLoop]=None,
+            limit: int=_DEFAULT_LIMIT, **kwargs) -> Stream:
+        assert isinstance(limit, int) and limit > 0
+
+        loop = loop or asyncio.get_event_loop()
+        fur = compat.create_future(loop=loop)
+
+        def factory():
+            return _StreamHelperProtocol(fur=fur, limit=limit, loop=loop)
+
+        await loop.create_unix_connection(factory, path, **kwargs)
+
+        return await fur
+
+    async def start_server(
+        callback: Callable[[Stream], Optional[compat.Awaitable[None]]],
+        path: Optional[compat.Text]=None, *,
+        loop: Optional[asyncio.AbstractEventLoop]=None,
+            limit: int=_DEFAULT_LIMIT, **kwargs) -> asyncio.AbstractServer:
+        assert isinstance(limit, int) and limit > 0
+
+        loop = loop or asyncio.get_event_loop()
+
+        def after_connected(fur: asyncio.Future):
+            if fur.cancelled():
+                return
+
+            stream = fur.result()
+            result = callback(stream)
+
+            if iscoroutine(result):
+                compat.ensure_future(result, loop=loop)
+
+        def factory():
+            fur = compat.create_future(loop=loop)  # asyncio.Future
+            fur.add_done_callback(after_connected)
+            return _StreamHelperProtocol(fur=fur, limit=limit, loop=loop)
+
+        return await loop.create_unix_server(factory, path, **kwargs)

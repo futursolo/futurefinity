@@ -38,7 +38,7 @@ class HTTPConnectionClosedError(Exception):
     pass
 
 
-class AbstractHTTPInitial(abc.ABC):
+class AbstractHTTPInitial(abc.ABC):  # pragma: no cover
     @property
     @abc.abstractmethod
     def headers(self) -> Mapping[compat.Text, compat.Text]:
@@ -50,7 +50,7 @@ class AbstractHTTPInitial(abc.ABC):
         raise NotImplementedError
 
 
-class AbstractHTTPRequest(AbstractHTTPInitial):
+class AbstractHTTPRequest(AbstractHTTPInitial):  # pragma: no cover
     @property
     @abc.abstractmethod
     def method(self) -> compat.Text:
@@ -84,7 +84,7 @@ class AbstractHTTPRequest(AbstractHTTPInitial):
         raise NotImplementedError
 
 
-class AbstractHTTPResponse(AbstractHTTPInitial):
+class AbstractHTTPResponse(AbstractHTTPInitial):  # pragma: no cover
     @property
     @abc.abstractmethod
     def status_code(self) -> int:
@@ -94,21 +94,22 @@ class AbstractHTTPResponse(AbstractHTTPInitial):
         raise NotImplementedError
 
 
-class AbstractHTTPContext(abc.ABC):
+class AbstractHTTPContext(abc.ABC):  # pragma: no cover
     """
     The constant context can be shared among multiple connection.
     """
     pass
 
 
-class AbstractEvent(abc.ABC):
+class AbstractEvent(abc.ABC):  # pragma: no cover
     """
     The event happened on the stream or the connection.
     """
     pass
 
 
-class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
+class AbstractHTTPStreamWriter(
+        streams.AbstractStreamWriter):  # pragma: no cover
     """
     The stream writer to help the handler to control the connection.
     """
@@ -185,7 +186,7 @@ class AbstractHTTPStreamWriter(streams.AbstractStreamWriter):
         raise NotImplementedError
 
 
-class AbstractHTTPStreamHandler(abc.ABC):
+class AbstractHTTPStreamHandler(abc.ABC):  # pragma: no cover
     """
     Handler to handle the stream.
     """
@@ -216,7 +217,7 @@ class AbstractHTTPStreamHandler(abc.ABC):
         pass
 
 
-class AbstractHTTPConnection(abc.ABC):
+class AbstractHTTPConnection(abc.ABC):  # pragma: no cover
     @abc.abstractmethod
     def __init__(
         self, context: AbstractHTTPContext, tcp_stream: streams.AbstractStream,

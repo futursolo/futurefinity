@@ -959,7 +959,7 @@ class RequestHandler:
             self.set_header("content-length", str(content_length))
         self.write(b"", clear_text=True)
 
-    async def get(self, *args, **kwargs):
+    async def get(self, *args, **kwargs):  # pragma: no cover
         """
         Must be overridden in subclass if you want to handle GET request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
@@ -968,7 +968,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def post(self, *args, **kwargs):
+    async def post(self, *args, **kwargs):  # pragma: no cover
         """
         Must be overridden in subclass if you want to handle POST request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
@@ -977,7 +977,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def delete(self, *args, **kwargs):
+    async def delete(self, *args, **kwargs):  # pragma: no cover
         """
         Must be overridden in subclass if you want to handle DELETE request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
@@ -986,7 +986,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def patch(self, *args, **kwargs):
+    async def patch(self, *args, **kwargs):  # pragma: no cover
         """
         Must be overridden in subclass if you want to handle PATCH request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
@@ -995,7 +995,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def put(self, *args, **kwargs):
+    async def put(self, *args, **kwargs):  # pragma: no cover
         """
         Must be overridden in subclass if you want to handle PUT request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
@@ -1004,7 +1004,7 @@ class RequestHandler:
         """
         raise HTTPError(405)
 
-    async def options(self, *args, **kwargs):
+    async def options(self, *args, **kwargs):  # pragma: no cover
         """
         Must be overridden in subclass if you want to handle OPTIONS request,
         or it will raise an HTTPError(405) -- Method Not Allowed.
@@ -1098,7 +1098,7 @@ class RequestHandler:
         if not self._finished:
             self.finish()
 
-    def data_received(self):
+    def data_received(self):  # pragma: no cover
         """
         For StreamRequestHandler. If you use this as a stream handler, you
         must overrride this function.

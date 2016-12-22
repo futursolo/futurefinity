@@ -474,7 +474,7 @@ class BlockAttrs:
 
         return wrapper
 
-    def __setattr__(self, name: compat.Text, value: Any):
+    def __setattr__(self, name: compat.Text, value: Any):  # pragma: no cover
         raise NotImplementedError
 
     __getitem__ = __getattr__
@@ -628,7 +628,7 @@ class Namespace:
         await tpl_namespace._render()
         return tpl_namespace._tpl_result
 
-    async def _render_body_str(self) -> compat.Text:
+    async def _render_body_str(self) -> compat.Text:  # pragma: no cover
         raise NotImplementedError
 
     async def _render(self):
@@ -792,7 +792,7 @@ class _Statement:
         else:
             raise CodeGenerationError(err_str)
 
-    def _print_code_impl(self, printer: CodePrinter):
+    def _print_code_impl(self, printer: CodePrinter):  # pragma: no cover
         raise NotImplementedError(
             "print code in this statement is not implemented.")
 
@@ -1403,15 +1403,16 @@ class BaseLoader:
 
         self._mutex_lock = asyncio.Lock()
 
-    async def _load_tpl_content(self, tpl_path: compat.Text) -> AnyStr:
+    async def _load_tpl_content(
+            self, tpl_path: compat.Text) -> AnyStr:  # pragma: no cover
         """
         Load the template content asynchronously.
         """
         raise NotImplementedError
 
     async def _find_abs_path(
-        self, tpl_path: compat.Text,
-            origin_path: Optional[compat.Text]=None) -> compat.Text:
+        self, tpl_path: compat.Text, origin_path: Optional[compat.Text]=None
+            ) -> compat.Text:  # pragma: no cover
         """
         Solve the absolute path of the template from the tpl_path based on the
         origin_path(if applicable).

@@ -45,24 +45,24 @@ class ResponseReceived(httpabc.AbstractEvent):
 class UpgradeRequested(httpabc.AbstractEvent):
     @property
     @abc.abstractmethod
-    def proposed_protocol(self) -> compat.Text:
+    def proposed_protocol(self) -> compat.Text:  # pragma: no cover
         raise NotImplementedError
 
     @abc.abstractmethod
     async def accept(
         self, headers: Optional[Mapping[compat.Text, compat.Text]]=None
-            ) -> streams.AbstractStream:
+            ) -> streams.AbstractStream:  # pragma: no cover
         raise NotImplementedError
 
 
 class UpgradeResponded(httpabc.AbstractEvent):
     @property
     @abc.abstractmethod
-    def proposed_protocol(self) -> compat.Text:
+    def proposed_protocol(self) -> compat.Text:  # pragma: no cover
         raise NotImplementedError
 
     @abc.abstractmethod
-    async def accept(self) -> streams.AbstractStream:
+    async def accept(self) -> streams.AbstractStream:  # pragma: no cover
         raise NotImplementedError
 
 

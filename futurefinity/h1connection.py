@@ -877,7 +877,7 @@ class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
         self._wait_closed_lock = asyncio.Lock()
 
     @abc.abstractmethod
-    def _write_impl(self, data: bytes):
+    def _write_impl(self, data: bytes):  # pragma: no cover
         raise NotImplementedError
 
     async def drain(self):
@@ -887,7 +887,7 @@ class _H1BaseBodyStreamWriter(streams.BaseStreamWriter):
         return True
 
     @abc.abstractmethod
-    def _write_eof_impl(self):
+    def _write_eof_impl(self):  # pragma: no cover
         raise NotImplementedError
 
     def write_eof(self):
