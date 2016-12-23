@@ -27,6 +27,7 @@ from . import encoding
 from . import security
 from . import httputils
 from . import magicdict
+from . import multipart
 from . import h1connection
 from ._version import version as futurefinity_version
 
@@ -162,190 +163,6 @@ class HTTPHeaders(magicdict.TolerantMagicDict):
 
     __copy__ = copy
     __repr__ = __str__
-
-
-class HTTPMultipartFileField:
-    """
-    Containing a file as a http form field.
-    """
-    def __init__(self, fieldname: compat.Text, filename: compat.Text,
-                 content: bytes,
-                 content_type: compat.Text="application/octet-stream",
-                 headers: Optional[HTTPHeaders]=None,
-                 encoding: compat.Text="binary"):
-        self.fieldname = fieldname
-        self.filename = filename
-        self.content = content
-        self.content_type = content_type
-        self.headers = headers or HTTPHeaders()
-        self.encoding = encoding
-
-    def __str__(self) -> compat.Text:
-        return ("HTTPMultipartFileField(filename={filename}, "
-                "content_type={content_type}, "
-                "headers={headers}, "
-                "encoding={encoding})").format(
-                    filename=repr(self.filename),
-                    content_type=repr(self.content_type),
-                    headers=repr(self.headers),
-                    encoding=repr(self.encoding)
-                )
-
-    def assemble(self) -> bytes:
-        """
-        Convert this form field to bytes.
-        """
-        self.headers["content-type"] = self.content_type
-        self.headers["content-transfer-encoding"] = self.encoding
-
-        content_disposition = "form-data; "
-        content_disposition += "name=\"{}\"; ".format(self.fieldname)
-        content_disposition += "filename=\"{}\"".format(self.filename)
-        self.headers["content-disposition"] = content_disposition
-
-        field = self.headers.assemble()
-        field += _CRLF_BYTES_MARK
-        field += encoding.ensure_bytes(self.content)
-        field += _CRLF_BYTES_MARK
-
-        return field
-
-    def copy(self) -> "HTTPMultipartFileField":
-        raise ProtocolError("HTTPMultipartFileField is not copyable.")
-
-    __copy__ = copy
-
-
-class HTTPMultipartBody(magicdict.TolerantMagicDict):
-    """
-    HTTPBody class, based on TolerantMagicDict.
-
-    It has not only all the features from TolerantMagicDict, but also
-    can parse and make HTTP Body.
-    """
-    def __init__(self, *args, **kwargs):
-        self.files = magicdict.TolerantMagicDict()
-        magicdict.TolerantMagicDict.__init__(self, *args, **kwargs)
-
-    @staticmethod
-    def parse(content_type: compat.Text, data: bytes) -> "HTTPMultipartBody":
-        """
-        Parse HTTP v1 Multipart Body.
-
-        It will raise an Error during the parse period if parse failed.
-        """
-        body_args = HTTPMultipartBody()
-        if not content_type.lower().startswith("multipart/form-data"):
-            raise ProtocolError("Unknown content-type.")
-
-        for field in content_type.split(";"):  # Search Boundary
-            if field.find("boundary=") == -1:
-                continue
-            boundary = encoding.ensure_bytes(field.split("=")[1])
-            if boundary.startswith(b'"') and boundary.endswith(b'"'):
-                boundary = boundary[1:-1]
-            break
-        else:
-            raise ProtocolError("Cannot Find Boundary.")
-        full_boundary = b"--" + boundary
-        body_content = data.split(full_boundary + b"--")[0]
-
-        full_boundary += _CRLF_BYTES_MARK
-        splitted_body_content = body_content.split(full_boundary)
-
-        for part in splitted_body_content:
-            if not part:
-                continue
-
-            initial, content = part.split(_CRLF_BYTES_MARK * 2)
-            headers = HTTPHeaders.parse(initial)
-
-            disposition = headers.get_first("content-disposition")
-            disposition_list = []
-            disposition_dict = magicdict.TolerantMagicDict()
-
-            for field in disposition.split(";"):  # Split Disposition
-                field = field.strip()  # Remove Useless Spaces.
-                if field.find("=") == -1:  # This is not a key-value pair.
-                    disposition_list.append(field)
-                    continue
-                key, value = field.split("=")
-                if value.startswith('"') and value.endswith('"'):
-                    value = value[1:-1]
-                disposition_dict.add(key.strip().lower(), value.strip())
-
-            if disposition_list[0] != "form-data":
-                raise ProtocolError("Cannot Parse Body.")
-                # Mixed form-data will be supported later.
-            content = content[:-2]  # Drop CRLF Mark
-
-            if "filename" in disposition_dict.keys():
-                body_args.files.add(
-                    disposition_dict.get_first("name", ""),
-                    HTTPMultipartFileField(
-                        fieldname=disposition_dict.get_first("name", ""),
-                        filename=disposition_dict.get_first("filename", ""),
-                        content=content,
-                        content_type=headers.get_first(
-                            "content-type", "application/octet-stream"),
-                        headers=headers,
-                        encoding=headers.get_first("content-transfer-encoding",
-                                                   "binary")))
-            else:
-                try:
-                    content = content.decode()
-                except UnicodeDecodeError:
-                    pass
-                body_args.add(disposition_dict.get_first("name", ""), content)
-
-        return body_args
-
-    def assemble(self) -> Tuple[bytes, compat.Text]:
-        """
-        Generate HTTP v1 Body to bytes.
-
-        It will return the body in bytes and the content-type in str.
-        """
-        body = b""
-        boundary = "----------FutureFinityFormBoundary"
-        boundary += encoding.ensure_str(security.get_random_str(8)).lower()
-        content_type = "multipart/form-data; boundary=" + boundary
-
-        full_boundary = b"--" + encoding.ensure_bytes(boundary)
-
-        for field_name, field_value in self.items():
-            body += full_boundary + _CRLF_BYTES_MARK
-
-            if isinstance(field_value, str):
-                body += b"Content-Disposition: form-data; "
-                body += encoding.ensure_bytes("name=\"{}\"\r\n".format(
-                    field_name))
-                body += _CRLF_BYTES_MARK
-
-                body += encoding.ensure_bytes(field_value)
-                body += _CRLF_BYTES_MARK
-            else:
-                raise ProtocolError("Unknown Field Type")
-
-        for file_field in self.files.values():
-            body += full_boundary + _CRLF_BYTES_MARK
-            body += file_field.assemble()
-
-        body += full_boundary + b"--" + _CRLF_BYTES_MARK
-        return body, content_type
-
-    def __str__(self) -> compat.Text:
-        # Multipart Body is not printable.
-        return object.__str__(self)
-
-    def __repr__(self) -> compat.Text:
-        # Multipart Body is not printable.
-        return object.__repr__(self)
-
-    def copy(self) -> "HTTPMultipartBody":
-        raise ProtocolError("HTTPMultipartBody is not copyable.")
-
-    __copy__ = copy
 
 
 class HTTPIncomingMessage:
@@ -502,7 +319,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
     @property
     def body_args(self) -> Union[magicdict.TolerantMagicDict,
-                                 HTTPMultipartBody,
+                                 multipart.HTTPMultipartBody,
                                  Mapping[Any, Any],
                                  List[Any]]:
         """
@@ -522,7 +339,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
 
             elif content_type.lower().startswith(
              "multipart/form-data"):
-                self._body_args = HTTPMultipartBody.parse(
+                self._body_args = multipart.HTTPMultipartBody.parse(
                     content_type=content_type,
                     data=self.body)
 

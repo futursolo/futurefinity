@@ -26,6 +26,7 @@ from . import encoding
 from . import protocol
 from . import httputils
 from . import magicdict
+from . import multipart
 
 from typing import Union, Optional, Mapping
 
@@ -426,7 +427,7 @@ class HTTPClient:
             body = encoding.ensure_bytes(json.dumps(body_args))
 
         elif content_type.lower().startswith("multipart/form-data"):
-            multipart_body = protocol.HTTPMultipartBody()
+            multipart_body = multipart.HTTPMultipartBody()
             multipart_body.update(body_args)
             if files:
                 multipart_body.files.update(files)
