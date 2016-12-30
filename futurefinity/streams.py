@@ -134,7 +134,8 @@ class AbstractStreamReader(
 
     @abc.abstractmethod
     def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+        self, name: compat.Text, default: Any=_DEFUALT_MARK
+            ) -> Any:  # pragma: no cover
         """
         Return optional stream information.
 
@@ -254,7 +255,8 @@ class AbstractStreamWriter(abc.ABC):  # pragma: no cover
 
     @abc.abstractmethod
     def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+        self, name: compat.Text, default: Any=_DEFUALT_MARK
+            ) -> Any:  # pragma: no cover
         """
         Return optional stream information.
 
@@ -397,6 +399,9 @@ class BaseStreamReader(AbstractStreamReader):
         async with self.__read_lock:
             self.__try_raise_exc()
 
+            if self.__eof:  # pragma: no cover
+                raise StreamEOFError
+
             if n < 0:
                 buffer = []
 
@@ -411,20 +416,23 @@ class BaseStreamReader(AbstractStreamReader):
 
                     raise
 
-            elif n == 0:
+            elif n == 0:  # pragma: no cover
                 return b""
 
             else:
                 return await self.__read_impl(n)
 
     async def readexactly(self, n: int=-1) -> bytes:
-        if n < 0:
+        if n < 0:  # pragma: no cover
             raise ValueError("readexactly size can not be less than zero.")
 
         async with self.__read_lock:
             self.__try_raise_exc()
 
-            if n == 0:
+            if self.__eof:  # pragma: no cover
+                raise StreamEOFError
+
+            if n == 0:  # pragma: no cover
                 return b""
 
             n_left = n
@@ -450,7 +458,7 @@ class BaseStreamReader(AbstractStreamReader):
         self, separator: bytes=b"\n",
             *, keep_separator: bool=True) -> bytes:
         seplen = len(separator)
-        if seplen == 0:
+        if seplen == 0:  # pragma: no cover
             raise ValueError("Separator should be at least one-byte string.")
 
         async with self.__read_lock:
@@ -527,7 +535,8 @@ class BaseStreamReader(AbstractStreamReader):
                     return
 
     def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+        self, name: compat.Text, default: Any=_DEFUALT_MARK
+            ) -> Any:  # pragma: no cover
         if default is _DEFUALT_MARK:
             raise KeyError(name)
 
@@ -553,7 +562,7 @@ class BaseStreamReader(AbstractStreamReader):
 
         return data
 
-    def __repr__(self) -> compat.Text:
+    def __repr__(self) -> compat.Text:  # pragma: no cover
         info = {
             "buflen": self.buflen(),
             "has_eof": self.has_eof(),
@@ -674,11 +683,21 @@ class BaseStreamWriter(AbstractStreamWriter):
         self.__closed = True
 
     def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+        self, name: compat.Text, default: Any=_DEFUALT_MARK
+            ) -> Any:  # pragma: no cover
         if default is _DEFUALT_MARK:
             raise KeyError(name)
 
         return default
+
+    def __repr__(self) -> compat.Text:  # pragma: no cover
+        info = {
+            "eof_written": self.eof_written(),
+            "closed": self.closed(),
+        }
+        return "<{} {}>".format(
+            self.__class__.__name__,
+            " ".join(["{}={}".format(k, v) for k, v in info.items()]))
 
 
 class BaseStream(AbstractStream, BaseStreamReader, BaseStreamWriter):
@@ -692,7 +711,7 @@ class BaseStream(AbstractStream, BaseStreamReader, BaseStreamWriter):
         BaseStreamReader.__init__(self, limit=limit, loop=loop)
         BaseStreamWriter.__init__(self)
 
-    def __repr__(self) -> compat.Text:
+    def __repr__(self) -> compat.Text:  # pragma: no cover
         info = {
             "buflen": self.buflen(),
             "has_eof": self.has_eof(),
@@ -797,7 +816,8 @@ class Stream(BaseStream):
             self._wait_closed_fur.set_result(None)
 
     def get_extra_info(
-            self, name: compat.Text, default: Any=_DEFUALT_MARK) -> Any:
+        self, name: compat.Text, default: Any=_DEFUALT_MARK
+            ) -> Any:  # pragma: no cover
         val = self.transport.get_extra_info(name, default)
         if val is _DEFUALT_MARK:
             raise KeyError(name)
