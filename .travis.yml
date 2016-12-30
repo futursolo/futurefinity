@@ -5,6 +5,18 @@ matrix:
     - python: nightly
 
   include:
+    - os: linux
+      python: 3.5.0
+
+    - os: linux
+      python: 3.5.1
+
+    - os: linux
+      python: 3.5.2
+
+    - os: linux
+      python: 3.6.0
+
     - os: osx
       osx_image: xcode7.3
       language: generic
@@ -24,18 +36,6 @@ matrix:
       osx_image: xcode7.3
       language: generic
       env: PYTHONVER=3.6.0
-
-    - os: linux
-      python: 3.5.0
-
-    - os: linux
-      python: 3.5.1
-
-    - os: linux
-      python: 3.5.2
-
-    - os: linux
-      python: 3.6.0
 
     - os: linux
       python: nightly
