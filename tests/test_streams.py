@@ -113,6 +113,18 @@ class StreamTestCase:
             await stream.read(100)
 
     @helper.run_until_complete
+    async def test_read_until_eof(self):
+        protocol, stream = _create_mocked_stream()
+
+        protocol.data_received(self.DATA)
+        protocol.eof_received()
+
+        assert await stream.read() == self.DATA
+
+        with pytest.raises(futurefinity.streams.StreamEOFError):
+            await stream.read(100)
+
+    @helper.run_until_complete
     async def test_readexactly(self):
         protocol, stream = _create_mocked_stream()
 
@@ -179,6 +191,19 @@ class StreamTestCase:
 
         await stream.wait_eof()
 
+    @helper.run_until_complete
+    async def test_aiter(self):
+        protocol, stream = _create_mocked_stream()
+
+        protocol.data_received(self.DATA)
+        protocol.eof_received()
+
+        lines = []
+        async for line in stream:
+            lines.append(line)
+
+        assert b"".join(lines) == self.DATA
+
     def test_write(self):
         protocol, stream = _create_mocked_stream()
 
@@ -188,6 +213,32 @@ class StreamTestCase:
             stream.write(self.DATA)
 
         assert b"".join(stream.transport._written_buffer) == self.DATA
+
+    def test_writelines(self):
+        protocol, stream = _create_mocked_stream()
+
+        stream.write(self.DATA)
+        stream.write_eof()
+        with pytest.raises(futurefinity.streams.StreamEOFError):
+            stream.writelines([b"line1\n", b"line2\n", b"line3\n"])
+
+        assert b"".join(stream.transport._written_buffer) == self.DATA
+
+    @helper.run_until_complete
+    async def test_drain(self):
+        protocol, stream = _create_mocked_stream()
+        stream.write(self.DATA)
+        await stream.drain()
+
+        protocol.pause_writing()
+
+        drain_fur = futurefinity.compat.ensure_future(stream.drain())
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(asyncio.shield(drain_fur), 0.1)
+
+        protocol.resume_writing()
+        await drain_fur
 
     def test_can_write_eof(self):
         protocol, stream = _create_mocked_stream()
@@ -226,7 +277,20 @@ class StreamTestCase:
     async def test_wait_closed(self):
         protocol, stream = _create_mocked_stream()
 
-        wait_closed_fur = stream.wait_closed()
+        wait_closed_fur = futurefinity.compat.ensure_future(
+            stream.wait_closed())
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(asyncio.shield(wait_closed_fur), 0.1)
+
+        stream.close()
+
+    @helper.run_until_complete
+    async def test_base_writer_wait_closed(self):
+        protocol, stream = _create_mocked_stream()
+
+        wait_closed_fur = futurefinity.compat.ensure_future(
+            futurefinity.streams.BaseStreamWriter.wait_closed(stream))
 
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(asyncio.shield(wait_closed_fur), 0.1)

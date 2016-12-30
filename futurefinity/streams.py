@@ -405,16 +405,17 @@ class BaseStreamReader(AbstractStreamReader):
             if n < 0:
                 buffer = []
 
-                try:
-                    data = await self.__read_impl(
-                        self.__limit or _DEFAULT_LIMIT)
-                    buffer.append(data)
+                while True:
+                    try:
+                        data = await self.__read_impl(
+                            self.__limit or _DEFAULT_LIMIT)
+                        buffer.append(data)
 
-                except StreamEOFError:
-                    if buffer:
-                        return b"".join(buffer)
+                    except StreamEOFError:
+                        if buffer:
+                            return b"".join(buffer)
 
-                    raise
+                        raise
 
             elif n == 0:  # pragma: no cover
                 return b""
@@ -654,7 +655,7 @@ class BaseStreamWriter(AbstractStreamWriter):
         The subclasses should override it
         if more efficient implementation is available.
         """
-        if self._closed:
+        if self.__closed:
             return
 
         while True:
@@ -972,10 +973,10 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 self._drain_impl_fur = compat.create_future(loop=self._loop)
 
                 try:
-                    await self._fetch_data_impl_fur
+                    await self._drain_impl_fur
 
                 finally:
-                    self._fetch_data_impl_fur.cancel()
+                    self._drain_impl_fur.cancel()
 
     def _closed_impl(self) -> bool:
         return self._closed
