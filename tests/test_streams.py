@@ -157,7 +157,7 @@ class StreamTestCase:
         protocol.data_received(os.urandom(100000).replace(b"\n\n", b"\r\r"))
         protocol.eof_received()
 
-        with pytest.raises(asyncio.LimitOverrunError):
+        with pytest.raises(futurefinity.streams.LimitOverrunError):
             await stream.readuntil(b"\n\n")
 
     @helper.run_until_complete

@@ -520,7 +520,7 @@ class _H1InitialParser:
                 break  # Headers Completed.
 
             if self._read_len > self._vars.max_initial_length:
-                raise asyncio.LimitOverrunError(
+                raise streams.LimitOverrunError(
                     "The intitial exceeded the initial limit.",
                     total_length)
 

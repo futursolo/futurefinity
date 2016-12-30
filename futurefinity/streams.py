@@ -57,6 +57,18 @@ class StreamClosedError(StreamEOFError, OSError):
     pass
 
 
+class _LimitOverrunError(Exception):
+    """
+    Backport of `asyncio.LimitOverrunError` for Python 3.5.1 and 3.5.0.
+    """
+    def __init__(self, message: compat.Text, consumed: int):
+        super().__init__(message)
+        self.consumed = consumed
+
+
+LimitOverrunError = getattr(asyncio, "LimitOverrunError", _LimitOverrunError)
+
+
 class AbstractStreamReader(
         abc.ABC, collections.abc.AsyncIterator):  # pragma: no cover
     """
@@ -486,13 +498,13 @@ class BaseStreamReader(AbstractStreamReader):
                 if self.__limit is not None:
                     if offset > self.__limit:
                         self.__prepend_data_to_buffer(bytes(buffer))
-                        raise asyncio.LimitOverrunError(
+                        raise LimitOverrunError(
                             "Separator is not found, "
                             "and the buffer exceeds the limit.", offset)
 
             if self.__limit is not None:
                 if seppos > self.__limit:
-                    raise asyncio.LimitOverrunError(
+                    raise LimitOverrunError(
                         "Separator is found, but chunk is longer than limit.",
                         seppos)
 
@@ -525,7 +537,7 @@ class BaseStreamReader(AbstractStreamReader):
 
                 if self.__limit is not None:
                     if self.__buflen > self.__limit:
-                        raise asyncio.LimitOverrunError(
+                        raise LimitOverrunError(
                             "EOF is not found, "
                             "but the buffer limit has been reached.")
 
