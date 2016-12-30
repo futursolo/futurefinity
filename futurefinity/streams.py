@@ -280,7 +280,7 @@ class BaseStreamReader(AbstractStreamReader):
     def __init__(
         self, *, limit: Optional[int]=_DEFAULT_LIMIT,
             loop: Optional[asyncio.AbstractEventLoop]=None):
-        assert isinstance(limit, Optional[int])
+        assert limit is None or isinstance(limit, int)
         self.__loop = loop or asyncio.get_event_loop()
         self.__limit = int(limit) if isinstance(limit, int) else None
 
@@ -364,8 +364,14 @@ class BaseStreamReader(AbstractStreamReader):
         if not self.__buflen:
             await self.__fetch_data_into_buffer()
 
+        self.__try_raise_exc()
+
         if self.__buflen <= n:
             data = self.__pop_everything_from_buffer()
+
+            if not data and self.__eof:
+                raise StreamEOFError
+
             return data
 
         else:
@@ -400,7 +406,10 @@ class BaseStreamReader(AbstractStreamReader):
                     buffer.append(data)
 
                 except StreamEOFError:
-                    return b"".join(buffer)
+                    if buffer:
+                        return b"".join(buffer)
+
+                    raise
 
             elif n == 0:
                 return b""
@@ -680,8 +689,8 @@ class BaseStream(AbstractStream, BaseStreamReader, BaseStreamWriter):
     def __init__(
         self, *, limit: Optional[int]=_DEFAULT_LIMIT,
             loop: Optional[asyncio.AbstractEventLoop]=None):
-        super(BaseStreamReader, self).__init__(limit=limit, loop=loop)
-        super(BaseStreamWriter, self).__init__()
+        BaseStreamReader.__init__(self, limit=limit, loop=loop)
+        BaseStreamWriter.__init__(self)
 
     def __repr__(self) -> compat.Text:
         info = {
@@ -708,7 +717,7 @@ class Stream(BaseStream):
         self._transport = transport
         self._protocol = protocol
 
-        super(BaseStream, self).__init__(limit=self._limit, loop=self._loop)
+        super().__init__(limit=self._limit, loop=self._loop)
 
         self._wait_closed_lock = asyncio.Lock()
 
@@ -733,32 +742,8 @@ class Stream(BaseStream):
     async def drain(self):
         await self._protocol._drain_impl()
 
-    @cached_property
-    def _check_if_closed_impl(self) -> Callable[[], bool]:
-        if compat.pyver_satisfies(">=3.5.1"):
-            return self.transport.is_closing
-
-        # Python 3.5.0 Compatibility Layer.
-        if hasattr(self.transport, "is_closing"):
-            return self.transport.is_closing
-
-        if hasattr(self.transport, "_closing"):
-            def check_fn():
-                return self.transport._closing
-
-            return check_fn
-
-        if hasattr(self.transport, "_closed"):
-            def check_fn():
-                return self.transport._closed
-
-            return check_fn
-
-        else:
-            raise NotImplementedError(
-                "This method is not implemented for a transport that "
-                "has no _closing or _closed attribute. "
-                "Consider override this method to custom the check method.")
+    def _check_if_closed_impl(self) -> bool:
+        return self._protocol._closed_impl()
 
     def _close_impl(self):
         self.transport.close()
@@ -842,6 +827,9 @@ class _StreamHelperProtocol(asyncio.Protocol):
         self._wait_closed_impl_fur = None
 
         self._pending_buffer = []
+        self._pending_buffer_len = 0
+
+        self._reading_paused = False
 
         self._writing_paused = False
         self._eof_received = False
@@ -875,6 +863,20 @@ class _StreamHelperProtocol(asyncio.Protocol):
 
     def data_received(self, data: bytes):
         self._pending_buffer.append(data)
+        self._pending_buffer_len += len(data)
+
+        if self._pending_buffer_len >= self._limit:
+            try:
+                self._stream.transport.pause_reading()
+
+            except NotImplementedError:
+                pass
+
+            except:
+                raise
+
+            else:
+                self._reading_paused = True
 
         if (self._fetch_data_impl_fur is not None and
                 not self._fetch_data_impl_fur.done()):
@@ -911,6 +913,7 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 if self._pending_buffer:
                     data = b"".join(self._pending_buffer)
                     self._pending_buffer.clear()
+                    self._pending_buffer_len = 0
 
                     return data
 
@@ -924,6 +927,8 @@ class _StreamHelperProtocol(asyncio.Protocol):
                     self._fetch_data_impl_fur.done()
 
                 self._fetch_data_impl_fur = self._loop.create_future()
+                if self._reading_paused:
+                    self._stream.transport.resume_reading()
 
                 try:
                     await self._fetch_data_impl_fur
@@ -950,6 +955,9 @@ class _StreamHelperProtocol(asyncio.Protocol):
 
                 finally:
                     self._fetch_data_impl_fur.cancel()
+
+    def _closed_impl(self) -> bool:
+        return self._closed
 
     async def _wait_closed_impl(self) -> bytes:
         async with self._wait_closed_impl_lock:
@@ -1002,7 +1010,7 @@ async def start_server(
         stream = fur.result()
         result = callback(stream)
 
-        if iscoroutine(result):
+        if asyncio.iscoroutine(result):
             compat.ensure_future(result, loop=loop)
 
     def factory():
@@ -1045,7 +1053,7 @@ if hasattr(socket, 'AF_UNIX'):
             stream = fur.result()
             result = callback(stream)
 
-            if iscoroutine(result):
+            if asyncio.iscoroutine(result):
                 compat.ensure_future(result, loop=loop)
 
         def factory():
