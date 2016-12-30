@@ -769,7 +769,7 @@ class Stream(BaseStream):
                 assert self._wait_closed_fur is None or \
                     self._wait_closed_fur.done()
 
-                self._wait_closed_fur = self._loop.create_future()
+                self._wait_closed_fur = compat.create_future(loop=self._loop)
 
                 try:
                     done, pending = await asyncio.wait(
@@ -926,7 +926,8 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 assert self._fetch_data_impl_fur is None or \
                     self._fetch_data_impl_fur.done()
 
-                self._fetch_data_impl_fur = self._loop.create_future()
+                self._fetch_data_impl_fur = compat.create_future(
+                    loop=self._loop)
                 if self._reading_paused:
                     self._stream.transport.resume_reading()
 
@@ -948,7 +949,7 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 assert self._drain_impl_fur is None or \
                     self._drain_impl_fur.done()
 
-                self._drain_impl_fur = self._loop.create_future()
+                self._drain_impl_fur = compat.create_future(loop=self._loop)
 
                 try:
                     await self._fetch_data_impl_fur
@@ -968,7 +969,8 @@ class _StreamHelperProtocol(asyncio.Protocol):
                 assert self._wait_closed_impl_fur is None or \
                     self._wait_closed_impl_fur.done()
 
-                self._wait_closed_impl_fur = self._loop.create_future()
+                self._wait_closed_impl_fur = compat.create_future(
+                    loop=self._loop)
 
                 try:
                     await self._wait_closed_impl_fur
