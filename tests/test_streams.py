@@ -151,6 +151,16 @@ class StreamTestCase:
             await stream.readuntil(b"\n")
 
     @helper.run_until_complete
+    async def test_readuntil_limit_overrun(self):
+        protocol, stream = _create_mocked_stream()
+
+        protocol.data_received(os.urandom(100000).replace(b"\n\n", b"\r\r"))
+        protocol.eof_received()
+
+        with pytest.raises(asyncio.LimitOverrunError):
+            await stream.readuntil(b"\n\n")
+
+    @helper.run_until_complete
     async def test_at_eof(self):
         protocol, stream = _create_mocked_stream()
 
