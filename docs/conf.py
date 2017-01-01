@@ -64,7 +64,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "FutureFinity"
-copyright = "2016-%s, Futur Solo" % time.strftime("%Y")
+copyright = "2017-%s, Futur Solo" % time.strftime("%Y")
 author = "Futur Solo"
 
 # The version info for the project you"re documenting, acts as replacement for
