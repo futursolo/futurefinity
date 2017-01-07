@@ -21,17 +21,22 @@
 
 """
 
+from .utils import cached_property
 from . import compat
+from . import httpabc
+from . import streams
 from . import encoding
 from . import protocol
 from . import httputils
 from . import magicdict
 from . import multipart
+from . import h1connection
 
-from typing import Union, Optional, Mapping
+from typing import Union, Optional, Mapping, Tuple, Any
 
 import asyncio
 
+import abc
 import ssl
 import sys
 import json
@@ -76,6 +81,175 @@ class ResponseEntityTooLarge(ClientError):
     larger than the largest allowed size of entity from the server.
     """
     pass
+
+
+class ClientRequest(httpabc.AbstractHTTPRequest):
+    def __init__(
+        method: compat.Text, url: compat.Text, *,
+        link_args: Optional[Mapping[compat.Text, compat.Text]]=None,
+        headers: Optional[Mapping[compat.Text, compat.Text]]=None,
+            body: Optional[Union[bytes, streams.AbstractStreamReader]]=None):
+        self._method = method
+
+        self._parsed_url = urllib.parse.urlsplit(url)
+
+        assert self.scheme in ("http", "https"), \
+            "URI Scheme must be provided and must be either http or https."
+
+        self._link_args = magicdict.TolerantMagicDict()
+        if self._parsed_uri.query:
+            self._link_args.update(urllib.parse.parse_qsl(
+                self._parsed_url.query, strict_parsing=True))
+        if link_args:
+            self._link_args.update(link_args)
+
+        self._link_args.freeze()
+
+        self._headers = magicdict.TolerantMagicDict()
+        if headers:
+            self._headers.update(headers)
+        self._headers.freeze()
+
+        assert body is None or isinstance(
+            body, (bytes, streams.AbstractStreamReader)), \
+            ("Body must be either bytes or instance of "
+             "streams.AbstractStreamReader if provided.")
+        self._body = body
+
+    @property
+    def method(self) -> compat.Text:
+        return self._method
+
+    @property
+    def authority(self) -> compat.Text:
+        return self._parsed_url.hostname
+
+    @cached_property
+    def port(self) -> int:
+        if self._parsed_url.port:
+            return self._parsed_url.port
+
+        if self.scheme == "http":
+            return 80
+
+        else:  # Scheme can only be either http or https.
+            return 443
+
+    @property
+    def scheme(self) -> compat.Text:
+        return self._parsed_url.scheme
+
+    @cached_property
+    def path(self) -> compat.Text:
+        return self._parsed_url.path or "/"
+
+    @cached_property
+    def uri(self) -> compat.Text:
+        return urllib.parse.urlunparse(
+            urllib.parse.ParseResult(
+                scheme="", netloc="", path=self.link,
+                params="", query=urllib.parse.urlencode(self.link_args),
+                fragment=""))
+
+    @property
+    def link_args(self) -> Mapping[compat.Text, compat.Text]:
+        return self._link_args
+
+    @cached_property
+    def url(self) -> compat.Text:
+        return urllib.parse.urlunparse(
+            urllib.parse.ParseResult(
+                scheme=self.scheme, netloc=self._parsed_url.netloc,
+                path=self.path,
+                params=self._parsed_url.params,
+                query=urllib.parse.urlencode(self.link_args),
+                fragment=self._parsed_url.fragment))
+
+    @property
+    def headers(self) -> Mapping[compat.Text, compat.Text]:
+        return self._headers
+
+
+class ResponseBody(abc.ABC, bytes):
+    @property
+    @abc.abstractmethod
+    def encoding(self) -> Optional[compat.Text]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def as_str(self, encoding: Optional[compat.Text]=None) -> compat.Text:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def as_json(self, encoding: Optional[compat.Text]=None) -> Any:
+        raise NotImplementedError
+
+
+class _ResponseBody(ResponseBody):
+    def __init__(self, *args, _encoding: Optional[compat.Text]=None, **kwargs):
+        bytes.__init__(self, *args, **kwargs)
+        self._encoding = _encoding
+
+    @property
+    def encoding(self) -> Optional[compat.Text]:
+        return self._encoding
+
+    def as_str(self, encoding: Optional[compat.Text]=None) -> compat.Text:
+        return encoding.ensure_str(
+            self, encoding=(encoding or self.encoding or ""))
+
+    def as_json(self, encoding: Optional[compat.Text]=None) -> Any:
+        return json.loads(self.as_str(encoding=encoding))
+
+
+class ClientResponse(httpabc.AbstractHTTPResponse):  # pragma: no cover
+    @property
+    @abc.abstractmethod
+    def http_version(self) -> int:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def request(self) -> ClientRequest:
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def body(self) -> ResponseBody:
+        raise NotImplementedError
+
+
+class _ClientResponse(ClientResponse):
+    def __init__(
+        self, __httpabc_response: httpabc.AbstractHTTPResponse, *,
+            http_version: int, request: ClientRequest, body: bytes):
+        self._httpabc_response = __httpabc_response
+
+        self._http_version = http_version
+
+        self._request = request
+
+        self._body = body
+
+    @property
+    def http_version(self) -> int:
+        return self._http_version
+
+    @property
+    def status_code(self) -> int:
+        return self._httpabc_response.status_code
+
+    @property
+    def headers(self) -> Mapping[compat.Text, compat.Text]:
+        return self._httpabc_response.headers
+
+    @property
+    def request(self) -> ClientRequest:
+        return self._request
+
+    @cached_property
+    def body(self) -> ResponseBody:
+        return _ResponseBody(self._body)
 
 
 def _check_if_transport_closed(transport: asyncio.BaseTransport) -> bool:
