@@ -1718,6 +1718,6 @@ class H1Connection(httpabc.AbstractHTTPConnection):
         except:
             pass
 
-    def __end__(self):
+    def __del__(self):
         self._current_http_stream = None
         self.close()
