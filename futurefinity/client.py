@@ -74,12 +74,40 @@ class ResponseEntityTooLarge(Exception):
     pass
 
 
+class HTTPError(Exception):
+    def __init__(response: "ClientResponse", *args):
+        self._response = response
+
+        if not len(args):
+            args = (str(self._response), )
+
+        super().__init__(*args)
+
+    @property
+    def response(self) -> "ClientResponse":
+        return self._response
+
+
+class TooManyRedirects(Exception):
+    def __init__(request: "ClientRequest", *args):
+        self._request = request
+
+        if not len(args):
+            args = (str(self._request), )
+
+        super().__init__(*args)
+
+    @property
+    def request(self) -> "ClientRequest":
+        return self._request
+
+
 class ClientRequest(httpabc.AbstractHTTPRequest):
     def __init__(
         method: compat.Text, url: compat.Text, *,
         link_args: Optional[Mapping[compat.Text, compat.Text]]=None,
         headers: Optional[Mapping[compat.Text, compat.Text]]=None,
-            body: Optional[Union[bytes, streams.AbstractStreamReader]]=None):
+            body: Optional[bytes]=None):
         self._method = method
 
         self._parsed_url = urllib.parse.urlsplit(url)
@@ -101,10 +129,8 @@ class ClientRequest(httpabc.AbstractHTTPRequest):
             self._headers.update(headers)
         self._headers.freeze()
 
-        assert body is None or isinstance(
-            body, (bytes, streams.AbstractStreamReader)), \
-            ("Body must be either bytes or instance of "
-             "streams.AbstractStreamReader if provided.")
+        assert body is None or isinstance(body, bytes), \
+            "Body must be bytes if provided."
         self._body = body
 
     @property
@@ -159,6 +185,10 @@ class ClientRequest(httpabc.AbstractHTTPRequest):
     @property
     def headers(self) -> Mapping[compat.Text, compat.Text]:
         return self._headers
+
+    @cached_property
+    def _idenifier(self) -> Tuple[compat.Text, int, compat.Text]:
+        return (self.authority, self.port, self.scheme)
 
 
 class ResponseBody(abc.ABC, bytes):
