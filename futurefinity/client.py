@@ -45,16 +45,7 @@ import traceback
 import urllib.parse
 
 
-class ClientError(Exception):
-    """
-    FutureFinity Client Error.
-
-    All Errors from FutureFinity Client Side are based on this class.
-    """
-    pass
-
-
-class RequestTimeoutError(ClientError, TimeoutError):
+class RequestTimeoutError(TimeoutError):
     """
     FutureFinity Client Timeout Error.
 
@@ -63,7 +54,7 @@ class RequestTimeoutError(ClientError, TimeoutError):
     pass
 
 
-class BadResponse(ClientError):
+class BadResponse(Exception):
     """
     FutureFinity Client Bad Response Error.
 
@@ -73,7 +64,7 @@ class BadResponse(ClientError):
     pass
 
 
-class ResponseEntityTooLarge(ClientError):
+class ResponseEntityTooLarge(Exception):
     """
     FutureFinity Client Response Entity Too Large Error.
 
