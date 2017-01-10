@@ -425,11 +425,26 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
                 return incoming
 
 
+class _HTTPClientConnection:
+    def fetch(self, *args, **kwargs) -> compat.Awaitable[ClientResponse]:
+        raise NotImplementedError
+
+    @property
+    def identifier(self) -> Tuple[compat.Text, int, compat.Text]:
+        raise NotImplementedError
+
+    def close(self):
+        raise NotImplementedError
+
+    def __del__(self):
+        self.close()
+
+
 class HTTPClient:
     """
-    FutureFinity HTTPClient Class.
+    The FutureFinity HTTPClient.
 
-    This is the HTTPClient Implementation of FutureFinity.
+    This is the Client-side HTTP Implementation of FutureFinity.
 
     Example:
         import asyncio
@@ -443,199 +458,194 @@ class HTTPClient:
         print(response.body)
 
     """
-    def __init__(self, *args, http_version=11,
-                 allow_keep_alive: bool=True,
-                 loop: Optional[asyncio.BaseEventLoop]=None,
-                 context: Optional[ssl.SSLContext]=None, **kwargs):
+    def __init__(
+        self, *, idle_timeout: int=10,
+        max_initial_length: int=8 * 1024,  # 8K
+        allow_keep_alive: bool=True,
+        chunk_size: int=10 * 1024,  # 10K
+        tls_context: Optional[ssl.SSLContext]=None,
+        max_connections: int=100,
+        max_redirects: int=50,
+            loop: Optional[asyncio.AbstractEventLoop]=None):
         self._loop = loop or asyncio.get_event_loop()
-        self.allow_keep_alive = allow_keep_alive
-        self.http_version = http_version
 
-        self.context = context or ssl.create_default_context(
+        self._conns = collections.OrderedDict()
+
+        self._h1_context = h1_context or h1connection.H1ConnectionContext(
+            is_client=True, idle_timeout=idle_timeout,
+            max_initial_length=max_initial_length,
+            allow_keep_alive=allow_keep_alive, chunk_size=chunk_size)
+
+        self._tls_context = tls_context or ssl.create_default_context(
             ssl.Purpose.CLIENT_AUTH)
 
-        self._connection_controllers = {}
+        self._idle_timeout = idle_timeout
 
-    def _makeup_url(self, url: compat.Text,
-                    link_args: Optional[Mapping[compat.Text, compat.Text]]):
-        parsed_url = urllib.parse.urlsplit(url)
+        self._max_connections = max_connections
+        self._max_redirects = max_redirects
 
-        if parsed_url.query:
-            if link_args is None:
-                link_args = magicdict.TolerantMagicDict()
-            link_args.update(urllib.parse.parse_qsl(parsed_url.query))
+    def _get_conn(
+        self, identifier: Tuple[compat.Text, int, compat.Text]
+            ) -> _HTTPClientConnection:
+        if identifier in self._conns.keys():
+            return self._conns.pop(identifier)
 
-        if link_args is not None:
-            encoded_link_args = urllib.parse.urlencode(link_args)
-        else:
-            encoded_link_args = ""
+        return _HTTPClientConnection(
+            identifier=identifier,
+            h1_context=self._h1_context, idle_timeout=self._idle_timeout,
+            tls_context=tls_context, loop=self._loop)
 
-        path = urllib.parse.urlunparse(urllib.parse.ParseResult(
-            scheme="", netloc="", path=(parsed_url.path or "/"),
-            params="", query=encoded_link_args, fragment=""))
+    def _put_conn(self, conn: _HTTPClientConnection):
+        while conn.identifier in self._conns.keys():
+            self._conns.pop(conn.identifier)
 
-        return {
-            "host": parsed_url.hostname,
-            "port": parsed_url.port,
-            "scheme": parsed_url.scheme,
-            "path": path
-        }
+        self._conns[conn.identifier] = conn
 
-    def _get_connection_controller(
-            self, host: compat.Text, port: compat.Text, scheme: compat.Text):
-        controller_identifier = (host, port, scheme)
-        if controller_identifier in self._connection_controllers.keys():
-            return self._connection_controllers.pop(controller_identifier)
-
-        if scheme == "https":
-            context = self.context
-        else:
-            context = None
-
-        return HTTPClientConnectionController(
-            allow_keep_alive=self.allow_keep_alive,
-            http_version=self.http_version,
-            host=host, port=port, context=context)
-
-    def _put_connection_controller(self,
-                                   controller: HTTPClientConnectionController):
-        if controller.context:
-            scheme = "https"
-        else:
-            scheme = "http"
-        controller_identifier = (controller.host, controller.port, scheme)
-        if controller_identifier in self._connection_controllers.keys():
-            return  # Only cache one controller for each identifier.
-        self._connection_controllers[controller_identifier] = controller
+        while len(self._conns) > self._max_connections:
+            self._conns.popitem()
 
     async def fetch(
-        self, method: compat.Text, url: compat.Text,
-            headers: Optional[
-                Union[protocol.HTTPHeaders, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            cookies: Optional[
-                Union[httputils.HTTPCookies, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            link_args: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            body: Optional[bytes]=None):
-        """
-        Fetch the request.
-        """
-        if link_args is not None and not isinstance(
-                link_args, magicdict.TolerantMagicDict):
-            link_args = magicdict.TolerantMagicDict(link_args)
+        self, request: ClientRequest, allow_redirects: bool=True,
+            raise_error: bool=True) -> ClientResponse:
+        conn = self._get_conn(request._idenifier)
 
-        url_info = self._makeup_url(url, link_args)
-        if not isinstance(headers, protocol.HTTPHeaders):
-            if headers is None:
-                headers = protocol.HTTPHeaders()
+        response = await conn.fetch(request)
+
+        self._put_conn(conn)
+
+        if allow_redirects:
+            current_response = response
+            for i in range(0, self._max_redirects):
+                if current_response.status_code in (301, 302, 303):
+                    new_request = ClientRequest(
+                        method="GET", url=current_response.headers["location"],
+                        headers=request.headers)
+
+                elif response.status_code in (307, 308):
+                    new_request = ClientRequest(
+                        method=request.method,
+                        url=current_response.headers["location"],
+                        headers=request.headers,
+                        body=request.body)
+
+                else:
+                    response = current_response
+                    break
+
+                current_response = await self.fetch(
+                    request=new_request, allow_redirects=False,
+                    raise_error=False)
+
             else:
-                headers = protocol.HTTPHeaders(headers)
-        if cookies:
-            if not isinstance(cookies, httputils.HTTPCookies):
-                cookies = httputils.HTTPCookies(cookies)
-            headers.accept_cookies_for_request(cookies)
+                raise TooManyRedirects(request)
 
-        if url_info["scheme"] not in ("http", "https"):
-            raise ClientError("Unknown Protocol Scheme.")
+        if raise_error:
+            if response.status_code >= 400:
+                raise HTTPError(response)
 
-        if not url_info["port"]:
-            if url_info["scheme"] == "http":
-                url_info["port"] = 80
-            else:
-                url_info["port"] = 443
-
-        controller = self._get_connection_controller(
-            host=url_info["host"], port=url_info["port"],
-            scheme=url_info["scheme"])
-
-        response = await controller.fetch(method=method,
-                                          path=url_info["path"],
-                                          headers=headers,
-                                          body=body)
-        self._put_connection_controller(controller)
         return response
 
-    async def get(
-        self, url: compat.Text,
-            headers: Optional[
-                Union[protocol.HTTPHeaders, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            cookies:  Optional[
-                Union[httputils.HTTPCookies, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            link_args:  Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[
-                    compat.Text, compat.Text]]]=None):
-        """
-        This is a friendly wrapper of `client.HTTPClient.fetch` for
-        `GET` request.
-        """
-        response = await self.fetch(method="GET", url=url, headers=headers,
-                                    cookies=cookies, link_args=link_args)
-        return response
+    def request(
+        self, method: compat.Text, url: compat.Text, *,
+        link_args: Optional[Mapping[compat.Text, compat.Text]]=None,
+        headers: Optional[Mapping[compat.Text, compat.Text]]=None,
+        body_args: Optional[Mapping[compat.Text, compat.Text]]=None,
+        files: Optional[Mapping[compat.Text, multipart.MultipartFile]]=None,
+            **kwargs) -> compat.Awaitable[ClientResponse]:
+        final_headers = magicdict.TolerantMagicDict()
+        if headers:
+            final_headers.update(headers)
 
-    async def post(
-        self, url: compat.Text,
-            headers: Optional[
-                Union[protocol.HTTPHeaders, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            cookies: Optional[
-                Union[httputils.HTTPCookies, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            link_args: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            body_args: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[
-                    compat.Text, compat.Text]]]=None,
-            files: Optional[
-                Union[magicdict.TolerantMagicDict, Mapping[
-                    compat.Text, compat.Text]]]=None):
-        """
-        This is a friendly wrapper of `client.HTTPClient.fetch` for
-        `POST` request.
-        """
-        if headers is None:
-            headers = protocol.HTTPHeaders()
-        else:
-            headers = protocol.HTTPHeaders(headers)
-
-        if "content-type" in headers.keys():
-            content_type = headers["content-type"]
-            if files:
-                if not content_type.lower().startswith("multipart/form-data"):
-                    raise ClientError(
-                        "Files can only be sent by multipart/form-data")
-        else:
-            if not files:  # Automatic Content-Type Decision.
-                content_type = "application/x-www-form-urlencoded"
-            else:
-                content_type = "multipart/form-data"
-
-        if content_type.lower() == "application/x-www-form-urlencoded":
-            body = encoding.ensure_bytes(urllib.parse.urlencode(body_args))
-
-        elif content_type.lower() == "application/json":
-            body = encoding.ensure_bytes(json.dumps(body_args))
-
-        elif content_type.lower().startswith("multipart/form-data"):
+        if files:  # multipart/form-data.
             multipart_body = multipart.HTTPMultipartBody()
-            multipart_body.update(body_args)
-            if files:
-                multipart_body.files.update(files)
-            body, content_type = multipart_body.assemble()
+            if body_args:
+                multipart_body.update(body_args)
+
+            multipart_body.files.update(files)
+            body, final_headers["content-type"] = multipart_body.assemble()
+
+            final_headers["content-length"] = encoding.ensure_str(
+                len(body))
+
+        elif body_args:  # application/x-www-form-urlencoded.
+            final_headers["content-type"] = "application/x-www-form-urlencoded"
+            body_content = encoding.ensure_bytes(
+                urllib.parse.urlencode(body_args), encoding="utf-8")
+
+            final_headers["content-length"] = encoding.ensure_str(
+                len(body_content))
+
         else:
-            raise ClientError("Unsupported Content-Type.")
+            if "content-type" in final_headers:
+                del final_headers["content-type"]
 
-        content_length = str(len(body))
-        headers["content-length"] = content_length
+            if "content-length" in final_headers:
+                del final_headers["content-length"]
 
-        headers["content-type"] = content_type
+        request = ClientRequest(
+            method=method, url=url, link_args=link_args, headers=headers,
+            body=body_content)
 
-        response = await self.fetch(method="POST", url=url, headers=headers,
-                                    cookies=cookies, link_args=link_args,
-                                    body=body)
-        return response
+        return self.fetch(request, **kwargs)
+
+    def head(self, url: compat.Text, **kwargs
+             ) -> compat.Awaitable[ClientResponse]:
+        kwargs.setdefault("allow_redirects", False)
+        return self.request(method="HEAD", url=url, **kwargs)
+
+    def get(self, url: compat.Text, **kwargs
+            ) -> compat.Awaitable[ClientResponse]:
+        return self.request(method="GET", url=url, **kwargs)
+
+    def post(self, url: compat.Text, **kwargs
+             ) -> compat.Awaitable[ClientResponse]:
+        return self.request(method="POST", url=url, **kwargs)
+
+    def delete(self, url: compat.Text, **kwargs
+               ) -> compat.Awaitable[ClientResponse]:
+        return self.request(method="DELETE", url=url, **kwargs)
+
+    def patch(self, url: compat.Text, **kwargs
+              ) -> compat.Awaitable[ClientResponse]:
+        return self.request(method="PATCH", url=url, **kwargs)
+
+    def put(self, url: compat.Text, **kwargs
+            ) -> compat.Awaitable[ClientResponse]:
+        return self.request(method="PUT", url=url, **kwargs)
+
+    def options(self, url: compat.Text, **kwargs
+                ) -> compat.Awaitable[ClientResponse]:
+        return self.request(method="OPTIONS", url=url, **kwargs)
+
+    def __del__(self):
+        while (self._conns):  # Destroy all the connections.
+            _, conn = self._conns.popitem()
+            conn.close()
+
+
+def fetch(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().fetch(*args, **kwargs)
+
+
+def get(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().get(*args, **kwargs)
+
+
+def post(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().post(*args, **kwargs)
+
+
+def delete(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().delete(*args, **kwargs)
+
+
+def patch(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().patch(*args, **kwargs)
+
+
+def put(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().put(*args, **kwargs)
+
+
+def options(*args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    return HTTPClient().options(*args, **kwargs)
