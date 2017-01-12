@@ -18,8 +18,9 @@
 from . import compat
 from . import encoding
 from . import magicdict
+from . import h1connection
 
-from typing import Optional, Union, Mapping
+from typing import Optional, Union, Mapping, Sequence, Any
 
 from http.cookies import SimpleCookie as HTTPCookies
 
@@ -27,6 +28,7 @@ import time
 import numbers
 import calendar
 import datetime
+import functools
 import email.utils
 import http.client
 
@@ -60,6 +62,58 @@ def format_timestamp(ts: Optional[Union[numbers.Real, tuple, time.struct_time,
     return encoding.ensure_str(email.utils.formatdate(ts, usegmt=True))
 
 
+@functools.singledispatch
+def parse_headers(data: Any) -> Mapping[compat.Text, compat.Text]:
+    # pragma: no cover
+    raise ValueError("Unknown Type of input data.")
+
+
+# For dict-like object.
+@parse_headers.register(Mapping[compat.Text, compat.Text])
+def _(
+    data: Mapping[compat.Text, compat.Text]
+        ) -> Mapping[compat.Text, compat.Text]:
+    headers = magicdict.TolerantMagicDict()
+    for (key, value) in data.items():
+        headers.add(key.strip(), value.strip())
+    return headers
+
+
+# For string-like object.
+@parse_headers.register(str)
+@parse_headers.register(bytes)
+def _(data: Union[compat.Text, bytes]) -> Mapping[compat.Text, compat.Text]:
+    headers = magicdict.TolerantMagicDict()
+
+    splitted_data = encoding.ensure_str(data).split("\r\n")
+
+    for header in splitted_data:
+        if not header:
+            continue
+        (key, value) = header.split(":", 1)
+        headers.add(key.strip(), value.strip())
+    return headers
+
+
+# For list-like object.
+@parse_headers.register(Sequence[compat.Text])
+def _(data: Sequence[compat.Text]) -> Mapping[compat.Text, compat.Text]:
+    headers = magicdict.TolerantMagicDict()
+    for (key, value) in data:
+        headers.add(key.strip(), value.strip())
+    return headers
+
+
+def build_headers(headers: Mapping[compat.Text, compat.Text]) -> bytes:
+    headers_str = ""
+    for (name, value) in headers.items():
+        headers_str += "{}: {}".format(
+            h1connection.capitalize_h1_header[name], value)
+        headers_str += "\r\n"
+
+    return encoding.ensure_bytes(headers_str)
+
+
 def parse_semicolon_header(
         value: compat.Text) -> Mapping[compat.Text, Optional[compat.Text]]:
     header_dict = magicdict.TolerantMagicDict()
@@ -90,3 +144,33 @@ def build_semicolon_header(
         header_list.append(part)
 
     return "; ".join(header_list)
+
+
+def build_cookies_for_request(
+        cookies: HTTPCookies) -> Mapping[compat.Text, compat.Text]:
+    """
+    Build all the cookies as a request cookie header.
+    """
+    headers = magicdict.TolerantMagicDict()
+    cookie_string = ""
+
+    for cookie_name, cookie_morsel in cookies.items():
+        cookie_string += "{}={}; ".format(cookie_name, cookie_morsel.value)
+
+    if cookie_string:
+        headers["cookie"] = cookie_string
+
+    return headers
+
+
+def build_cookies_for_response(
+        cookies: HTTPCookies) -> Mapping[compat.Text, compat.Text]:
+    """
+    Insert all the cookies as response set cookie headers.
+    """
+    headers = magicdict.TolerantMagicDict()
+
+    for cookie_morsel in cookies.values():
+        headers.add("set-cookie", cookie_morsel.OutputString())
+
+    return headers

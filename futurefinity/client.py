@@ -26,7 +26,6 @@ from . import compat
 from . import httpabc
 from . import streams
 from . import encoding
-from . import protocol
 from . import httputils
 from . import magicdict
 from . import multipart
@@ -42,6 +41,7 @@ import sys
 import json
 import functools
 import traceback
+import collections
 import urllib.parse
 
 
@@ -75,7 +75,7 @@ class ResponseEntityTooLarge(Exception):
 
 
 class HTTPError(Exception):
-    def __init__(response: "ClientResponse", *args):
+    def __init__(self, response: "ClientResponse", *args):
         self._response = response
 
         if not len(args):
@@ -89,7 +89,7 @@ class HTTPError(Exception):
 
 
 class TooManyRedirects(Exception):
-    def __init__(request: "ClientRequest", *args):
+    def __init__(self, request: "ClientRequest", *args):
         self._request = request
 
         if not len(args):
@@ -104,7 +104,7 @@ class TooManyRedirects(Exception):
 
 class ClientRequest(httpabc.AbstractHTTPRequest):
     def __init__(
-        method: compat.Text, url: compat.Text, *,
+        self, method: compat.Text, url: compat.Text, *,
         link_args: Optional[Mapping[compat.Text, compat.Text]]=None,
         headers: Optional[Mapping[compat.Text, compat.Text]]=None,
             body: Optional[bytes]=None):
@@ -116,7 +116,7 @@ class ClientRequest(httpabc.AbstractHTTPRequest):
             "URI Scheme must be provided and must be either http or https."
 
         self._link_args = magicdict.TolerantMagicDict()
-        if self._parsed_uri.query:
+        if self._parsed_url.query:
             self._link_args.update(urllib.parse.parse_qsl(
                 self._parsed_url.query, strict_parsing=True))
         if link_args:
@@ -284,48 +284,15 @@ def _check_if_transport_closed(transport: asyncio.BaseTransport) -> bool:
         return transport._closed
 
 
-class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
-    """
-    HTTP Client Connection Controller Class.
-
-    THis is a subclass of `protocol.BaseHTTPConnectionController`.
-
-    This is used to control a HTTP Connection from the client side.
-    """
-    def __init__(self, host: compat.Text, port: int, *args,
-                 allow_keep_alive: bool=True,
-                 http_version: int=11,
-                 loop: Optional[asyncio.BaseEventLoop]=None,
-                 context: ssl.SSLContext=None, **kwargs):
-        self._loop = loop or asyncio.get_event_loop()
-        self.http_version = http_version
-        self.allow_keep_alive = allow_keep_alive
-
-        protocol.BaseHTTPConnectionController.__init__(self)
-
-        self.port = port
-        self.host = host
-        self.context = context
-
-        self.reader = None
-        self.writer = None
-        self.connection = None
-        self.incoming = None
-        self._exc = None
-
-        self.default_timeout_length = 10
-        self._timeout_handler = None
-
-    def error_received(
-     self, incoming: Optional[protocol.HTTPIncomingResponse],
-     exc: tuple):
+class HTTPClientConnectionController:
+    def error_received(self, incoming: Any, exc: tuple):
         if isinstance(tuple[1], protocol.ConnectionEntityTooLarge):
             self._exc = ResponseEntityTooLarge(str(tuple[1]))
         else:
             self._exc = BadResponse(str(tuple[1]))
         self.close_stream_and_connection()
 
-    def message_received(self, incoming: protocol.HTTPIncomingResponse):
+    def message_received(self, incoming: Any):
         self.incoming = incoming
 
     async def get_stream_and_connection_ready(self):
@@ -371,18 +338,8 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
             self.writer = None
             self.transport = None
 
-    def set_timeout_handler(self):
-        self.cancel_timeout_handler()
-        self._timeout_handler = self._loop.call_later(
-            self.default_timeout_length, self.close_stream_and_connection)
-
-    def cancel_timeout_handler(self):
-        if self._timeout_handler is not None:
-            self._timeout_handler.cancel()
-        self._timeout_handler = None
-
     async def fetch(self, method: compat.Text, path: compat.Text,
-                    headers: protocol.HTTPHeaders, body: bytes):
+                    headers: Any, body: bytes):
         """
         Fetch the request.
         """
@@ -426,7 +383,27 @@ class HTTPClientConnectionController(protocol.BaseHTTPConnectionController):
 
 
 class _HTTPClientConnection:
-    def fetch(self, *args, **kwargs) -> compat.Awaitable[ClientResponse]:
+    def __init__(
+        self, identifier: Tuple[compat.Text, int, compat.Text],
+        h1_context: h1connection.H1Context, idle_timeout: int,
+            tls_context: ssl.SSLContext, loop: asyncio.AbstractEventLoop):
+        self._loop = loop
+
+        self._host, self._port, self._scheme = identifier
+
+        self._h1_context = h1_context
+        self._tls_context = tls_context
+
+        self._tcp_stream = None
+
+        self._http_stream_handler = None
+        self._http_conn = None
+
+    async def get_ready(self):
+        raise NotImplementedError
+
+    async def fetch(
+            self, request: ClientRequest) -> compat.Awaitable[ClientResponse]:
         raise NotImplementedError
 
     @property
@@ -471,7 +448,7 @@ class HTTPClient:
 
         self._conns = collections.OrderedDict()
 
-        self._h1_context = h1_context or h1connection.H1ConnectionContext(
+        self._h1_context = h1connection.H1Context(
             is_client=True, idle_timeout=idle_timeout,
             max_initial_length=max_initial_length,
             allow_keep_alive=allow_keep_alive, chunk_size=chunk_size)
@@ -493,7 +470,7 @@ class HTTPClient:
         return _HTTPClientConnection(
             identifier=identifier,
             h1_context=self._h1_context, idle_timeout=self._idle_timeout,
-            tls_context=tls_context, loop=self._loop)
+            tls_context=self._tls_context, loop=self._loop)
 
     def _put_conn(self, conn: _HTTPClientConnection):
         while conn.identifier in self._conns.keys():
@@ -550,7 +527,8 @@ class HTTPClient:
         link_args: Optional[Mapping[compat.Text, compat.Text]]=None,
         headers: Optional[Mapping[compat.Text, compat.Text]]=None,
         body_args: Optional[Mapping[compat.Text, compat.Text]]=None,
-        files: Optional[Mapping[compat.Text, multipart.MultipartFile]]=None,
+        files: Optional[
+            Mapping[compat.Text, multipart.HTTPMultipartFileField]]=None,
             **kwargs) -> compat.Awaitable[ClientResponse]:
         final_headers = magicdict.TolerantMagicDict()
         if headers:
@@ -569,11 +547,11 @@ class HTTPClient:
 
         elif body_args:  # application/x-www-form-urlencoded.
             final_headers["content-type"] = "application/x-www-form-urlencoded"
-            body_content = encoding.ensure_bytes(
+            body = encoding.ensure_bytes(
                 urllib.parse.urlencode(body_args), encoding="utf-8")
 
             final_headers["content-length"] = encoding.ensure_str(
-                len(body_content))
+                len(body))
 
         else:
             if "content-type" in final_headers:
@@ -584,7 +562,7 @@ class HTTPClient:
 
         request = ClientRequest(
             method=method, url=url, link_args=link_args, headers=headers,
-            body=body_content)
+            body=body)
 
         return self.fetch(request, **kwargs)
 
@@ -618,9 +596,10 @@ class HTTPClient:
         return self.request(method="OPTIONS", url=url, **kwargs)
 
     def __del__(self):
-        while (self._conns):  # Destroy all the connections.
-            _, conn = self._conns.popitem()
-            conn.close()
+        if hasattr(self, "_conns"):
+            while (self._conns):  # Destroy all the connections.
+                _, conn = self._conns.popitem()
+                conn.close()
 
 
 def fetch(*args, **kwargs) -> compat.Awaitable[ClientResponse]:

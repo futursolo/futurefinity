@@ -15,7 +15,7 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from typing import Optional
+from typing import Optional, Mapping
 
 import futurefinity
 
@@ -28,124 +28,16 @@ import urllib.parse
 import unittest.mock
 
 
-class HTTPHeadersTestCase:
-    def test_http_headers_parse(self):
-        test_string = "Header-A: value-a\r\nHeader-B: value-b\r\n"
-
-        headers = futurefinity.protocol.HTTPHeaders.parse(test_string)
-
-        assert set(headers.keys()) == set(["header-a", "header-b"])
-        assert headers["header-a"] == "value-a"
-        assert headers["header-b"] == "value-b"
-
-    def test_http_headers_assemble(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-        headers["header-b"] = "value-b"
-
-        assert headers.assemble() in [
-            b"Header-A: value-a\r\nHeader-B: value-b\r\n",
-            b"Header-B: value-b\r\nHeader-A: value-a\r\n"]
-
-    def test_http_headers_str_method(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-
-        assert str(headers) == "HTTPHeaders([('header-a', 'value-a')])"
-
-    def test_http_headers_copy(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-        headers["header-b"] = "value-b"
-
-        assert headers.copy() == headers
-
-    def test_http_headers_load_headers_with_dict(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-        headers.load_headers({"header-a": "value-c", "header-b": "value-b"})
-
-        assert set(headers.keys()) == set(["header-a", "header-b"])
-        assert headers.get_list("header-a") == ["value-a", "value-c"]
-        assert headers["header-b"] == "value-b"
-
-    def test_http_headers_load_headers_with_string(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-        test_string = "Header-A: value-c\r\nHeader-B: value-b\r\n"
-        headers.load_headers(test_string)
-
-        assert set(headers.keys()) == set(["header-a", "header-b"])
-        assert headers.get_list("header-a") == ["value-a", "value-c"]
-        assert headers["header-b"] == "value-b"
-
-    def test_http_headers_load_headers_with_bytes(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-        test_string = b"Header-A: value-c\r\nHeader-B: value-b\r\n"
-        headers.load_headers(test_string)
-
-        assert set(headers.keys()) == set(["header-a", "header-b"])
-        assert headers.get_list("header-a") == ["value-a", "value-c"]
-        assert headers["header-b"] == "value-b"
-
-    def test_http_headers_load_headers_with_list(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-        headers.load_headers([("header-a", "value-c"),
-                              ("header-b", "value-b")])
-
-        assert set(headers.keys()) == set(["header-a", "header-b"])
-        assert headers.get_list("header-a") == ["value-a", "value-c"]
-        assert headers["header-b"] == "value-b"
-
-    def test_http_headers_load_headers_with_other(self):
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["header-a"] = "value-a"
-
-        with pytest.raises(ValueError):
-            headers.load_headers(object())
-
-    def test_http_headers_accept_cookies_for_request(self):
-        cookies = http.cookies.SimpleCookie()
-
-        cookies["cookie-b"] = "value-b"
-
-        headers = futurefinity.protocol.HTTPHeaders()
-
-        headers["cookie"] = "cookie-a=valuea; "
-        headers.accept_cookies_for_request(cookies)
-
-        assert headers["cookie"] == "cookie-a=valuea; cookie-b=value-b; "
-
-    def test_http_headers_accept_cookies_for_response(self):
-        cookies = http.cookies.SimpleCookie()
-
-        cookies["cookie-a"] = "value-a"
-
-        headers = futurefinity.protocol.HTTPHeaders()
-        headers.accept_cookies_for_response(cookies)
-
-        assert headers["set-cookie"] == "cookie-a=value-a"
-
-
 class HTTPIncomingMessageTestCase:
     def test_is_chunked_body(self):
         class HTTPIncomingMessageMock(
                 futurefinity.protocol.HTTPIncomingMessage):
             def __init__(
                 self, http_version: int,
-                    headers: Optional[futurefinity.protocol.HTTPHeaders]=None):
+                    headers: Optional[Mapping[str, str]]=None):
                 self.http_version = http_version
-                self.headers = headers or futurefinity.protocol.HTTPHeaders()
+                self.headers = \
+                    headers or futurefinity.magicdict.TolerantMagicDict()
 
         http_10_message = HTTPIncomingMessageMock(10)
         assert http_10_message._is_chunked_body is False
@@ -153,12 +45,12 @@ class HTTPIncomingMessageTestCase:
         http_no_header_message = HTTPIncomingMessageMock(11)
         assert http_no_header_message._is_chunked_body is False
 
-        true_header = futurefinity.protocol.HTTPHeaders()
+        true_header = futurefinity.magicdict.TolerantMagicDict()
         true_header.add("Transfer-Encoding", "Chunked")
         http_true_header_message = HTTPIncomingMessageMock(11, true_header)
         assert http_true_header_message._is_chunked_body is True
 
-        other_header = futurefinity.protocol.HTTPHeaders()
+        other_header = futurefinity.magicdict.TolerantMagicDict()
         other_header.add("Transfer-Encoding", "Any")
         http_other_header_message = HTTPIncomingMessageMock(11, other_header)
         assert http_other_header_message._is_chunked_body is False
@@ -179,19 +71,19 @@ class HTTPIncomingMessageTestCase:
     def test_expected_content_length(self):
         class HTTPIncomingMessageMock(
                 futurefinity.protocol.HTTPIncomingMessage):
-            def __init__(self, headers: futurefinity.protocol.HTTPHeaders):
+            def __init__(self, headers: Mapping[str, str]):
                 self.headers = headers
 
         http_no_header_message = HTTPIncomingMessageMock(
-            futurefinity.protocol.HTTPHeaders())
+            futurefinity.magicdict.TolerantMagicDict())
         assert http_no_header_message._expected_content_length == -1
 
-        true_header = futurefinity.protocol.HTTPHeaders()
+        true_header = futurefinity.magicdict.TolerantMagicDict()
         true_header.add("Content-Length", "10000")
         http_true_header_message = HTTPIncomingMessageMock(true_header)
         assert http_true_header_message._expected_content_length == 10000
 
-        other_header = futurefinity.protocol.HTTPHeaders()
+        other_header = futurefinity.magicdict.TolerantMagicDict()
         other_header.add("Content-Length", "Any")
         http_other_header_message = HTTPIncomingMessageMock(other_header)
         assert http_other_header_message._expected_content_length == -1
@@ -202,7 +94,7 @@ class HTTPIncomingMessageTestCase:
             def __init__(self, method="GET", chunked=False, content_length=-1):
                 self.method = method
                 self.http_version = 11
-                self.headers = futurefinity.protocol.HTTPHeaders()
+                self.headers = futurefinity.magicdict.TolerantMagicDict()
                 if chunked:
                     self.headers.add("Transfer-Encoding", "Chunked")
                 if content_length != -1:
@@ -221,7 +113,7 @@ class HTTPIncomingMessageTestCase:
         assert body_message._body_expected is True
 
     def test_request_init(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
             method="GET", origin_path="/", http_version=10,
@@ -235,7 +127,7 @@ class HTTPIncomingMessageTestCase:
         assert incoming.connection is connection
 
     def test_request_parse_origin_path(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
             method="GET", origin_path="/test?a=b", http_version=10,
@@ -248,7 +140,7 @@ class HTTPIncomingMessageTestCase:
             a="b")
 
     def test_request_cookies(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("cookie", "a=b;")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
@@ -259,7 +151,7 @@ class HTTPIncomingMessageTestCase:
         assert incoming.cookies["a"].value == "b"
 
     def test_request_path(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
             method="GET", origin_path="/test?a=b", http_version=10,
@@ -268,7 +160,7 @@ class HTTPIncomingMessageTestCase:
         assert incoming.path == "/test"
 
     def test_request_host(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("host", "localhost")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
@@ -278,7 +170,7 @@ class HTTPIncomingMessageTestCase:
         assert incoming.host == "localhost"
 
     def test_request_link_args(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
             method="GET", origin_path="/test?a=b", http_version=10,
@@ -288,7 +180,7 @@ class HTTPIncomingMessageTestCase:
             a="b")
 
     def test_request_body_args_with_urlencoded(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("Content-Type", "application/x-www-form-urlencoded")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
@@ -314,7 +206,7 @@ filename=\"test.txt\"\r\n"
         body_bytes += file_content + b"\r\n"
         body_bytes += b"-------as7B98bFk--\r\n"
 
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("Content-Type",
                     "multipart/form-data; boundary=-----as7B98bFk")
         connection = object()
@@ -329,7 +221,7 @@ filename=\"test.txt\"\r\n"
         assert incoming.body_args.files["file-field"].content == file_content
 
     def test_request_body_args_with_json(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("Content-Type", "application/json")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
@@ -340,7 +232,7 @@ filename=\"test.txt\"\r\n"
         assert incoming.body_args == {"a": "b"}
 
     def test_request_body_args_with_other(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("Content-Type", "application/unknown")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
@@ -351,7 +243,7 @@ filename=\"test.txt\"\r\n"
             incoming.body_args
 
     def test_request_str_method(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("host", "localhost")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingRequest(
@@ -363,13 +255,13 @@ filename=\"test.txt\"\r\n"
             "path='/test', "
             "http_version=10, "
             "host='localhost', "
-            "headers=HTTPHeaders([('host', 'localhost')]), "
+            "headers=TolerantMagicDict([('host', 'localhost')]), "
             "cookies=<SimpleCookie: >, "
             "link_args=TolerantMagicDict([('a', 'b')]), "
             ")")
 
     def test_response_init(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingResponse(
             status_code=200, http_version=10, headers=headers,
@@ -382,7 +274,7 @@ filename=\"test.txt\"\r\n"
         assert incoming.connection is connection
 
     def test_response_cookies(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         headers.add("set-cookie", "a=b;")
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingResponse(
@@ -393,7 +285,7 @@ filename=\"test.txt\"\r\n"
         assert incoming.cookies["a"].value == "b"
 
     def test_response_str_method(self):
-        headers = futurefinity.protocol.HTTPHeaders()
+        headers = futurefinity.magicdict.TolerantMagicDict()
         connection = object()
         incoming = futurefinity.protocol.HTTPIncomingResponse(
             status_code=200, http_version=10, headers=headers,
@@ -403,7 +295,7 @@ filename=\"test.txt\"\r\n"
             "HTTPIncomingResponse("
             "status_code=200, "
             "http_version=10, "
-            "headers=HTTPHeaders([]), "
+            "headers=TolerantMagicDict([]), "
             "cookies=<SimpleCookie: >, "
             ")")
 
@@ -486,7 +378,7 @@ class HTTPv1ConnectionTestCase:
 
         connection.write_initial(
             http_version=10, method="GET", path="/",
-            headers=futurefinity.protocol.HTTPHeaders())
+            headers=futurefinity.magicdict.TolerantMagicDict())
         connection.finish_writing()
 
         initial, headers = controller.stored_bytes.split(b"\r\n", 1)
@@ -526,7 +418,7 @@ class HTTPv1ConnectionTestCase:
 
         connection.write_initial(
             http_version=10, method="POST", path="/",
-            headers=futurefinity.protocol.HTTPHeaders())
+            headers=futurefinity.magicdict.TolerantMagicDict())
         connection.write_body(post_body.encode())
         connection.finish_writing()
 
@@ -564,7 +456,7 @@ class HTTPv1ConnectionTestCase:
 
         connection.write_initial(
             http_version=10, method="GET", path="/",
-            headers=futurefinity.protocol.HTTPHeaders())
+            headers=futurefinity.magicdict.TolerantMagicDict())
         connection.finish_writing()
 
         initial, headers = controller.stored_bytes.split(b"\r\n", 1)
@@ -597,7 +489,7 @@ class HTTPv1ConnectionTestCase:
 
         connection.write_initial(
             http_version=11, method="GET", path="/",
-            headers=futurefinity.protocol.HTTPHeaders())
+            headers=futurefinity.magicdict.TolerantMagicDict())
         connection.finish_writing()
 
         initial, headers = controller.stored_bytes.split(b"\r\n", 1)

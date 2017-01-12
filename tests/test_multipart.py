@@ -41,7 +41,7 @@ class HTTPMultipartTestCase:
         assert file_field.content_type == "image/png"
 
         assert isinstance(
-            file_field.headers, futurefinity.protocol.HTTPHeaders)
+            file_field.headers, futurefinity.magicdict.TolerantMagicDict)
 
         assert file_field.encoding == "binary"
 
@@ -57,7 +57,7 @@ class HTTPMultipartTestCase:
         assert str(file_field) == (
             "HTTPMultipartFileField(filename='test.file', "
             "content_type='image/png', "
-            "headers=HTTPHeaders([]), "
+            "headers=TolerantMagicDict([]), "
             "encoding='binary')")
 
     def test_multipart_file_field_assemble(self):
@@ -72,7 +72,7 @@ class HTTPMultipartTestCase:
 
         assembled_bytes = file_field.assemble()
         initial, content = assembled_bytes.split(b"\r\n\r\n", 1)
-        headers = futurefinity.protocol.HTTPHeaders.parse(initial + b"\r\n")
+        headers = futurefinity.httputils.parse_headers(initial + b"\r\n")
 
         assert file_content == content[:-2]
         assert headers["content-type"] == "image/png"

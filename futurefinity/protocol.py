@@ -74,97 +74,6 @@ class ProtocolError(Exception):
     pass
 
 
-class HTTPHeaders(magicdict.TolerantMagicDict):
-    """
-    HTTPHeaders class, based on TolerantMagicDict.
-
-    It has not only all the features from TolerantMagicDict, but also
-    can parse and make HTTP Headers.
-    """
-    def __str__(self) -> compat.Text:
-        content_list = [(key, value) for (key, value) in self.items()]
-        return "HTTPHeaders({})".format(str(content_list))
-
-    def copy(self) -> "HTTPHeaders":
-        return HTTPHeaders(self)
-
-    @staticmethod
-    def parse(data: Union[compat.Text, bytes, list,
-                          magicdict.TolerantMagicDict]) -> "HTTPHeaders":
-        headers = HTTPHeaders()
-        headers.load_headers(data)
-        return headers
-
-    def assemble(self) -> bytes:
-        """
-        Assemble a HTTPHeaders Class to HTTP/1.x Form.
-        """
-        headers_str = ""
-        for (name, value) in self.items():
-            headers_str += "{}: {}".format(
-                h1connection.capitalize_h1_header[name], value)
-            headers_str += _CRLF_MARK
-
-        return encoding.ensure_bytes(headers_str)
-
-    def load_headers(
-        self, data: Union[compat.Text, bytes, list,
-                          magicdict.TolerantMagicDict]):
-        """
-        Load HTTP Headers from another object.
-
-        It will raise an Error if the header is invalid.
-        """
-
-        # For dict-like object.
-        if hasattr(data, "items"):
-            for (key, value) in data.items():
-                self.add(key.strip(), value.strip())
-            return
-
-        if isinstance(data, (str, bytes)):
-            # For string-like object.
-            splitted_data = encoding.ensure_str(data).split(_CRLF_MARK)
-
-            for header in splitted_data:
-                if not header:
-                    continue
-                (key, value) = header.split(":", 1)
-                self.add(key.strip(), value.strip())
-            return
-
-        # For list-like object.
-        if hasattr(data, "__iter__"):
-            for (key, value) in data:
-                self.add(key.strip(), value.strip())
-            return
-
-        raise ValueError("Unknown Type of input data.")
-
-    def accept_cookies_for_request(self, cookies: httputils.HTTPCookies):
-        """
-        Insert all the cookies as a request cookie header.
-        """
-        cookie_string = ""
-        if "cookie" in self.keys():
-            cookie_string += self["cookie"]
-        for cookie_name, cookie_morsel in cookies.items():
-            cookie_string += "{}={}; ".format(cookie_name, cookie_morsel.value)
-
-        if cookie_string:
-            self["cookie"] = cookie_string
-
-    def accept_cookies_for_response(self, cookies: httputils.HTTPCookies):
-        """
-        Insert all the cookies as response set cookie headers.
-        """
-        for cookie_morsel in cookies.values():
-            self.add("set-cookie", cookie_morsel.OutputString())
-
-    __copy__ = copy
-    __repr__ = __str__
-
-
 class HTTPIncomingMessage:
     """
     FutureFinity HTTP Incoming Message Class.
@@ -253,7 +162,7 @@ class HTTPIncomingRequest(HTTPIncomingMessage):
     """
     def __init__(self, method: compat.Text,
                  origin_path: compat.Text,
-                 headers: HTTPHeaders,
+                 headers: Mapping[compat.Text, compat.Text],
                  connection: "HTTPv1Connection",
                  http_version: int=10,
                  body: Optional[bytes]=None):
@@ -382,7 +291,7 @@ class HTTPIncomingResponse(HTTPIncomingMessage):
     This class represents a Incoming HTTP Response.
     """
     def __init__(self, status_code: int, http_version: int=10,
-                 headers: Optional[HTTPHeaders]=None,
+                 headers: Optional[Mapping[compat.Text, compat.Text]]=None,
                  body: Optional[bytes]=None,
                  connection: Optional["HTTPv1Connection"]=None):
         self.http_version = http_version
@@ -612,7 +521,7 @@ class HTTPv1Connection:
         self._parsed_incoming_info["http_version"] = self.http_version
 
         try:
-            headers = HTTPHeaders.parse(origin_headers)
+            headers = httputils.parse_headers(origin_headers)
 
         except Exception as e:
             raise ConnectionBadMessage("Bad Headers Received.") from e
@@ -789,7 +698,7 @@ class HTTPv1Connection:
     def write_initial(
         self, http_version: Optional[int]=None, method: compat.Text="GET",
             path: compat.Text="/", status_code: int=200,
-            headers: Optional[HTTPHeaders]=None):
+            headers: Optional[Mapping[compat.Text, compat.Text]]=None):
         """
         Write the initial to remote.
         """
@@ -858,7 +767,7 @@ class HTTPv1Connection:
                 # For Head Request, there will not be a body.
                 self._outgoing_chunked_body = False
 
-        initial += headers.assemble()
+        initial += httputils.build_headers(headers)
 
         initial += _CRLF_BYTES_MARK
 

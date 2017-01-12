@@ -22,6 +22,7 @@ from . import encoding
 from . import protocol
 from . import security
 from . import magicdict
+from . import httputils
 
 _CRLF_BYTES_MARK = b"\r\n"
 
@@ -39,7 +40,7 @@ class HTTPMultipartFileField:
         self.filename = filename
         self.content = content
         self.content_type = content_type
-        self.headers = headers or protocol.HTTPHeaders()
+        self.headers = headers or magicdict.TolerantMagicDict()
         self.encoding = encoding
 
     def __str__(self) -> compat.Text:
@@ -65,7 +66,7 @@ class HTTPMultipartFileField:
         content_disposition += "filename=\"{}\"".format(self.filename)
         self.headers["content-disposition"] = content_disposition
 
-        field = self.headers.assemble()
+        field = httputils.build_headers(self.headers)
         field += _CRLF_BYTES_MARK
         field += encoding.ensure_bytes(self.content)
         field += _CRLF_BYTES_MARK
@@ -120,7 +121,7 @@ class HTTPMultipartBody(magicdict.TolerantMagicDict):
                 continue
 
             initial, content = part.split(_CRLF_BYTES_MARK * 2)
-            headers = protocol.HTTPHeaders.parse(initial)
+            headers = httputils.parse_headers(initial)
 
             disposition = headers.get_first("content-disposition")
             disposition_list = []

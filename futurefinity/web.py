@@ -53,6 +53,7 @@ from . import encoding
 from . import protocol
 from . import security
 from . import httputils
+from . import magicdict
 from . import templating
 
 from typing import Optional, Union, Mapping, List, Dict, Any, Callable
@@ -202,7 +203,7 @@ class _ApplicationHTTPServer(server.HTTPServer):
                 method="GET",
                 origin_path="/",
                 http_version=11,
-                headers=protocol.HTTPHeaders(),
+                headers=magicdict.TolerantMagicDict(),
                 connection=self.connection)
 
         Handler = self._request_handlers.get(
@@ -325,7 +326,7 @@ class RequestHandler:
         self.http_version = self.request.http_version
 
         self._status_code = 200
-        self._headers = protocol.HTTPHeaders()
+        self._headers = magicdict.TolerantMagicDict()
         self._cookies = httputils.HTTPCookies()
         self._response_body = bytearray()
 
@@ -449,7 +450,7 @@ class RequestHandler:
         if self._initial_written:
             raise HTTPError(500, "You cannot clear headers after the "
                                  "initial is written.")
-        self._headers = HTTPHeaders()
+        self._headers = magicdict.TolerantMagicDict()
 
     def get_cookie(
         self, name: compat.Text,
@@ -822,7 +823,8 @@ class RequestHandler:
         if "date" not in self._headers.keys():
             self.set_header("date", httputils.format_timestamp())
 
-        self._headers.accept_cookies_for_response(self._cookies)
+        self._headers.update(
+            httputils.build_cookies_for_response(self._cookies))
 
         if self.settings.get("csrf_protect", False):
             self.set_csrf_value()
