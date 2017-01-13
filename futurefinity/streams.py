@@ -876,7 +876,7 @@ class _StreamHelperProtocol(asyncio.Protocol):
             loop=self._loop)
 
         self._allow_open_after_eof = transport.get_extra_info(
-            "sslcontext") is not None
+            "sslcontext") is None
 
         if not self._fur.done():
             return self._fur.set_result(self._stream)
