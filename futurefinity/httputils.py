@@ -122,12 +122,12 @@ def parse_semicolon_header(
         if not part:
             continue
         splitted = part.split("=", 1)
-        part_name = splitted.pop(0)
-        part_value = splitted.pop() if splitted else None
+        part_name = splitted.pop(0).strip()
+        part_value = splitted.pop().strip() if splitted else None
         if part_value:
             if part_value.startswith('"') and part_value.endswith('"'):
                 part_value = part_value[1:-1]
-        header_dict.add(part_name.strip(), part_value.strip())
+        header_dict.add(part_name, part_value)
 
     return header_dict
 
