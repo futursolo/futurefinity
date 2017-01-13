@@ -29,6 +29,7 @@ from . import encoding
 from . import httputils
 from . import magicdict
 from . import multipart
+from . import httpevents
 from . import h1connection
 
 from typing import Union, Optional, Mapping, Tuple, Any
@@ -43,6 +44,10 @@ import functools
 import traceback
 import collections
 import urllib.parse
+
+__all__ = ["RequestTimeoutError", "BadResponse", "ResponseEntityTooLarge",
+           "HTTPError", "TooManyRedirects", "ClientRequest", "ResponseBody",
+           "ClientResponse", "HTTPClient"]
 
 
 class RequestTimeoutError(TimeoutError):
@@ -164,7 +169,7 @@ class ClientRequest(httpabc.AbstractHTTPRequest):
     def uri(self) -> compat.Text:
         return urllib.parse.urlunparse(
             urllib.parse.ParseResult(
-                scheme="", netloc="", path=self.link,
+                scheme="", netloc="", path=self.path,
                 params="", query=urllib.parse.urlencode(self.link_args),
                 fragment=""))
 
@@ -207,8 +212,12 @@ class ResponseBody(abc.ABC, bytes):
 
 
 class _ResponseBody(ResponseBody):
+    def __new__(
+        Cls, *args, _encoding: Optional[compat.Text]=None,
+            **kwargs) -> ResponseBody:
+        return bytes.__new__(Cls, *args, **kwargs)
+
     def __init__(self, *args, _encoding: Optional[compat.Text]=None, **kwargs):
-        bytes.__init__(self, *args, **kwargs)
         self._encoding = _encoding
 
     @property
@@ -217,7 +226,7 @@ class _ResponseBody(ResponseBody):
 
     def as_str(self, encoding: Optional[compat.Text]=None) -> compat.Text:
         return encoding.ensure_str(
-            self, encoding=(encoding or self.encoding or ""))
+            self, encoding=(encoding or self.encoding or "utf-8"))
 
     def as_json(self, encoding: Optional[compat.Text]=None) -> Any:
         return json.loads(self.as_str(encoding=encoding))
@@ -273,113 +282,94 @@ class _ClientResponse(ClientResponse):
         return _ResponseBody(self._body)
 
 
-def _check_if_transport_closed(transport: asyncio.BaseTransport) -> bool:
-    if compat.pyver_satisfies(">=3.5.1"):
-        return transport.is_closing()
+class _HTTPClientStreamHandler(httpabc.AbstractHTTPStreamHandler):
+    def __init__(self):
+        self._request = None
 
-    try:
-        return transport._closing
+        self._writer = None
 
-    except:
-        return transport._closed
+        self._httpabc_response = None
+        self._body_buf = []
+        self._eof = True
 
+        self._response = None
+        self._exc = None
 
-class HTTPClientConnectionController:
-    def error_received(self, incoming: Any, exc: tuple):
-        if isinstance(tuple[1], protocol.ConnectionEntityTooLarge):
-            self._exc = ResponseEntityTooLarge(str(tuple[1]))
-        else:
-            self._exc = BadResponse(str(tuple[1]))
-        self.close_stream_and_connection()
+        self._fur = None
 
-    def message_received(self, incoming: Any):
-        self.incoming = incoming
+    def attach_request(self, request: ClientRequest, fur: asyncio.Future):
+        assert self._fur is None
+        assert self._request is None
 
-    async def get_stream_and_connection_ready(self):
-        """
-        Prepare the Stream and the Connection for new request.
-        """
-        self.cancel_timeout_handler()
-        async def _create_new_stream_and_connection():
-            self.reader, self.writer = await asyncio.open_connection(
-                host=self.host,  port=self.port, ssl=self.context,
-                loop=self._loop)
-            self.transport = self.writer.transport
+        self._request = request
+        self._fur = fur
 
-            if self.http_version < 20:
-                self.connection = protocol.HTTPv1Connection(
-                    is_client=True,
-                    http_version=self.http_version,
-                    allow_keep_alive=self.allow_keep_alive,
-                    use_tls=self.context,
-                    sockname=self.writer.get_extra_info("sockname"),
-                    peername=self.writer.get_extra_info("peername"),
-                    controller=self)
-            else:
-                pass
-            self.set_timeout_handler()
-        if not (self.reader and self.writer and self.transport):
-            await _create_new_stream_and_connection()
+        def check_cancelled(fur: asyncio.Future):
+            if fur.cancelled() and not self._writer.closed():
+                self._writer.close()
 
-        if _check_if_transport_closed(self.writer.transport):
-            await _create_new_stream_and_connection()
+        self._fur.add_done_callback(check_cancelled)
 
-    def close_stream_and_connection(self):
-        """
-        Close the Stream and the Connection.
-        """
-        self.cancel_timeout_handler()
-        if self.connection:
-            self.connection.connection_lost()
-            self.connection = None
-        if self.writer:
-            self.writer.close()
-            self.reader = None
-            self.writer = None
-            self.transport = None
+        if self._writer is not None:
+            self._writer.write(self._request._body)
+            self._writer.write_eof()
 
-    async def fetch(self, method: compat.Text, path: compat.Text,
-                    headers: Any, body: bytes):
-        """
-        Fetch the request.
-        """
-        await self.get_stream_and_connection_ready()
-        headers["host"] = self.host
-        self.connection.write_initial(
-            http_version=self.http_version,
-            method=method,
-            path=path,
-            headers=headers)
+        elif self._eof:
+            self._fur.set_result(_ClientResponse(
+                self._httpabc_response,
+                http_version=self._writer.http_version,
+                request=self._request, body=b"".join(self._body_buf)))
 
-        if body:
-            self.connection.write_body(body)
+        elif self._exc is not None:
+            self._fur.set_exception(self._exc)
 
-        self.connection.finish_writing()
-        while True:
-            try:
-                incoming_data = await asyncio.wait_for(
-                    self.reader.read(4096), 60)
-            except asyncio.TimeoutError:
-                self.close_stream_and_connection()
-                raise RequestTimeoutError("Request Timeout.")
+    def stream_created(self, writer: httpabc.AbstractHTTPStreamWriter):
+        assert self._writer is None
+        self._writer = writer
 
-            if not incoming_data:
-                if (not self.writer) or _check_if_transport_closed(
-                 self.writer.transport):
-                    self.close_stream_and_connection()
-                    raise BadResponse("Unexpected Remote Close.")
+        if self._request is not None:
+            self._writer.write(self._request._body)
+            self._writer.write_eof()
 
-            self.connection.data_received(incoming_data)
-            if self._exc is not None:
-                _exc = self._exc
-                self._exc = None
-                raise self._exc
+    def event_received(self, event: httpabc.AbstractEvent):
+        @functools.singledispatch
+        def dispatch_event(event: httpabc.AbstractEvent):
+            pass
 
-            if self.incoming is not None:
-                incoming = self.incoming
-                self.incoming = None
-                self.set_timeout_handler()
-                return incoming
+        @dispatch_event.register(httpevents.UnexpectedEOF)
+        @dispatch_event.register(httpevents.BadResponse)
+        def _(event: Union[httpevents.BadResponse, httpevents.UnexpectedEOF]):
+            raise BadResponse
+
+        @dispatch_event.register(httpevents.EntityTooLarge)
+        def _(event: httpevents.EntityTooLarge):
+            raise ResponseEntityTooLarge
+
+        @dispatch_event.register(httpevents.ResponseReceived)
+        def _(event: httpevents.ResponseReceived):
+            self._httpabc_response = event.response
+
+        @dispatch_event.register(httpevents.DataReceived)
+        def _(event: httpevents.DataReceived):
+            self._body_buf.append(event.data)
+
+        @dispatch_event.register(httpevents.EOFReceived)
+        def _(event: httpevents.EOFReceived):
+            self._eof = True
+
+            if self._fur and not self._fur.done():
+                self._fur.set_result(_ClientResponse(
+                    self._httpabc_response,
+                    http_version=self._writer.http_version,
+                    request=self._request, body=b"".join(self._body_buf)))
+
+        dispatch_event(event)
+
+    def stream_closed(self, exc: Optional[BaseException]):
+        self._exc = exc
+        if self._fur and not self._fur.done():
+            self._fur.set_exception(
+                self._exc or streams.StreamClosedError("Stream Closed."))
 
 
 class _HTTPClientConnection:
@@ -390,28 +380,45 @@ class _HTTPClientConnection:
         self._loop = loop
 
         self._host, self._port, self._scheme = identifier
+        self._scheme = self._scheme.strip().lower()
 
         self._h1_context = h1_context
-        self._tls_context = tls_context
+        self._tls_context = tls_context if self._scheme == "https" else None
 
-        self._tcp_stream = None
-
-        self._http_stream_handler = None
         self._http_conn = None
 
-    async def get_ready(self):
-        raise NotImplementedError
+    async def _get_ready(self):
+        if (not self._http_conn) or self._http_conn.closed():
+            tcp_stream = await streams.open_connection(
+                host=self._host, port=self._port,
+                ssl=self._tls_context,
+                loop=self._loop)
+
+            self._http_conn = h1connection.H1Connection(
+                self._h1_context, tcp_stream=tcp_stream,
+                handler_factory=_HTTPClientStreamHandler, loop=self._loop)
+
+            await self._http_conn.start_serving()
 
     async def fetch(
             self, request: ClientRequest) -> compat.Awaitable[ClientResponse]:
-        raise NotImplementedError
+        await self._get_ready()
+
+        response_fur = self._loop.create_future()
+
+        handler = await self._http_conn.send_request(
+            method=request.method, uri=request.uri,
+            authority=request.authority, headers=request.headers)
+        handler.attach_request(request, response_fur)
+
+        return await response_fur
 
     @property
     def identifier(self) -> Tuple[compat.Text, int, compat.Text]:
-        raise NotImplementedError
+        return (self._host, self._port, self._scheme)
 
     def close(self):
-        raise NotImplementedError
+        self._http_conn.close()
 
     def __del__(self):
         self.close()
@@ -559,6 +566,8 @@ class HTTPClient:
 
             if "content-length" in final_headers:
                 del final_headers["content-length"]
+
+            body = b""
 
         request = ClientRequest(
             method=method, url=url, link_args=link_args, headers=headers,
