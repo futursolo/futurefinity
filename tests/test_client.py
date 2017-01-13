@@ -27,11 +27,6 @@ helper = futurefinity.testutils.TestHelper(__file__)
 received_body = None
 
 
-def get_v10_client():
-    return futurefinity.client.HTTPClient(
-        http_version=10, allow_keep_alive=False)
-
-
 def get_v11_client():
     return futurefinity.client.HTTPClient()
 
@@ -110,29 +105,6 @@ def make_server_handler(http_version="HTTP/1.0", method="GET",
 
 
 class ClientGetTestCase:
-    @helper.run_until_complete
-    async def test_v10_get_request(self):
-        ServerHandler = make_server_handler()
-
-        server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
-
-        try:
-            futurefinity.compat.ensure_future(
-                helper.loop.run_in_executor(None, server.serve_forever),
-                loop=helper.loop)
-
-            client = get_v10_client()
-
-            response = await client.get("http://localhost:8000/get_test/")
-
-        finally:
-            server.shutdown()
-            server.server_close()
-
-        assert response.http_version == 10, "Wrong HTTP Version"
-        assert response.status_code == 200, "Wrong Status Code"
-        assert response.body == b"Hello, World!"
-
     @helper.run_until_complete
     async def test_v11_get_request(self):
         ServerHandler = make_server_handler(
@@ -256,7 +228,7 @@ class ClientPostTestCase:
             response = await client.post(
                 "http://localhost:8000/post_test/",
                 body_args={"a": "b"},
-                headers={"content-type": "multipart/form-data"})
+                files={})
 
         finally:
             server.shutdown()
@@ -270,39 +242,5 @@ class ClientPostTestCase:
         assert received_body is not None
 
         assert received_body.getfirst("a") == "b"
-
-        received_body = None
-
-    @helper.run_until_complete
-    async def test_post_json_request(self):
-        ServerHandler = make_server_handler(
-            http_version="HTTP/1.1", method="POST", path="/post_test/")
-
-        server = http.server.HTTPServer(("localhost", 8000), ServerHandler)
-
-        try:
-            futurefinity.compat.ensure_future(
-                helper.loop.run_in_executor(None, server.serve_forever),
-                loop=helper.loop)
-
-            client = get_v11_client()
-
-            response = await client.post(
-                "http://localhost:8000/post_test/",
-                body_args={"a": "b"},
-                headers={"content-type": "application/json"})
-
-        finally:
-            server.shutdown()
-            server.server_close()
-
-        assert response.http_version == 11, "Wrong HTTP Version"
-        assert response.status_code == 200, "Wrong Status Code"
-        assert response.body == b"Hello, World!"
-
-        global received_body
-        assert received_body is not None
-
-        assert received_body.get("a") == "b"
 
         received_body = None

@@ -570,7 +570,7 @@ class HTTPClient:
             body = b""
 
         request = ClientRequest(
-            method=method, url=url, link_args=link_args, headers=headers,
+            method=method, url=url, link_args=link_args, headers=final_headers,
             body=body)
 
         return self.fetch(request, **kwargs)
