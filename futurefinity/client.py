@@ -404,7 +404,7 @@ class _HTTPClientConnection:
             self, request: ClientRequest) -> compat.Awaitable[ClientResponse]:
         await self._get_ready()
 
-        response_fur = self._loop.create_future()
+        response_fur = compat.create_future(loop=self._loop)
 
         handler = await self._http_conn.send_request(
             method=request.method, uri=request.uri,
