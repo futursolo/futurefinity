@@ -48,6 +48,7 @@ from .utils import Identifier
 from . import log
 from . import compat
 from . import server
+from . import httpabc
 from . import routing
 from . import encoding
 from . import protocol
@@ -146,17 +147,17 @@ def print_access_log(
     log_fn(log_msg)
 
 
-class HTTPError(server.ServerError):
+class HTTPError(Exception):
     """
     Common HTTPError class, this Error should be raised when a non-200 status
     need to be responded.
 
-    Any additional message can be added to the response by message attribute.
+    Additional messages can be added to the response by arguments.
 
     .. code-block:: python3
 
       async def get(self, *args, **kwargs):
-          raise HTTPError(500, message='Please contact system administrator.')
+          raise HTTPError(500, 'Please contact system administrator.')
     """
     def __init__(self, status_code: int=200, *args, **kwargs):
         self.status_code = status_code
@@ -175,6 +176,10 @@ class HTTPError(server.ServerError):
             final_str += ": {}".format(self._err_str)
 
         return final_str
+
+
+class WebRequest(httpabc.AbstractHTTPRequest):
+    pass
 
 
 class _ApplicationHTTPServer(server.HTTPServer):

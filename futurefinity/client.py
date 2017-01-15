@@ -16,8 +16,7 @@
 #   limitations under the License.
 
 """
-``futurefinity.client`` contains the `HTTPClient` which implements the
-:class:`futurefinity.protocol.HTTPv1Connection` from the client side.
+``futurefinity.client`` is the client side http implementation of futurefinity.
 
 """
 
