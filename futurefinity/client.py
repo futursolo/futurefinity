@@ -388,7 +388,7 @@ class _HTTPClientConnection:
         self._http_conn = None
 
     async def _get_ready(self):
-        if (not self._http_conn) or self._http_conn.closed():
+        if (not self._http_conn) or self._http_conn.closing():
             tcp_stream = await streams.open_connection(
                 host=self._host, port=self._port,
                 ssl=self._tls_context,
@@ -469,8 +469,8 @@ class HTTPClient:
         self._max_redirects = max_redirects
 
     def _get_conn(
-        self, identifier: Tuple[compat.Text, int, compat.Text]
-            ) -> _HTTPClientConnection:
+        self, identifier: Tuple[
+            compat.Text, int, compat.Text]) -> _HTTPClientConnection:
         if identifier in self._conns.keys():
             return self._conns.pop(identifier)
 

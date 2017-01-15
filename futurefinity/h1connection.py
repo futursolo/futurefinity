@@ -143,6 +143,7 @@ class CapitalizedH1Headers(dict):
 
         return dict.__getitem__(self, key)
 
+
 capitalize_h1_header = CapitalizedH1Headers()
 
 
@@ -1723,6 +1724,13 @@ class H1Connection(httpabc.AbstractHTTPConnection):
 
             if self._vars.tcp_stream:
                 self._vars.tcp_stream.close()
+
+    def closing(self) -> bool:
+        if self._vars.tcp_stream:
+            if self._vars._tcp_stream.closed():
+                self.close()
+
+        return self._closing
 
     def close(self):
         if self._closing:
