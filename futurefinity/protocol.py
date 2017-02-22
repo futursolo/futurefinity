@@ -26,7 +26,6 @@ from . import compat
 from . import encoding
 from . import security
 from . import httputils
-from . import magicdict
 from . import multipart
 from . import h1connection
 from ._version import version as futurefinity_version
@@ -37,6 +36,7 @@ from typing import Union, Optional, Any, List, Mapping, Tuple
 import sys
 import json
 import string
+import magicdict
 import traceback
 import urllib.parse
 

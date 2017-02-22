@@ -26,7 +26,6 @@ from . import httpabc
 from . import streams
 from . import encoding
 from . import httputils
-from . import magicdict
 from . import multipart
 from . import httpevents
 from . import h1connection
@@ -40,6 +39,7 @@ import ssl
 import sys
 import json
 import functools
+import magicdict
 import traceback
 import collections
 import urllib.parse
@@ -126,12 +126,9 @@ class ClientRequest(httpabc.AbstractHTTPRequest):
         if link_args:
             self._link_args.update(link_args)
 
-        self._link_args.freeze()
-
         self._headers = magicdict.TolerantMagicDict()
         if headers:
             self._headers.update(headers)
-        self._headers.freeze()
 
         assert body is None or isinstance(body, bytes), \
             "Body must be bytes if provided."

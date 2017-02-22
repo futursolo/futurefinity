@@ -22,6 +22,7 @@ import time
 import pytest
 import calendar
 import datetime
+import magicdict
 import email.utils
 import http.cookies
 
@@ -49,7 +50,7 @@ class ParseHeadersTestCase:
 
 class BuildHeadersTestCase:
     def test_http_build_headers(self):
-        headers = futurefinity.magicdict.TolerantMagicDict()
+        headers = magicdict.TolerantMagicDict()
 
         headers["header-a"] = "value-a"
         headers["header-b"] = "value-b"

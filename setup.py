@@ -23,7 +23,8 @@ import sys
 if not sys.version_info[:3] >= (3, 5, 0):
     raise RuntimeError("FutureFinity requires Python 3.5.0 or higher.")
 
-setup_requires = ["packaging>=16.5", "aiofiles>=0.3.0,<1.0"]
+setup_requires = [
+    "packaging>=16.5", "aiofiles>=0.3.0,<1.0", "magicdict>=0.1.0,<1"]
 
 try:
     import futurefinity

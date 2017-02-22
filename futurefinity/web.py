@@ -54,7 +54,6 @@ from . import encoding
 from . import protocol
 from . import security
 from . import httputils
-from . import magicdict
 from . import templating
 
 from typing import Optional, Union, Mapping, List, Dict, Any, Callable
@@ -72,6 +71,7 @@ import hashlib
 import inspect
 import warnings
 import functools
+import magicdict
 import mimetypes
 import traceback
 

@@ -13,6 +13,7 @@ dev
 - Introduce FutureFinity Logging Facility
 - Introduce New Routing Dispatcher
 - Better implementation of MagicDict and TolerantMagicDict
+- Split magicdict into separate package
 
 v0.2.1
 ------

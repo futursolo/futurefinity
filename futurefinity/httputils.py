@@ -17,7 +17,6 @@
 
 from . import compat
 from . import encoding
-from . import magicdict
 from . import h1connection
 
 from typing import Optional, Union, Mapping, Sequence, Any
@@ -29,6 +28,7 @@ import numbers
 import calendar
 import datetime
 import functools
+import magicdict
 import email.utils
 import http.client
 

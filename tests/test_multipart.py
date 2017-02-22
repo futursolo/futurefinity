@@ -21,6 +21,7 @@ import io
 import os
 import cgi
 import pytest
+import magicdict
 
 
 class HTTPMultipartTestCase:
@@ -41,7 +42,7 @@ class HTTPMultipartTestCase:
         assert file_field.content_type == "image/png"
 
         assert isinstance(
-            file_field.headers, futurefinity.magicdict.TolerantMagicDict)
+            file_field.headers, magicdict.TolerantMagicDict)
 
         assert file_field.encoding == "binary"
 

@@ -47,7 +47,6 @@ from . import httpabc
 from . import streams
 from . import encoding
 from . import httputils
-from . import magicdict
 from . import httpevents
 
 from ._version import version as futurefinity_version
@@ -57,6 +56,7 @@ import sys
 import enum
 import asyncio
 import inspect
+import magicdict
 import threading
 import collections
 
@@ -536,8 +536,6 @@ class _H1InitialParser:
 
             self._parsed_headers.add(key.strip(), value.strip())
 
-        self._parsed_headers.freeze()
-
     def _parse_request(self):
         self._parse_http_version(
             self._parsed_basic_info_tuple[2])
@@ -668,8 +666,6 @@ class _H1InitialBuilder:
         for key, value in self._justified_headers.items():
             self._pending_data.append(
                 "{}: {}\r\n".format(capitalize_h1_header[key], value))
-
-        self._justified_headers.freeze()
 
     def _write_pending_data(self):
         self._vars.tcp_stream.write(encoding.ensure_bytes(

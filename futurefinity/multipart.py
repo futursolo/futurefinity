@@ -21,8 +21,9 @@ from . import compat
 from . import encoding
 from . import protocol
 from . import security
-from . import magicdict
 from . import httputils
+
+import magicdict
 
 _CRLF_BYTES_MARK = b"\r\n"
 
