@@ -28,10 +28,9 @@ from . import streams
 from . import encoding
 from . import protocol
 from . import security
-from . import templating
 from . import h1connection
 
 __all__ = [
     "__version__", "version", "log", "web", "client", "compat", "server",
     "httpabc", "routing", "streams", "encoding", "protocol", "security",
-    "templating", "h1connection"]
+    "h1connection"]

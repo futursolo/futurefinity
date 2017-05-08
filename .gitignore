@@ -64,3 +64,6 @@ target/
 
 # Ignore Visual Studio Code Workspace Files
 .vscode/
+
+# Ignore PyEnv Files.
+.python-version

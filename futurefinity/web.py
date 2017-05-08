@@ -54,7 +54,6 @@ from . import encoding
 from . import protocol
 from . import security
 from . import httputils
-from . import templating
 
 from typing import Optional, Union, Mapping, List, Dict, Any, Callable
 
@@ -74,6 +73,7 @@ import functools
 import magicdict
 import mimetypes
 import traceback
+import sketchbook
 
 _DEFAULT_MARK = Identifier()
 
@@ -696,9 +696,9 @@ class RequestHandler:
                 "Cannot found `template_path`. "
                 "Please provide `template_path` through Application Settings.")
 
-        parsed_tpl = await self.app._tpl_loader.load_tpl(
+        parsed_tpl = await self.app._tpl_loader.find(
             template_name)
-        return await parsed_tpl.render_str(**template_args)
+        return await parsed_tpl.draw(**template_args)
 
     async def render(
         self, template_name: compat.Text,
@@ -1225,17 +1225,15 @@ class Application:
         self._sec_context = None
 
         if "template_path" in self.settings.keys():
-            tpl_context = templating.TemplateContext(
-                cache_tpls=self.settings.get(
+            tpl_context = sketchbook.SketchContext(
+                cache_sketches=self.settings.get(
                     "cache_template", (not self.settings.get("debug", False))),
-                default_escape="html",
-                input_encoding="utf-8", output_encoding="utf-8",
-                escape_url_with_plus=True,
+                source_encoding="utf-8",
                 loop=self._loop)
 
-            self._tpl_loader = templating.AsyncFileSystemLoader(
+            self._tpl_loader = sketchbook.SketchFinder(
                 self.settings["template_path"],
-                tpl_context)
+                skt_ctx=tpl_context)
 
         if "security_secret" in self.settings.keys():
             if "aes_security" in self.settings.keys():
@@ -1263,7 +1261,7 @@ class Application:
             self.handlers.add(static_handler_path, Handler=StaticFileHandler)
 
     @property
-    def template_loader(self) -> templating.AsyncFileSystemLoader:
+    def template_loader(self) -> sketchbook.SketchFinder:
         """
         .. deprecated:: 0.3
             For direct access to `TemplateLoader`.

@@ -386,44 +386,6 @@ class RedirectTestCase:
         assert result.getheader("location") == "/redirected"
 
 
-class RenderTestCase:
-    @helper.run_until_complete
-    async def test_redirect_request(self):
-        app = get_app()
-
-        @app.add_handler("/")
-        class TestHandler(futurefinity.web.RequestHandler):
-            async def get(self, *args, **kwargs):
-                return await self.render("index.html")
-
-        server = await app.listen(8888)
-
-        try:
-            result = await helper.loop.run_in_executor(
-                None, functools.partial(
-                    urllib.request.urlopen,
-                    "http://127.0.0.1:8888/"))
-
-        finally:
-            server.close()
-            await server.wait_closed()
-
-        assert result.status == 200
-        assert result.read() == """\
-<!DOCTYPE HTML>
-<html>
-    <head>
-        <title>Index Title</title>
-    </head>
-    <body>
-        \n
-This is body. The old title is Old Title.
-
-    </body>
-</html>
-""".encode()
-
-
 class NotFoundHandlerTestCase:
     @helper.run_until_complete
     async def test_redirect_request(self):
